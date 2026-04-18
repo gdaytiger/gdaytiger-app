@@ -62,7 +62,7 @@ function Card({ emoji, title, children }: { emoji: string; title: string; childr
     }} className="rounded-3xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <span className="text-base">{emoji}</span>
-        <span className="text-xs font-bold tracking-widest uppercase text-orange-500" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700 }}>{title}</span>
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#fbcdad' }}>{title}</span>
       </div>
       {children}
     </div>
@@ -82,7 +82,7 @@ function CheckItem({
         onChange={e => onChange(id, e.target.checked)}
         className="mt-0.5 w-4 h-4 rounded accent-orange-500 shrink-0"
       />
-      <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#fbcdad' }}>{title}</span>
+      <span className={`text-sm leading-snug transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
         {text}
       </span>
     </label>
@@ -321,7 +321,7 @@ export default function Home() {
         </Card>
 
         {/* ROSTER */}
-        <Card emoji="📅" title="The Week Ahead">
+        <Card emoji="📅" title="Roster">
           <div className="space-y-2">
             {shifts.length === 0 ? (
               <p className="text-sm text-gray-400 italic">No shifts found</p>
