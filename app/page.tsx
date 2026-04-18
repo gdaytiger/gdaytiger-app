@@ -106,12 +106,14 @@ function CheckItem({
 function RosterRow({
   shift,
   isToday,
+  isHighlighted,
   taskCount,
   onAdd,
   onSelectDay,
 }: {
   shift: Shift;
   isToday: boolean;
+  isHighlighted: boolean;
   taskCount: number;
   onAdd: (date: string, text: string) => Promise<void>;
   onSelectDay: (date: string) => void;
@@ -142,8 +144,8 @@ function RosterRow({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-xl ${isToday ? 'border' : 'bg-white/30'}`}
-      style={isToday ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}
+      className={`relative overflow-hidden rounded-xl ${isHighlighted ? 'border' : 'bg-white/30'}`}
+      style={isHighlighted ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}
     >
       {/* Normal row — slides left out */}
       <div
@@ -159,24 +161,22 @@ function RosterRow({
           {shift.working && shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
         </div>
         <div className="flex items-center gap-2">
-          {/* Task count circle */}
-          {taskCount > 0 && (
-            <button
-              onClick={() => onSelectDay(shift.date)}
-              className="flex items-center justify-center rounded-full text-xs font-bold transition-all hover:scale-110"
-              style={{
-                width: '22px',
-                height: '22px',
-                background: '#fbcdad',
-                color: '#333',
-                flexShrink: 0,
-                fontSize: '11px',
-              }}
-              title={`${taskCount} task${taskCount > 1 ? 's' : ''}`}
-            >
-              {taskCount}
-            </button>
-          )}
+          {/* Task count circle — always shown */}
+          <button
+            onClick={() => onSelectDay(shift.date)}
+            className="flex items-center justify-center rounded-full font-bold transition-all hover:scale-110 self-center"
+            style={{
+              width: '22px',
+              height: '22px',
+              background: taskCount > 0 ? '#fbcdad' : 'rgba(0,0,0,0.06)',
+              color: taskCount > 0 ? '#333' : '#aaa',
+              flexShrink: 0,
+              fontSize: '11px',
+            }}
+            title={`${taskCount} task${taskCount !== 1 ? 's' : ''}`}
+          >
+            {taskCount}
+          </button>
           <span className={`text-sm font-medium ${shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
             {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
           </span>
@@ -423,6 +423,7 @@ export default function Home() {
                   key={shift.date}
                   shift={shift}
                   isToday={shift.date === todayStr}
+                  isHighlighted={selectedDate ? shift.date === selectedDate : shift.date === todayStr}
                   taskCount={weekTasks[shift.date]?.count ?? 0}
                   onAdd={handleAddTask}
                   onSelectDay={handleSelectDay}
