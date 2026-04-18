@@ -77,17 +77,27 @@ export async function GET() {
       return `${h}${m > 0 ? `:${pad(m)}` : ''}${ampm}`;
     };
 
+    // Normalize any date value from Deputy to YYYY-MM-DD
+    const normalizeDate = (val: string | number): string => {
+      if (typeof val === 'number') {
+        const melb = new Date(val * 1000 + 10 * 60 * 60 * 1000);
+        return `${melb.getUTCFullYear()}-${pad(melb.getUTCMonth() + 1)}-${pad(melb.getUTCDate())}`;
+      }
+      return String(val).substring(0, 10);
+    };
+
     // Build map of date -> shift from Deputy
     const shiftMap: Record<string, { start: string; end: string; area: string; comment: string }> = {};
     if (Array.isArray(rosters)) {
       for (const r of rosters as {
-        Date: string;
+        Date: string | number;
         StartTime: number;
         EndTime: number;
         OperationalUnit: number;
         Comment?: string;
       }[]) {
-        shiftMap[r.Date] = {
+        const key = normalizeDate(r.Date);
+        shiftMap[key] = {
           start: formatTime(r.StartTime),
           end: formatTime(r.EndTime),
           area: AREA_NAMES[r.OperationalUnit] || '',
@@ -96,12 +106,13 @@ export async function GET() {
       }
     }
 
-    // Generate all 7 days, fill gaps with "not working"
+    // Generate all 7 days in Melbourne time (UTC+10), fill gaps with "not working"
+    const melbNow = new Date(Date.now() + 10 * 60 * 60 * 1000);
     const shifts = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(today.getTime() + i * 24 * 60 * 60 * 1000);
-      const dateStr = formatDate(d);
-      const dayLabel = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+      const d = new Date(melbNow.getTime() + i * 24 * 60 * 60 * 1000);
+      const dateStr = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+      const dayLabel = `${dayNames[d.getUTCDay()]} ${d.getUTCDate()} ${monthNames[d.getUTCMonth()]}`;
       const shift = shiftMap[dateStr];
 
       shifts.push({
