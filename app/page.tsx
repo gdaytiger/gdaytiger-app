@@ -263,8 +263,10 @@ export default function Home() {
     fetch('/api/roster')
       .then(r => r.json())
       .then(d => setShifts(d.shifts || []));
-    fetchDashboard().then(() => setLoading(false));
-    fetchWeekTasks();
+    fetchDashboard()
+      .then(() => setLoading(false))
+      .catch(() => setLoading(false));
+    fetchWeekTasks().catch(() => {});
   }, []);
 
   const handleSelectDay = (date: string) => {

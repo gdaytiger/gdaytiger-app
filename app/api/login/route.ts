@@ -15,8 +15,8 @@ export async function POST(req: NextRequest) {
   res.cookies.set('gdt_session', SESSION_TOKEN!, {
     httpOnly: true,
     secure: true,
-    sameSite: 'strict',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    sameSite: 'lax', // 'strict' breaks iOS PWA home screen apps
+    maxAge: 60 * 60 * 24 * 30, // 30 days
     path: '/',
   });
 
