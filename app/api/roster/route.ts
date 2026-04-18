@@ -109,3 +109,4 @@ export async function GET() {
     return NextResponse.json({ shifts: [], error: 'Failed to fetch roster' });
   }
 }
+
