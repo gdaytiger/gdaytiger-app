@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "G'Day Tiger OS",
+  title: "Tiger OS",
   description: "G'Day Tiger Café OS",
 };
 
