@@ -167,5 +167,8 @@ export async function GET() {
   const ordinal = d + (['th', 'st', 'nd', 'rd'][(d % 100 > 10 && d % 100 < 14) ? 0 : (d % 10 < 4 ? d % 10 : 0)] || 'th');
   const dateStr = `${dayNames[dayOfWeek]} ${ordinal} ${monthNames[today.getMonth()]}`;
 
-  return NextResponse.json({ dateStr, weather, dailyTasks, projects, personalTodos });
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const todayStr = `${today.getUTCFullYear()}-${pad(today.getUTCMonth() + 1)}-${pad(today.getUTCDate())}`;
+
+  return NextResponse.json({ dateStr, weather, dailyTasks, projects, personalTodos, todayStr });
 }

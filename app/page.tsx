@@ -28,6 +28,7 @@ interface Shift {
 interface DashboardData {
   dateStr: string;
   weather: string;
+  todayStr: string;
   dailyTasks: Todo[];
   projects: Project[];
   personalTodos: Todo[];
@@ -204,7 +205,7 @@ export default function Home() {
   const [promoting, setPromoting] = useState(false);
   const [shifts, setShifts] = useState<Shift[]>([]);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = data?.todayStr ?? '';
 
   const fetchDashboard = async () => {
     const d = await fetch('/api/dashboard').then(r => r.json());
