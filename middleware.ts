@@ -15,6 +15,10 @@ export function middleware(request: NextRequest) {
   const session = request.cookies.get('gdt_session')?.value;
 
   if (!session || session !== SESSION_TOKEN) {
+    // For API routes return 401 JSON — don't redirect (fetch calls can't follow HTML redirects)
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -22,5 +26,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png|manifest.json).*)'],
 };

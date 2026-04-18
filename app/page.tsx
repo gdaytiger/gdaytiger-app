@@ -237,7 +237,9 @@ export default function Home() {
   const todayStr = data?.todayStr ?? '';
 
   const fetchDashboard = async () => {
-    const d = await fetch('/api/dashboard').then(r => r.json());
+    const res = await fetch('/api/dashboard');
+    if (res.status === 401) { window.location.href = '/login'; return; }
+    const d = await res.json();
     const state = loadCheckedState();
     setData({
       ...d,
