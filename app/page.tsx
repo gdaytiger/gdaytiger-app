@@ -141,27 +141,20 @@ function RosterRow({
         style={{ transform: isAdding ? 'translateX(-100%)' : 'translateX(0)' }}
       >
         <div>
-          <span
-            className={`text-sm font-semibold ${isToday ? '' : shift.working ? 'text-gray-800' : 'text-gray-400'}`}
-            style={isToday ? { color: '#fbcdad' } : {}}
-          >
+          <span className={`text-sm font-semibold ${shift.working ? 'text-gray-800' : 'text-gray-400'}`}>
             {shift.label}
-            {isToday && <span className="ml-2 text-xs font-medium" style={{ color: '#fbcdad' }}>TODAY</span>}
+            {isToday && <span className="ml-2 text-xs font-medium text-gray-400">TODAY</span>}
           </span>
           {shift.working && shift.area && <p className="text-xs text-gray-400 mt-0.5">{shift.area}</p>}
           {shift.working && shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
         </div>
         <div className="flex items-center gap-2">
-          <span
-            className={`text-sm font-medium ${isToday ? '' : shift.working ? 'text-gray-500' : 'text-gray-300'}`}
-            style={isToday ? { color: '#fbcdad' } : {}}
-          >
+          <span className={`text-sm font-medium ${shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
             {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
           </span>
           <button
             onClick={openInput}
-            className="transition-colors text-xl leading-none font-light pl-1"
-            style={{ color: isToday ? '#fbcdad' : '#d1d5db' }}
+            className="transition-colors text-xl leading-none font-light pl-1 text-gray-300 hover:text-gray-400"
             aria-label="Add task"
           >
             +
@@ -174,7 +167,7 @@ function RosterRow({
         className="absolute inset-0 flex items-center gap-2 py-2 px-3 transition-transform duration-300 ease-in-out"
         style={{ transform: isAdding ? 'translateX(0)' : 'translateX(100%)' }}
       >
-        <span className="text-xs font-semibold shrink-0" style={{ color: isToday ? '#fbcdad' : '#6b7280' }}>
+        <span className="text-xs font-semibold shrink-0 text-gray-500">
           {shift.label.split(' ')[0]}
         </span>
         <input
