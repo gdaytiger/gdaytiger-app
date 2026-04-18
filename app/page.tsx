@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 interface Todo {
   id: string;
@@ -33,7 +33,6 @@ interface DashboardData {
   personalTodos: Todo[];
 }
 
-// localStorage helpers — keyed by today's date so state auto-clears each new day
 const getStorageKey = () => `gdaytiger-checked-${new Date().toISOString().split('T')[0]}`;
 
 const loadCheckedState = (): Record<string, boolean> => {
@@ -90,6 +89,101 @@ function CheckItem({
   );
 }
 
+function RosterRow({
+  shift,
+  isToday,
+  onAdd,
+}: {
+  shift: Shift;
+  isToday: boolean;
+  onAdd: (date: string, text: string) => Promise<void>;
+}) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [taskText, setTaskText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const openInput = () => {
+    setIsAdding(true);
+    setTimeout(() => inputRef.current?.focus(), 320);
+  };
+
+  const close = () => {
+    setIsAdding(false);
+    setTaskText('');
+  };
+
+  const submit = async () => {
+    if (!taskText.trim()) return;
+    setSaving(true);
+    await onAdd(shift.date, taskText);
+    setSaving(false);
+    close();
+  };
+
+  return (
+    <div className={`relative overflow-hidden rounded-xl ${isToday ? 'bg-orange-50 border border-orange-200' : 'bg-white/30'}`}
+      style={{ minHeight: '52px' }}>
+
+      {/* Normal row — slides left out */}
+      <div
+        className="absolute inset-0 flex items-center justify-between py-2 px-3 transition-transform duration-300 ease-in-out"
+        style={{ transform: isAdding ? 'translateX(-100%)' : 'translateX(0)' }}
+      >
+        <div>
+          <span className={`text-sm font-semibold ${isToday ? 'text-orange-600' : shift.working ? 'text-gray-800' : 'text-gray-400'}`}>
+            {shift.label}
+            {isToday && <span className="ml-2 text-xs font-medium text-orange-400">TODAY</span>}
+          </span>
+          {shift.working && shift.area && <p className="text-xs text-gray-400 mt-0.5">{shift.area}</p>}
+          {shift.working && shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
+            {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
+          </span>
+          <button
+            onClick={openInput}
+            className="text-gray-300 hover:text-orange-400 transition-colors text-xl leading-none font-light pl-1"
+            aria-label="Add task"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      {/* Input row — slides in from right */}
+      <div
+        className="absolute inset-0 flex items-center gap-2 py-2 px-3 transition-transform duration-300 ease-in-out"
+        style={{ transform: isAdding ? 'translateX(0)' : 'translateX(100%)' }}
+      >
+        <span className={`text-xs font-semibold shrink-0 ${isToday ? 'text-orange-500' : 'text-gray-500'}`}>
+          {shift.label.split(' ')[0]}
+        </span>
+        <input
+          ref={inputRef}
+          value={taskText}
+          onChange={e => setTaskText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') close(); }}
+          placeholder="Add a task..."
+          className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
+          style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }}
+        />
+        <button
+          onClick={submit}
+          disabled={saving || !taskText.trim()}
+          className="text-xs bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0"
+        >
+          {saving ? '...' : 'Add'}
+        </button>
+        <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,11 +193,6 @@ export default function Home() {
   const [nextActions, setNextActions] = useState(['', '', '']);
   const [promoting, setPromoting] = useState(false);
   const [shifts, setShifts] = useState<Shift[]>([]);
-
-  // Add task dialog state
-  const [selectedDay, setSelectedDay] = useState<Shift | null>(null);
-  const [newTaskText, setNewTaskText] = useState('');
-  const [savingTask, setSavingTask] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -122,9 +211,17 @@ export default function Home() {
     fetch('/api/roster')
       .then(r => r.json())
       .then(d => setShifts(d.shifts || []));
-
     fetchDashboard().then(() => setLoading(false));
   }, []);
+
+  const handleAddTask = async (date: string, text: string) => {
+    await fetch('/api/add-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, text }),
+    });
+    if (date === todayStr) await fetchDashboard();
+  };
 
   const toggleTodo = async (
     blockId: string,
@@ -137,23 +234,16 @@ export default function Home() {
     saveCheckedState(state);
 
     if (section === 'daily') {
-      setData(prev => prev ? {
-        ...prev,
-        dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t),
-      } : prev);
+      setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
     } else if (section === 'project' && projectId) {
       setData(prev => prev ? {
         ...prev,
         projects: prev.projects.map(p => p.id === projectId ? {
-          ...p,
-          todos: p.todos.map(t => t.id === blockId ? { ...t, checked } : t),
+          ...p, todos: p.todos.map(t => t.id === blockId ? { ...t, checked } : t),
         } : p),
       } : prev);
     } else if (section === 'personal') {
-      setData(prev => prev ? {
-        ...prev,
-        personalTodos: prev.personalTodos.map(t => t.id === blockId ? { ...t, checked } : t),
-      } : prev);
+      setData(prev => prev ? { ...prev, personalTodos: prev.personalTodos.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
     }
 
     await fetch('/api/todos', {
@@ -161,26 +251,6 @@ export default function Home() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ blockId, checked }),
     });
-  };
-
-  const handleAddTask = async () => {
-    if (!selectedDay || !newTaskText.trim()) return;
-    setSavingTask(true);
-
-    await fetch('/api/add-task', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: selectedDay.date, text: newTaskText }),
-    });
-
-    // If it's today, refresh the daily tasks to show the new item
-    if (selectedDay.date === todayStr) {
-      await fetchDashboard();
-    }
-
-    setNewTaskText('');
-    setSelectedDay(null);
-    setSavingTask(false);
   };
 
   const handlePromote = async () => {
@@ -217,70 +287,9 @@ export default function Home() {
     <div className="min-h-screen text-gray-900" style={{
       background: 'linear-gradient(135deg, #e8eeff 0%, #fff8f0 40%, #f0fdf4 100%)',
     }}>
-      {/* Decorative blobs */}
-      <div style={{
-        position: 'fixed', top: '-10%', right: '-5%', width: '400px', height: '400px',
-        background: 'radial-gradient(circle, rgba(251,146,60,0.18) 0%, transparent 70%)',
-        borderRadius: '50%', pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'fixed', bottom: '-10%', left: '-5%', width: '500px', height: '500px',
-        background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)',
-        borderRadius: '50%', pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'fixed', top: '40%', left: '30%', width: '300px', height: '300px',
-        background: 'radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%)',
-        borderRadius: '50%', pointerEvents: 'none',
-      }} />
-
-      {/* Add Task Dialog */}
-      {selectedDay && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)' }}
-          onClick={e => { if (e.target === e.currentTarget) { setSelectedDay(null); setNewTaskText(''); } }}
-        >
-          <div style={{
-            background: 'rgba(255,255,255,0.85)',
-            backdropFilter: 'blur(24px) saturate(180%)',
-            border: '1px solid rgba(255,255,255,0.9)',
-            boxShadow: '0 24px 64px rgba(0,0,0,0.15)',
-          }} className="rounded-3xl p-6 w-full max-w-sm flex flex-col gap-4">
-            <div>
-              <p className="text-xs font-bold tracking-widest uppercase text-orange-500 mb-1" style={{ fontFamily: '"stolzl", sans-serif' }}>Add Task</p>
-              <p className="text-lg font-bold text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", sans-serif' }}>{selectedDay.label}</p>
-              {selectedDay.working && (
-                <p className="text-xs text-gray-400 mt-0.5">{selectedDay.area} · {selectedDay.start} – {selectedDay.end}</p>
-              )}
-            </div>
-            <input
-              autoFocus
-              value={newTaskText}
-              onChange={e => setNewTaskText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddTask(); if (e.key === 'Escape') { setSelectedDay(null); setNewTaskText(''); } }}
-              placeholder="What needs to be done?"
-              style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.1)' }}
-              className="w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={handleAddTask}
-                disabled={savingTask || !newTaskText.trim()}
-                className="flex-1 text-sm bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white px-4 py-2.5 rounded-xl font-semibold transition-colors shadow-sm"
-              >
-                {savingTask ? 'Adding...' : 'Add Task'}
-              </button>
-              <button
-                onClick={() => { setSelectedDay(null); setNewTaskText(''); }}
-                className="text-sm text-gray-400 hover:text-gray-600 px-4 py-2.5 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div style={{ position: 'fixed', top: '-10%', right: '-5%', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(251,146,60,0.18) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
+      <div style={{ position: 'fixed', bottom: '-10%', left: '-5%', width: '500px', height: '500px', background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
+      <div style={{ position: 'fixed', top: '40%', left: '30%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
 
       {/* Header */}
       <div className="max-w-5xl mx-auto px-5 pt-8 pb-4 flex items-center justify-between relative">
@@ -304,13 +313,8 @@ export default function Home() {
               <p className="text-sm text-gray-400 italic">No tasks today 🎉</p>
             ) : (
               data.dailyTasks.map(task => (
-                <CheckItem
-                  key={task.id}
-                  id={task.id}
-                  text={task.text}
-                  checked={task.checked}
-                  onChange={(id, checked) => toggleTodo(id, checked, 'daily')}
-                />
+                <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked}
+                  onChange={(id, checked) => toggleTodo(id, checked, 'daily')} />
               ))
             )}
           </div>
@@ -322,31 +326,14 @@ export default function Home() {
             {shifts.length === 0 ? (
               <p className="text-sm text-gray-400 italic">No shifts found</p>
             ) : (
-              shifts.map(shift => {
-                const isToday = shift.date === todayStr;
-                return (
-                  <div
-                    key={shift.date}
-                    onClick={() => { setSelectedDay(shift); setNewTaskText(''); }}
-                    className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-all group ${isToday ? 'bg-orange-50 border border-orange-200 hover:bg-orange-100' : 'bg-white/30 hover:bg-white/60'}`}
-                  >
-                    <div>
-                      <span className={`text-sm font-semibold ${isToday ? 'text-orange-600' : shift.working ? 'text-gray-800' : 'text-gray-400'}`}>
-                        {shift.label}
-                        {isToday && <span className="ml-2 text-xs font-medium text-orange-400">TODAY</span>}
-                      </span>
-                      {shift.working && shift.area && <p className="text-xs text-gray-400 mt-0.5">{shift.area}</p>}
-                      {shift.working && shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
-                        {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
-                      </span>
-                      <span className="text-gray-300 group-hover:text-orange-400 transition-colors text-lg leading-none">+</span>
-                    </div>
-                  </div>
-                );
-              })
+              shifts.map(shift => (
+                <RosterRow
+                  key={shift.date}
+                  shift={shift}
+                  isToday={shift.date === todayStr}
+                  onAdd={handleAddTask}
+                />
+              ))
             )}
           </div>
         </Card>
@@ -366,22 +353,15 @@ export default function Home() {
                       project.status === 'In Progress' ? 'bg-blue-100 text-blue-600' :
                       project.status === 'Blocked' ? 'bg-red-100 text-red-600' :
                       'bg-gray-100 text-gray-500'
-                    }`}>
-                      {project.status}
-                    </span>
+                    }`}>{project.status}</span>
                   </div>
                   {project.todos.length === 0 ? (
                     <p className="text-xs text-gray-400 italic ml-1">No actions set</p>
                   ) : (
                     <div className="space-y-2">
                       {project.todos.map(todo => (
-                        <CheckItem
-                          key={todo.id}
-                          id={todo.id}
-                          text={todo.text}
-                          checked={todo.checked}
-                          onChange={(id, checked) => toggleTodo(id, checked, 'project', project.id)}
-                        />
+                        <CheckItem key={todo.id} id={todo.id} text={todo.text} checked={todo.checked}
+                          onChange={(id, checked) => toggleTodo(id, checked, 'project', project.id)} />
                       ))}
                     </div>
                   )}
@@ -404,10 +384,8 @@ export default function Home() {
                 rows={4}
               />
               {braindump.trim() && (
-                <button
-                  onClick={() => { setProjectName(braindump.trim()); setShowPromote(true); }}
-                  className="text-xs bg-orange-500 hover:bg-orange-400 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-sm"
-                >
+                <button onClick={() => { setProjectName(braindump.trim()); setShowPromote(true); }}
+                  className="text-xs bg-orange-500 hover:bg-orange-400 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-sm">
                   Move to Projects →
                 </button>
               )}
@@ -415,35 +393,23 @@ export default function Home() {
           ) : (
             <div className="space-y-3">
               <p className="text-xs text-gray-400 italic">&ldquo;{braindump}&rdquo;</p>
-              <input
-                value={projectName}
-                onChange={e => setProjectName(e.target.value)}
-                placeholder="Project name"
+              <input value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="Project name"
                 style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }}
-                className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
-              />
+                className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
               {nextActions.map((action, i) => (
-                <input
-                  key={i}
-                  value={action}
+                <input key={i} value={action}
                   onChange={e => { const a = [...nextActions]; a[i] = e.target.value; setNextActions(a); }}
                   placeholder={`Next action ${i + 1}`}
                   style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }}
-                  className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
-                />
+                  className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
               ))}
               <div className="flex gap-2 pt-1">
-                <button
-                  onClick={handlePromote}
-                  disabled={promoting || !projectName.trim()}
-                  className="text-xs bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-sm"
-                >
+                <button onClick={handlePromote} disabled={promoting || !projectName.trim()}
+                  className="text-xs bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-sm">
                   {promoting ? 'Creating...' : 'Create Project'}
                 </button>
-                <button
-                  onClick={() => { setShowPromote(false); setProjectName(''); setNextActions(['', '', '']); }}
-                  className="text-xs text-gray-400 hover:text-gray-600 px-3 py-2 transition-colors"
-                >
+                <button onClick={() => { setShowPromote(false); setProjectName(''); setNextActions(['', '', '']); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-3 py-2 transition-colors">
                   Cancel
                 </button>
               </div>
@@ -458,13 +424,8 @@ export default function Home() {
               <p className="text-sm text-gray-400 italic">Nothing here</p>
             ) : (
               data.personalTodos.map(todo => (
-                <CheckItem
-                  key={todo.id}
-                  id={todo.id}
-                  text={todo.text}
-                  checked={todo.checked}
-                  onChange={(id, checked) => toggleTodo(id, checked, 'personal')}
-                />
+                <CheckItem key={todo.id} id={todo.id} text={todo.text} checked={todo.checked}
+                  onChange={(id, checked) => toggleTodo(id, checked, 'personal')} />
               ))
             )}
           </div>
