@@ -15,6 +15,14 @@ interface Project {
   todos: Todo[];
 }
 
+interface Shift {
+  date: string;
+  label: string;
+  start: string;
+  end: string;
+  comment: string;
+}
+
 interface DashboardData {
   dateStr: string;
   weather: string;
@@ -69,8 +77,13 @@ export default function Home() {
   const [projectName, setProjectName] = useState('');
   const [nextActions, setNextActions] = useState(['', '', '']);
   const [promoting, setPromoting] = useState(false);
+  const [shifts, setShifts] = useState<Shift[]>([]);
 
   useEffect(() => {
+    fetch('/api/roster')
+      .then(r => r.json())
+      .then(d => setShifts(d.shifts || []));
+
     fetch('/api/dashboard')
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); });
@@ -293,6 +306,33 @@ export default function Home() {
               </div>
             </div>
           )}
+        </Card>
+
+        {/* ROSTER */}
+        <Card emoji="📅" title="Roster">
+          <div className="space-y-2">
+            {shifts.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No shifts found</p>
+            ) : (
+              shifts.map(shift => {
+                const isToday = shift.date === new Date().toISOString().split('T')[0];
+                return (
+                  <div key={shift.date} className={`flex items-center justify-between py-2 px-3 rounded-xl ${isToday ? 'bg-orange-50 border border-orange-200' : 'bg-white/30'}`}>
+                    <div>
+                      <span className={`text-sm font-semibold ${isToday ? 'text-orange-600' : 'text-gray-800'}`}>
+                        {shift.label}
+                        {isToday && <span className="ml-2 text-xs font-medium text-orange-400">TODAY</span>}
+                      </span>
+                      {shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
+                    </div>
+                    <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : 'text-gray-500'}`}>
+                      {shift.start} – {shift.end}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </Card>
 
         {/* PERSONAL TO DO */}
