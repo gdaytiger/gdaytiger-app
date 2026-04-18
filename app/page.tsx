@@ -321,7 +321,7 @@ export default function Home() {
         </Card>
 
         {/* ROSTER */}
-        <Card emoji="📅" title="Roster">
+        <Card emoji="📅" title="The Week Ahead">
           <div className="space-y-2">
             {shifts.length === 0 ? (
               <p className="text-sm text-gray-400 italic">No shifts found</p>
