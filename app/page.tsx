@@ -82,7 +82,7 @@ function CheckItem({
         onChange={e => onChange(id, e.target.checked)}
         className="mt-0.5 w-4 h-4 rounded accent-orange-500 shrink-0"
       />
-      <span className={`text-sm leading-snug transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+      <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#fbcdad' }}>{title}</span>
         {text}
       </span>
     </label>
