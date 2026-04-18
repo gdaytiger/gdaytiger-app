@@ -18,6 +18,7 @@ interface Project {
 interface Shift {
   date: string;
   label: string;
+  working: boolean;
   start: string;
   end: string;
   area: string;
@@ -261,15 +262,15 @@ export default function Home() {
                 return (
                   <div key={shift.date} className={`flex items-center justify-between py-2 px-3 rounded-xl ${isToday ? 'bg-orange-50 border border-orange-200' : 'bg-white/30'}`}>
                     <div>
-                      <span className={`text-sm font-semibold ${isToday ? 'text-orange-600' : 'text-gray-800'}`}>
+                      <span className={`text-sm font-semibold ${isToday ? 'text-orange-600' : shift.working ? 'text-gray-800' : 'text-gray-400'}`}>
                         {shift.label}
                         {isToday && <span className="ml-2 text-xs font-medium text-orange-400">TODAY</span>}
                       </span>
-                      {shift.area && <p className="text-xs text-gray-400 mt-0.5">{shift.area}</p>}
-                      {shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
+                      {shift.working && shift.area && <p className="text-xs text-gray-400 mt-0.5">{shift.area}</p>}
+                      {shift.working && shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
                     </div>
-                    <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : 'text-gray-500'}`}>
-                      {shift.start} – {shift.end}
+                    <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
+                      {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
                     </span>
                   </div>
                 );

@@ -33,14 +33,14 @@ export async function GET() {
     const token = await getValidToken();
 
     const today = new Date();
-    const twoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const eightDays = new Date(today.getTime() + 8 * 24 * 60 * 60 * 1000);
 
     const pad = (n: number) => String(n).padStart(2, '0');
     const formatDate = (d: Date) =>
       `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
     const startDate = formatDate(today);
-    const endDate = formatDate(twoWeeks);
+    const endDate = formatDate(eightDays);
 
     const rosterRes = await fetch(
       `${DEPUTY_ENDPOINT}/api/v1/resource/Roster/QUERY`,
@@ -63,10 +63,6 @@ export async function GET() {
 
     const rosters = await rosterRes.json();
 
-    if (!Array.isArray(rosters)) {
-      return NextResponse.json({ shifts: [], error: 'No roster data' });
-    }
-
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -81,27 +77,43 @@ export async function GET() {
       return `${h}${m > 0 ? `:${pad(m)}` : ''}${ampm}`;
     };
 
-    const shifts = rosters.map((r: {
-      Date: string;
-      StartTime: number;
-      EndTime: number;
-      OperationalUnit: number;
-      Comment?: string;
-    }) => {
-      const date = new Date(r.Date);
-      const dayLabel = `${dayNames[date.getDay()]} ${date.getDate()} ${monthNames[date.getMonth()]}`;
-      const start = formatTime(r.StartTime);
-      const end = formatTime(r.EndTime);
-      const area = AREA_NAMES[r.OperationalUnit] || '';
-      return {
-        date: r.Date,
+    // Build map of date -> shift from Deputy
+    const shiftMap: Record<string, { start: string; end: string; area: string; comment: string }> = {};
+    if (Array.isArray(rosters)) {
+      for (const r of rosters as {
+        Date: string;
+        StartTime: number;
+        EndTime: number;
+        OperationalUnit: number;
+        Comment?: string;
+      }[]) {
+        shiftMap[r.Date] = {
+          start: formatTime(r.StartTime),
+          end: formatTime(r.EndTime),
+          area: AREA_NAMES[r.OperationalUnit] || '',
+          comment: r.Comment || '',
+        };
+      }
+    }
+
+    // Generate all 7 days, fill gaps with "not working"
+    const shifts = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today.getTime() + i * 24 * 60 * 60 * 1000);
+      const dateStr = formatDate(d);
+      const dayLabel = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+      const shift = shiftMap[dateStr];
+
+      shifts.push({
+        date: dateStr,
         label: dayLabel,
-        start,
-        end,
-        area,
-        comment: r.Comment || '',
-      };
-    });
+        working: !!shift,
+        start: shift?.start || '',
+        end: shift?.end || '',
+        area: shift?.area || '',
+        comment: shift?.comment || '',
+      });
+    }
 
     return NextResponse.json({ shifts });
   } catch (err) {
@@ -109,4 +121,3 @@ export async function GET() {
     return NextResponse.json({ shifts: [], error: 'Failed to fetch roster' });
   }
 }
-
