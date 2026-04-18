@@ -56,7 +56,7 @@ export default function Login() {
         <div className="flex flex-col items-center gap-3">
           <img src="/logo.png" alt="G'Day Tiger" style={{ width: '64px', height: '64px', objectFit: 'contain', filter: 'drop-shadow(0px 4px 12px rgba(0,0,0,0.3))' }} />
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif', fontWeight: 700, fontVariationSettings: "'opsz' 18, 'wght' 700" }}>
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif', fontWeight: 700, fontStyle: 'italic', fontVariationSettings: "'opsz' 18, 'wght' 700" }}>
               TIGER <span style={{ color: '#fbcdad' }}>OS</span>
             </h1>
             <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>Enter password to continue</p>
