@@ -20,6 +20,7 @@ interface Shift {
   label: string;
   start: string;
   end: string;
+  area: string;
   comment: string;
 }
 
@@ -208,6 +209,34 @@ export default function Home() {
           </div>
         </Card>
 
+        {/* ROSTER */}
+        <Card emoji="📅" title="Roster">
+          <div className="space-y-2">
+            {shifts.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No shifts found</p>
+            ) : (
+              shifts.map(shift => {
+                const isToday = shift.date === new Date().toISOString().split('T')[0];
+                return (
+                  <div key={shift.date} className={`flex items-center justify-between py-2 px-3 rounded-xl ${isToday ? 'bg-orange-50 border border-orange-200' : 'bg-white/30'}`}>
+                    <div>
+                      <span className={`text-sm font-semibold ${isToday ? 'text-orange-600' : 'text-gray-800'}`}>
+                        {shift.label}
+                        {isToday && <span className="ml-2 text-xs font-medium text-orange-400">TODAY</span>}
+                      </span>
+                      {shift.area && <p className="text-xs text-gray-400 mt-0.5">{shift.area}</p>}
+                      {shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
+                    </div>
+                    <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : 'text-gray-500'}`}>
+                      {shift.start} – {shift.end}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Card>
+
         {/* ONGOING PROJECTS */}
         <Card emoji="🎯" title="Ongoing Projects">
           <span className="text-xs text-gray-400 -mt-2">{projectsDone}/{projectsTotal} actions done</span>
@@ -306,33 +335,6 @@ export default function Home() {
               </div>
             </div>
           )}
-        </Card>
-
-        {/* ROSTER */}
-        <Card emoji="📅" title="Roster">
-          <div className="space-y-2">
-            {shifts.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No shifts found</p>
-            ) : (
-              shifts.map(shift => {
-                const isToday = shift.date === new Date().toISOString().split('T')[0];
-                return (
-                  <div key={shift.date} className={`flex items-center justify-between py-2 px-3 rounded-xl ${isToday ? 'bg-orange-50 border border-orange-200' : 'bg-white/30'}`}>
-                    <div>
-                      <span className={`text-sm font-semibold ${isToday ? 'text-orange-600' : 'text-gray-800'}`}>
-                        {shift.label}
-                        {isToday && <span className="ml-2 text-xs font-medium text-orange-400">TODAY</span>}
-                      </span>
-                      {shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
-                    </div>
-                    <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : 'text-gray-500'}`}>
-                      {shift.start} – {shift.end}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
         </Card>
 
         {/* PERSONAL TO DO */}
