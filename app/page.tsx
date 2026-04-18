@@ -39,18 +39,19 @@ interface WeekDay {
   tasks: Todo[];
 }
 
-const getStorageKey = () => `gdaytiger-checked-${new Date().toISOString().split('T')[0]}`;
+const getStorageKey = (date?: string) =>
+  `gdaytiger-checked-${date ?? new Date().toISOString().split('T')[0]}`;
 
-const loadCheckedState = (): Record<string, boolean> => {
+const loadCheckedState = (date?: string): Record<string, boolean> => {
   try {
-    const stored = localStorage.getItem(getStorageKey());
+    const stored = localStorage.getItem(getStorageKey(date));
     return stored ? JSON.parse(stored) : {};
   } catch { return {}; }
 };
 
-const saveCheckedState = (state: Record<string, boolean>) => {
+const saveCheckedState = (state: Record<string, boolean>, date?: string) => {
   try {
-    localStorage.setItem(getStorageKey(), JSON.stringify(state));
+    localStorage.setItem(getStorageKey(date), JSON.stringify(state));
   } catch {}
 };
 
@@ -268,9 +269,10 @@ export default function Home() {
 
   const fetchWeekTasks = async () => {
     const d = await fetch('/api/week-tasks').then(r => r.json());
-    const state = loadCheckedState();
     const enriched: Record<string, WeekDay> = {};
     for (const [date, day] of Object.entries(d.days as Record<string, WeekDay>)) {
+      // Each day uses its own date-specific storage key so checks don't bleed across weeks
+      const state = loadCheckedState(date);
       enriched[date] = { ...day, tasks: applyChecked(day.tasks, state) };
     }
     setWeekTasks(enriched);
@@ -324,9 +326,10 @@ export default function Home() {
     projectId?: string,
     date?: string,
   ) => {
-    const state = loadCheckedState();
+    const storageDate = section === 'week' ? date : undefined;
+    const state = loadCheckedState(storageDate);
     state[blockId] = checked;
-    saveCheckedState(state);
+    saveCheckedState(state, storageDate);
 
     if (section === 'daily') {
       setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
