@@ -76,15 +76,17 @@ function Card({ emoji, title, children }: { emoji: string; title: string; childr
 }
 
 function CheckItem({
-  id, text, checked, onChange
+  id, text, checked, onChange, onDelete
 }: {
-  id: string; text: string; checked: boolean; onChange: (id: string, checked: boolean) => void;
+  id: string; text: string; checked: boolean;
+  onChange: (id: string, checked: boolean) => void;
+  onDelete?: (id: string) => void;
 }) {
   return (
-    <label className="flex items-start gap-3 cursor-pointer group">
+    <div className="flex items-start gap-3 group">
       <div
         onClick={() => onChange(id, !checked)}
-        className="mt-0.5 shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors"
+        className="mt-0.5 shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer"
         style={{
           background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)',
           border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)',
@@ -96,10 +98,25 @@ function CheckItem({
           </svg>
         )}
       </div>
-      <span className={`text-sm leading-snug transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+      <span
+        onClick={() => onChange(id, !checked)}
+        className={`flex-1 text-sm leading-snug transition-colors cursor-pointer ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}
+      >
         {text}
       </span>
-    </label>
+      {onDelete && (
+        <button
+          onClick={() => onDelete(id)}
+          className="shrink-0 transition-colors leading-none mt-0.5"
+          style={{ fontSize: '16px', lineHeight: 1, color: '#ccc' }}
+          onTouchStart={e => (e.currentTarget.style.color = '#ef4444')}
+          onTouchEnd={e => (e.currentTarget.style.color = '#ccc')}
+          aria-label="Delete task"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -273,6 +290,23 @@ export default function Home() {
     setSelectedDate(prev => prev === date ? null : date);
   };
 
+  const handleDeleteTask = async (blockId: string, section: 'daily' | 'week', date?: string) => {
+    // Optimistic UI update
+    if (section === 'daily') {
+      setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(t => t.id !== blockId) } : prev);
+    } else if (section === 'week' && date) {
+      setWeekTasks(prev => ({
+        ...prev,
+        [date]: { ...prev[date], count: prev[date].count - 1, tasks: prev[date].tasks.filter(t => t.id !== blockId) },
+      }));
+    }
+    await fetch('/api/delete-task', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blockId }),
+    });
+  };
+
   const handleAddTask = async (date: string, text: string) => {
     await fetch('/api/add-task', {
       method: 'POST',
@@ -408,6 +442,11 @@ export default function Home() {
                     id, checked,
                     isViewingOtherDay ? 'week' : 'daily',
                     undefined,
+                    isViewingOtherDay ? selectedDate! : undefined
+                  )}
+                  onDelete={(id) => handleDeleteTask(
+                    id,
+                    isViewingOtherDay ? 'week' : 'daily',
                     isViewingOtherDay ? selectedDate! : undefined
                   )}
                 />
