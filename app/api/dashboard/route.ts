@@ -51,15 +51,44 @@ async function getWeather() {
   }
 }
 
-async function getDailyTasks(dayOfWeek: number) {
+// Returns ISO week number for a given date
+function getISOWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+async function getDailyTasks(dayOfWeek: number, today: Date) {
   const pageId = DAY_PAGES[dayOfWeek];
   const data = await notionFetch(`/blocks/${pageId}/children?page_size=100`);
+
+  const weekNum = getISOWeek(today);
+  const isOddWeek = weekNum % 2 === 1;
+
   const tasks = [];
   for (const block of (data.results || [])) {
     if (block.type === 'bulleted_list_item') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const text = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
-      if (text.trim()) tasks.push({ id: block.id, text: text.trim(), checked: false });
+      const raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
+      if (!raw.trim()) continue;
+
+      // [F] = fortnightly — only show on odd ISO weeks
+      if (raw.startsWith('[F]')) {
+        if (!isOddWeek) continue;
+        tasks.push({ id: block.id, text: raw.replace('[F]', '').trim(), checked: false });
+        continue;
+      }
+
+      // [M] = monthly — only show on first occurrence of this weekday in the month
+      if (raw.startsWith('[M]')) {
+        if (today.getDate() > 7) continue;
+        tasks.push({ id: block.id, text: raw.replace('[M]', '').trim(), checked: false });
+        continue;
+      }
+
+      tasks.push({ id: block.id, text: raw.trim(), checked: false });
     }
   }
   return tasks;
@@ -127,7 +156,7 @@ export async function GET() {
 
   const [weather, dailyTasks, projects, personalTodos] = await Promise.all([
     getWeather(),
-    getDailyTasks(dayOfWeek),
+    getDailyTasks(dayOfWeek, today),
     getProjects(),
     getPersonalTodos(),
   ]);
