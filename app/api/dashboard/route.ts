@@ -60,6 +60,19 @@ function getISOWeek(date: Date): number {
   return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
+// Auto-delete a stale Notion block (fire-and-forget)
+function deleteBlock(blockId: string) {
+  fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${NOTION_API_KEY}`,
+      'Notion-Version': '2022-06-28',
+    },
+  }).catch(() => {});
+}
+
+const DATE_PREFIX_RE = /^\[(\d{4}-\d{2}-\d{2})\]\s*/;
+
 async function getDailyTasks(dayOfWeek: number, today: Date) {
   const pageId = DAY_PAGES[dayOfWeek];
   const data = await notionFetch(`/blocks/${pageId}/children?page_size=100`);
@@ -67,12 +80,31 @@ async function getDailyTasks(dayOfWeek: number, today: Date) {
   const weekNum = getISOWeek(today);
   const isOddWeek = weekNum % 2 === 1;
 
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const todayStr = `${today.getUTCFullYear()}-${pad(today.getUTCMonth() + 1)}-${pad(today.getUTCDate())}`;
+
   const tasks = [];
   for (const block of (data.results || [])) {
     if (block.type === 'bulleted_list_item') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
       if (!raw.trim()) continue;
+
+      // [YYYY-MM-DD] prefix = one-off task added via app
+      const dateMatch = raw.match(DATE_PREFIX_RE);
+      if (dateMatch) {
+        const taskDate = dateMatch[1];
+        if (taskDate < todayStr) {
+          // Past — silently delete from Notion
+          deleteBlock(block.id);
+          continue;
+        }
+        if (taskDate === todayStr) {
+          tasks.push({ id: block.id, text: raw.replace(DATE_PREFIX_RE, '').trim(), checked: false });
+        }
+        // Future date — don't show yet
+        continue;
+      }
 
       // [F] = fortnightly — only show on odd ISO weeks
       if (raw.startsWith('[F]')) {

@@ -20,6 +20,18 @@ function getISOWeek(date: Date): number {
   return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
+const DATE_PREFIX_RE = /^\[(\d{4}-\d{2}-\d{2})\]\s*/;
+
+function deleteBlock(blockId: string) {
+  fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${NOTION_API_KEY}`,
+      'Notion-Version': '2022-06-28',
+    },
+  }).catch(() => {});
+}
+
 async function getTasksForDay(dateStr: string): Promise<{ id: string; text: string; checked: boolean }[]> {
   const [year, month, day] = dateStr.split('-').map(Number);
   const d = new Date(year, month - 1, day);
@@ -28,6 +40,10 @@ async function getTasksForDay(dateStr: string): Promise<{ id: string; text: stri
 
   const weekNum = getISOWeek(d);
   const isOddWeek = weekNum % 2 === 1;
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const melbNow = new Date(Date.now() + 10 * 60 * 60 * 1000);
+  const todayStr = `${melbNow.getUTCFullYear()}-${pad(melbNow.getUTCMonth() + 1)}-${pad(melbNow.getUTCDate())}`;
 
   const res = await fetch(`https://api.notion.com/v1/blocks/${pageId}/children?page_size=100`, {
     headers: {
@@ -44,6 +60,20 @@ async function getTasksForDay(dateStr: string): Promise<{ id: string; text: stri
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
     if (!raw.trim()) continue;
+
+    // [YYYY-MM-DD] prefix = one-off task added via app
+    const dateMatch = raw.match(DATE_PREFIX_RE);
+    if (dateMatch) {
+      const taskDate = dateMatch[1];
+      if (taskDate < todayStr) {
+        deleteBlock(block.id);
+        continue;
+      }
+      if (taskDate === dateStr) {
+        tasks.push({ id: block.id, text: raw.replace(DATE_PREFIX_RE, '').trim(), checked: false });
+      }
+      continue;
+    }
 
     if (raw.startsWith('[F]')) {
       if (!isOddWeek) continue;

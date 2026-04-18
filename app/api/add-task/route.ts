@@ -20,7 +20,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing date or text' }, { status: 400 });
   }
 
-  // Get day of week from date string (Melbourne — treat as local date)
   const [year, month, day] = date.split('-').map(Number);
   const d = new Date(year, month - 1, day);
   const dayOfWeek = d.getDay();
@@ -29,6 +28,9 @@ export async function POST(req: NextRequest) {
   if (!pageId) {
     return NextResponse.json({ error: 'No page for that day' }, { status: 400 });
   }
+
+  // Prefix with date so the cleanup logic can auto-delete after the day passes
+  const content = `[${date}] ${text.trim()}`;
 
   const res = await fetch(`https://api.notion.com/v1/blocks/${pageId}/children`, {
     method: 'PATCH',
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
         {
           type: 'bulleted_list_item',
           bulleted_list_item: {
-            rich_text: [{ type: 'text', text: { content: text.trim() } }],
+            rich_text: [{ type: 'text', text: { content } }],
           },
         },
       ],
