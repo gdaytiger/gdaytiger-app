@@ -161,10 +161,13 @@ function RosterRow({
           {shift.working && shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
         </div>
         <div className="flex items-center gap-2">
-          {/* Task count circle — always shown */}
+          <span className={`text-sm font-medium ${shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
+            {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
+          </span>
+          {/* Task count circle */}
           <button
             onClick={() => onSelectDay(shift.date)}
-            className="flex items-center justify-center rounded-full font-bold transition-all hover:scale-110 self-center"
+            className="flex items-center justify-center rounded-full font-bold transition-all hover:scale-110"
             style={{
               width: '22px',
               height: '22px',
@@ -177,12 +180,9 @@ function RosterRow({
           >
             {taskCount}
           </button>
-          <span className={`text-sm font-medium ${shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
-            {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
-          </span>
           <button
             onClick={openInput}
-            className="transition-colors text-xl leading-none font-light pl-1 text-gray-300 hover:text-gray-400"
+            className="transition-colors text-xl leading-none font-light text-gray-300 hover:text-gray-400"
             aria-label="Add task"
           >
             +
