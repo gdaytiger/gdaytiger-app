@@ -183,7 +183,7 @@ export default function Home() {
           </h1>
           <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr} &nbsp;·&nbsp; {data.weather}</p>
         </div>
-        <img src="/logo.png" alt="G'Day Tiger" className="logo-spin" style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0 }} />
+        <img src="/logo.png" alt="G'DAY TIGER" style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0px 4px 12px rgba(0,0,0,0.3))' }} />
       </div>
 
       {/* Grid */}
