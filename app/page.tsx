@@ -76,12 +76,20 @@ function CheckItem({
 }) {
   return (
     <label className="flex items-start gap-3 cursor-pointer group">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={e => onChange(id, e.target.checked)}
-        className="mt-0.5 w-4 h-4 rounded accent-orange-500 shrink-0"
-      />
+      <div
+        onClick={() => onChange(id, !checked)}
+        className="mt-0.5 shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors"
+        style={{
+          background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)',
+          border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)',
+        }}
+      >
+        {checked && (
+          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+            <path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </div>
       <span className={`text-sm leading-snug transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
         {text}
       </span>
