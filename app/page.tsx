@@ -34,6 +34,11 @@ interface DashboardData {
   personalTodos: Todo[];
 }
 
+interface WeekDay {
+  count: number;
+  tasks: Todo[];
+}
+
 const getStorageKey = () => `gdaytiger-checked-${new Date().toISOString().split('T')[0]}`;
 
 const loadCheckedState = (): Record<string, boolean> => {
@@ -101,18 +106,23 @@ function CheckItem({
 function RosterRow({
   shift,
   isToday,
+  taskCount,
   onAdd,
+  onSelectDay,
 }: {
   shift: Shift;
   isToday: boolean;
+  taskCount: number;
   onAdd: (date: string, text: string) => Promise<void>;
+  onSelectDay: (date: string) => void;
 }) {
   const [isAdding, setIsAdding] = useState(false);
   const [taskText, setTaskText] = useState('');
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const openInput = () => {
+  const openInput = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setIsAdding(true);
     setTimeout(() => inputRef.current?.focus(), 320);
   };
@@ -135,7 +145,6 @@ function RosterRow({
       className={`relative overflow-hidden rounded-xl ${isToday ? 'border' : 'bg-white/30'}`}
       style={isToday ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}
     >
-
       {/* Normal row — slides left out */}
       <div
         className="absolute inset-0 flex items-center justify-between py-2 px-3 transition-transform duration-300 ease-in-out"
@@ -150,6 +159,24 @@ function RosterRow({
           {shift.working && shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
         </div>
         <div className="flex items-center gap-2">
+          {/* Task count circle */}
+          {taskCount > 0 && (
+            <button
+              onClick={() => onSelectDay(shift.date)}
+              className="flex items-center justify-center rounded-full text-xs font-bold transition-all hover:scale-110"
+              style={{
+                width: '22px',
+                height: '22px',
+                background: '#fbcdad',
+                color: '#333',
+                flexShrink: 0,
+                fontSize: '11px',
+              }}
+              title={`${taskCount} task${taskCount > 1 ? 's' : ''}`}
+            >
+              {taskCount}
+            </button>
+          )}
           <span className={`text-sm font-medium ${shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
             {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
           </span>
@@ -204,6 +231,8 @@ export default function Home() {
   const [nextActions, setNextActions] = useState(['', '', '']);
   const [promoting, setPromoting] = useState(false);
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const todayStr = data?.todayStr ?? '';
 
@@ -218,12 +247,27 @@ export default function Home() {
     });
   };
 
+  const fetchWeekTasks = async () => {
+    const d = await fetch('/api/week-tasks').then(r => r.json());
+    const state = loadCheckedState();
+    const enriched: Record<string, WeekDay> = {};
+    for (const [date, day] of Object.entries(d.days as Record<string, WeekDay>)) {
+      enriched[date] = { ...day, tasks: applyChecked(day.tasks, state) };
+    }
+    setWeekTasks(enriched);
+  };
+
   useEffect(() => {
     fetch('/api/roster')
       .then(r => r.json())
       .then(d => setShifts(d.shifts || []));
     fetchDashboard().then(() => setLoading(false));
+    fetchWeekTasks();
   }, []);
+
+  const handleSelectDay = (date: string) => {
+    setSelectedDate(prev => prev === date ? null : date);
+  };
 
   const handleAddTask = async (date: string, text: string) => {
     await fetch('/api/add-task', {
@@ -231,14 +275,16 @@ export default function Home() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date, text }),
     });
+    await fetchWeekTasks();
     if (date === todayStr) await fetchDashboard();
   };
 
   const toggleTodo = async (
     blockId: string,
     checked: boolean,
-    section: 'daily' | 'project' | 'personal',
-    projectId?: string
+    section: 'daily' | 'project' | 'personal' | 'week',
+    projectId?: string,
+    date?: string,
   ) => {
     const state = loadCheckedState();
     state[blockId] = checked;
@@ -246,6 +292,11 @@ export default function Home() {
 
     if (section === 'daily') {
       setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
+    } else if (section === 'week' && date) {
+      setWeekTasks(prev => ({
+        ...prev,
+        [date]: { ...prev[date], tasks: prev[date].tasks.map(t => t.id === blockId ? { ...t, checked } : t) },
+      }));
     } else if (section === 'project' && projectId) {
       setData(prev => prev ? {
         ...prev,
@@ -290,7 +341,17 @@ export default function Home() {
 
   if (!data) return null;
 
-  const dailyDone = data.dailyTasks.filter(t => t.checked).length;
+  // Determine which tasks to show in Daily To Do
+  const isViewingOtherDay = selectedDate !== null && selectedDate !== todayStr;
+  const displayedTasks = isViewingOtherDay
+    ? (weekTasks[selectedDate!]?.tasks ?? [])
+    : data.dailyTasks;
+
+  // Label for the selected day
+  const selectedShift = selectedDate ? shifts.find(s => s.date === selectedDate) : null;
+  const displayDayLabel = isViewingOtherDay && selectedShift ? selectedShift.label : null;
+
+  const dailyDone = displayedTasks.filter(t => t.checked).length;
   const projectsDone = data.projects.flatMap(p => p.todos).filter(t => t.checked).length;
   const projectsTotal = data.projects.flatMap(p => p.todos).length;
 
@@ -317,21 +378,41 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-5 pb-10 grid grid-cols-1 md:grid-cols-2 gap-4 relative">
 
         {/* DAILY TO DO */}
-        <Card emoji="⚡" title="Daily To Do">
-          <span className="text-xs text-gray-400 -mt-2">{dailyDone}/{data.dailyTasks.length} done</span>
+        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'}>
+          <div className="flex items-center justify-between -mt-2">
+            <span className="text-xs text-gray-400">{dailyDone}/{displayedTasks.length} done</span>
+            {isViewingOtherDay && (
+              <button
+                onClick={() => setSelectedDate(null)}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                ← Back to today
+              </button>
+            )}
+          </div>
           <div className="space-y-3">
-            {data.dailyTasks.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No tasks today 🎉</p>
+            {displayedTasks.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p>
             ) : (
-              data.dailyTasks.map(task => (
-                <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked}
-                  onChange={(id, checked) => toggleTodo(id, checked, 'daily')} />
+              displayedTasks.map(task => (
+                <CheckItem
+                  key={task.id}
+                  id={task.id}
+                  text={task.text}
+                  checked={task.checked}
+                  onChange={(id, checked) => toggleTodo(
+                    id, checked,
+                    isViewingOtherDay ? 'week' : 'daily',
+                    undefined,
+                    isViewingOtherDay ? selectedDate! : undefined
+                  )}
+                />
               ))
             )}
           </div>
         </Card>
 
-        {/* ROSTER */}
+        {/* THE WEEK AHEAD */}
         <Card emoji="📅" title="The Week Ahead">
           <div className="space-y-2">
             {shifts.length === 0 ? (
@@ -342,7 +423,9 @@ export default function Home() {
                   key={shift.date}
                   shift={shift}
                   isToday={shift.date === todayStr}
+                  taskCount={weekTasks[shift.date]?.count ?? 0}
                   onAdd={handleAddTask}
+                  onSelectDay={handleSelectDay}
                 />
               ))
             )}
