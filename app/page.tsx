@@ -61,8 +61,8 @@ function Card({ emoji, title, children }: { emoji: string; title: string; childr
       boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
     }} className="rounded-3xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2">
-        <span className="text-base">{emoji}</span>
-        <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#fbcdad' }}>{title}</span>
+        <span className="text-base" style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>{emoji}</span>
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#fbcdad', textShadow: '0px 2px 6px rgba(0,0,0,0.12)' }}>{title}</span>
       </div>
       {children}
     </div>
@@ -338,7 +338,7 @@ export default function Home() {
         </Card>
 
         {/* ROSTER */}
-        <Card emoji="📅" title="Roster">
+        <Card emoji="📅" title="The Week Ahead">
           <div className="space-y-2">
             {shifts.length === 0 ? (
               <p className="text-sm text-gray-400 italic">No shifts found</p>
