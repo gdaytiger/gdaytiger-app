@@ -164,10 +164,12 @@ export default function Home() {
       {/* Header */}
       <div className="max-w-5xl mx-auto px-5 pt-8 pb-4 flex items-center justify-between relative">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", sans-serif', fontVariationSettings: "'opsz' 18, 'wght' 700" }}>G&apos;DAY TIGER OS</h1>
-          <p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr} &nbsp;·&nbsp; {data.weather}</p>
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", sans-serif', fontVariationSettings: "'opsz' 18, 'wght' 700" }}>
+            G&apos;DAY TIGER <span style={{ color: '#fbcdad' }}>OS</span>
+          </h1>
+          <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr} &nbsp;·&nbsp; {data.weather}</p>
         </div>
-        <span className="text-2xl">🐯</span>
+        <img src="/logo.png" alt="G'Day Tiger" className="h-14 w-14 object-contain" />
       </div>
 
       {/* Grid */}
