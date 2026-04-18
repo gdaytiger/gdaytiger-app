@@ -34,7 +34,7 @@ function Card({ emoji, title, children }: { emoji: string; title: string; childr
     }} className="rounded-3xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <span className="text-base">{emoji}</span>
-        <span className="text-xs font-bold tracking-widest uppercase text-orange-500">{title}</span>
+        <span className="text-xs font-bold tracking-widest uppercase text-orange-500" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700 }}>{title}</span>
       </div>
       {children}
     </div>
@@ -164,8 +164,8 @@ export default function Home() {
       {/* Header */}
       <div className="max-w-5xl mx-auto px-5 pt-8 pb-4 flex items-center justify-between relative">
         <div>
-          <h1 className="text-lg font-bold tracking-tight text-gray-900">G&apos;DAY TIGER OS</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{data.dateStr} &nbsp;·&nbsp; {data.weather}</p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", sans-serif', fontVariationSettings: "'opsz' 18, 'wght' 700" }}>G&apos;DAY TIGER OS</h1>
+          <p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr} &nbsp;·&nbsp; {data.weather}</p>
         </div>
         <span className="text-2xl">🐯</span>
       </div>
