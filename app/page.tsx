@@ -32,6 +32,25 @@ interface DashboardData {
   personalTodos: Todo[];
 }
 
+// localStorage helpers — keyed by today's date so state auto-clears each new day
+const getStorageKey = () => `gdaytiger-checked-${new Date().toISOString().split('T')[0]}`;
+
+const loadCheckedState = (): Record<string, boolean> => {
+  try {
+    const stored = localStorage.getItem(getStorageKey());
+    return stored ? JSON.parse(stored) : {};
+  } catch { return {}; }
+};
+
+const saveCheckedState = (state: Record<string, boolean>) => {
+  try {
+    localStorage.setItem(getStorageKey(), JSON.stringify(state));
+  } catch {}
+};
+
+const applyChecked = (todos: Todo[], state: Record<string, boolean>): Todo[] =>
+  todos.map(t => ({ ...t, checked: state[t.id] !== undefined ? state[t.id] : t.checked }));
+
 function Card({ emoji, title, children }: { emoji: string; title: string; children: React.ReactNode }) {
   return (
     <div style={{
@@ -87,7 +106,16 @@ export default function Home() {
 
     fetch('/api/dashboard')
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); });
+      .then(d => {
+        const state = loadCheckedState();
+        setData({
+          ...d,
+          dailyTasks: applyChecked(d.dailyTasks, state),
+          projects: d.projects.map((p: Project) => ({ ...p, todos: applyChecked(p.todos, state) })),
+          personalTodos: applyChecked(d.personalTodos, state),
+        });
+        setLoading(false);
+      });
   }, []);
 
   const toggleTodo = async (
@@ -96,6 +124,12 @@ export default function Home() {
     section: 'daily' | 'project' | 'personal',
     projectId?: string
   ) => {
+    // Persist to localStorage immediately
+    const state = loadCheckedState();
+    state[blockId] = checked;
+    saveCheckedState(state);
+
+    // Update UI optimistically
     if (section === 'daily') {
       setData(prev => prev ? {
         ...prev,
@@ -116,6 +150,7 @@ export default function Home() {
       } : prev);
     }
 
+    // Sync to Notion in background
     await fetch('/api/todos', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -132,7 +167,13 @@ export default function Home() {
       body: JSON.stringify({ projectName, nextActions, ideaText: braindump }),
     });
     const fresh = await fetch('/api/dashboard').then(r => r.json());
-    setData(fresh);
+    const state = loadCheckedState();
+    setData({
+      ...fresh,
+      dailyTasks: applyChecked(fresh.dailyTasks, state),
+      projects: fresh.projects.map((p: Project) => ({ ...p, todos: applyChecked(p.todos, state) })),
+      personalTodos: applyChecked(fresh.personalTodos, state),
+    });
     setBraindump('');
     setProjectName('');
     setNextActions(['', '', '']);
@@ -183,7 +224,7 @@ export default function Home() {
           </h1>
           <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr} &nbsp;·&nbsp; {data.weather}</p>
         </div>
-        <img src="/logo.png" alt="G'DAY TIGER" style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0px 4px 12px rgba(0,0,0,0.3))' }} />
+        <img src="/logo.png" alt="G'Day Tiger" style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0px 4px 12px rgba(0,0,0,0.3))' }} />
       </div>
 
       {/* Grid */}
