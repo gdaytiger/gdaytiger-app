@@ -130,8 +130,10 @@ function RosterRow({
   };
 
   return (
-    <div className={`relative overflow-hidden rounded-xl ${isToday ? 'bg-orange-50 border border-orange-200' : 'bg-white/30'}`}
-      style={{ minHeight: '52px' }}>
+    <div
+      className={`relative overflow-hidden rounded-xl ${isToday ? 'border' : 'bg-white/30'}`}
+      style={isToday ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}
+    >
 
       {/* Normal row — slides left out */}
       <div
@@ -139,20 +141,27 @@ function RosterRow({
         style={{ transform: isAdding ? 'translateX(-100%)' : 'translateX(0)' }}
       >
         <div>
-          <span className={`text-sm font-semibold ${isToday ? 'text-orange-600' : shift.working ? 'text-gray-800' : 'text-gray-400'}`}>
+          <span
+            className={`text-sm font-semibold ${isToday ? '' : shift.working ? 'text-gray-800' : 'text-gray-400'}`}
+            style={isToday ? { color: '#fbcdad' } : {}}
+          >
             {shift.label}
-            {isToday && <span className="ml-2 text-xs font-medium text-orange-400">TODAY</span>}
+            {isToday && <span className="ml-2 text-xs font-medium" style={{ color: '#fbcdad' }}>TODAY</span>}
           </span>
           {shift.working && shift.area && <p className="text-xs text-gray-400 mt-0.5">{shift.area}</p>}
           {shift.working && shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
+          <span
+            className={`text-sm font-medium ${isToday ? '' : shift.working ? 'text-gray-500' : 'text-gray-300'}`}
+            style={isToday ? { color: '#fbcdad' } : {}}
+          >
             {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
           </span>
           <button
             onClick={openInput}
-            className="text-gray-300 hover:text-orange-400 transition-colors text-xl leading-none font-light pl-1"
+            className="transition-colors text-xl leading-none font-light pl-1"
+            style={{ color: isToday ? '#fbcdad' : '#d1d5db' }}
             aria-label="Add task"
           >
             +
@@ -165,7 +174,7 @@ function RosterRow({
         className="absolute inset-0 flex items-center gap-2 py-2 px-3 transition-transform duration-300 ease-in-out"
         style={{ transform: isAdding ? 'translateX(0)' : 'translateX(100%)' }}
       >
-        <span className={`text-xs font-semibold shrink-0 ${isToday ? 'text-orange-500' : 'text-gray-500'}`}>
+        <span className="text-xs font-semibold shrink-0" style={{ color: isToday ? '#fbcdad' : '#6b7280' }}>
           {shift.label.split(' ')[0]}
         </span>
         <input
