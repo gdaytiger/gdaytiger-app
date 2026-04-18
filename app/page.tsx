@@ -100,23 +100,30 @@ export default function Home() {
   const [promoting, setPromoting] = useState(false);
   const [shifts, setShifts] = useState<Shift[]>([]);
 
+  // Add task dialog state
+  const [selectedDay, setSelectedDay] = useState<Shift | null>(null);
+  const [newTaskText, setNewTaskText] = useState('');
+  const [savingTask, setSavingTask] = useState(false);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const fetchDashboard = async () => {
+    const d = await fetch('/api/dashboard').then(r => r.json());
+    const state = loadCheckedState();
+    setData({
+      ...d,
+      dailyTasks: applyChecked(d.dailyTasks, state),
+      projects: d.projects.map((p: Project) => ({ ...p, todos: applyChecked(p.todos, state) })),
+      personalTodos: applyChecked(d.personalTodos, state),
+    });
+  };
+
   useEffect(() => {
     fetch('/api/roster')
       .then(r => r.json())
       .then(d => setShifts(d.shifts || []));
 
-    fetch('/api/dashboard')
-      .then(r => r.json())
-      .then(d => {
-        const state = loadCheckedState();
-        setData({
-          ...d,
-          dailyTasks: applyChecked(d.dailyTasks, state),
-          projects: d.projects.map((p: Project) => ({ ...p, todos: applyChecked(p.todos, state) })),
-          personalTodos: applyChecked(d.personalTodos, state),
-        });
-        setLoading(false);
-      });
+    fetchDashboard().then(() => setLoading(false));
   }, []);
 
   const toggleTodo = async (
@@ -125,12 +132,10 @@ export default function Home() {
     section: 'daily' | 'project' | 'personal',
     projectId?: string
   ) => {
-    // Persist to localStorage immediately
     const state = loadCheckedState();
     state[blockId] = checked;
     saveCheckedState(state);
 
-    // Update UI optimistically
     if (section === 'daily') {
       setData(prev => prev ? {
         ...prev,
@@ -151,12 +156,31 @@ export default function Home() {
       } : prev);
     }
 
-    // Sync to Notion in background
     await fetch('/api/todos', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ blockId, checked }),
     });
+  };
+
+  const handleAddTask = async () => {
+    if (!selectedDay || !newTaskText.trim()) return;
+    setSavingTask(true);
+
+    await fetch('/api/add-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: selectedDay.date, text: newTaskText }),
+    });
+
+    // If it's today, refresh the daily tasks to show the new item
+    if (selectedDay.date === todayStr) {
+      await fetchDashboard();
+    }
+
+    setNewTaskText('');
+    setSelectedDay(null);
+    setSavingTask(false);
   };
 
   const handlePromote = async () => {
@@ -167,14 +191,7 @@ export default function Home() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectName, nextActions, ideaText: braindump }),
     });
-    const fresh = await fetch('/api/dashboard').then(r => r.json());
-    const state = loadCheckedState();
-    setData({
-      ...fresh,
-      dailyTasks: applyChecked(fresh.dailyTasks, state),
-      projects: fresh.projects.map((p: Project) => ({ ...p, todos: applyChecked(p.todos, state) })),
-      personalTodos: applyChecked(fresh.personalTodos, state),
-    });
+    await fetchDashboard();
     setBraindump('');
     setProjectName('');
     setNextActions(['', '', '']);
@@ -217,6 +234,54 @@ export default function Home() {
         borderRadius: '50%', pointerEvents: 'none',
       }} />
 
+      {/* Add Task Dialog */}
+      {selectedDay && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)' }}
+          onClick={e => { if (e.target === e.currentTarget) { setSelectedDay(null); setNewTaskText(''); } }}
+        >
+          <div style={{
+            background: 'rgba(255,255,255,0.85)',
+            backdropFilter: 'blur(24px) saturate(180%)',
+            border: '1px solid rgba(255,255,255,0.9)',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.15)',
+          }} className="rounded-3xl p-6 w-full max-w-sm flex flex-col gap-4">
+            <div>
+              <p className="text-xs font-bold tracking-widest uppercase text-orange-500 mb-1" style={{ fontFamily: '"stolzl", sans-serif' }}>Add Task</p>
+              <p className="text-lg font-bold text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", sans-serif' }}>{selectedDay.label}</p>
+              {selectedDay.working && (
+                <p className="text-xs text-gray-400 mt-0.5">{selectedDay.area} · {selectedDay.start} – {selectedDay.end}</p>
+              )}
+            </div>
+            <input
+              autoFocus
+              value={newTaskText}
+              onChange={e => setNewTaskText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddTask(); if (e.key === 'Escape') { setSelectedDay(null); setNewTaskText(''); } }}
+              placeholder="What needs to be done?"
+              style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.1)' }}
+              className="w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleAddTask}
+                disabled={savingTask || !newTaskText.trim()}
+                className="flex-1 text-sm bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white px-4 py-2.5 rounded-xl font-semibold transition-colors shadow-sm"
+              >
+                {savingTask ? 'Adding...' : 'Add Task'}
+              </button>
+              <button
+                onClick={() => { setSelectedDay(null); setNewTaskText(''); }}
+                className="text-sm text-gray-400 hover:text-gray-600 px-4 py-2.5 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="max-w-5xl mx-auto px-5 pt-8 pb-4 flex items-center justify-between relative">
         <div>
@@ -258,9 +323,13 @@ export default function Home() {
               <p className="text-sm text-gray-400 italic">No shifts found</p>
             ) : (
               shifts.map(shift => {
-                const isToday = shift.date === new Date().toISOString().split('T')[0];
+                const isToday = shift.date === todayStr;
                 return (
-                  <div key={shift.date} className={`flex items-center justify-between py-2 px-3 rounded-xl ${isToday ? 'bg-orange-50 border border-orange-200' : 'bg-white/30'}`}>
+                  <div
+                    key={shift.date}
+                    onClick={() => { setSelectedDay(shift); setNewTaskText(''); }}
+                    className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-all group ${isToday ? 'bg-orange-50 border border-orange-200 hover:bg-orange-100' : 'bg-white/30 hover:bg-white/60'}`}
+                  >
                     <div>
                       <span className={`text-sm font-semibold ${isToday ? 'text-orange-600' : shift.working ? 'text-gray-800' : 'text-gray-400'}`}>
                         {shift.label}
@@ -269,9 +338,12 @@ export default function Home() {
                       {shift.working && shift.area && <p className="text-xs text-gray-400 mt-0.5">{shift.area}</p>}
                       {shift.working && shift.comment && <p className="text-xs text-gray-400 mt-0.5">{shift.comment}</p>}
                     </div>
-                    <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
-                      {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-medium ${isToday ? 'text-orange-500' : shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
+                        {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
+                      </span>
+                      <span className="text-gray-300 group-hover:text-orange-400 transition-colors text-lg leading-none">+</span>
+                    </div>
                   </div>
                 );
               })
