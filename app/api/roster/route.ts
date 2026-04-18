@@ -51,6 +51,7 @@ export async function GET() {
           search: {
             s1: { field: 'Date', type: 'ge', data: startDate },
             s2: { field: 'Date', type: 'le', data: endDate },
+            s3: { field: 'Employee', type: 'eq', data: 1 },
           },
           sort: { Date: 'asc' },
         }),
