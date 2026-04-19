@@ -471,7 +471,7 @@ export default function Home() {
 
         {/* DAILY TO DO */}
         <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'} onEmojiClick={() => setDeleteMode(d => !d)} emojiActive={deleteMode}>
-          <div className="flex items-center justify-between -mt-2">
+          <div className="flex items-center justify-between">
             <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
             {isViewingOtherDay && (
               <button
