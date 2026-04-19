@@ -120,7 +120,7 @@ export async function GET() {
   const days: Record<string, { count: number; tasks: { id: string; text: string; checked: boolean }[] }> = {};
   dateStrs.forEach((dateStr, i) => {
     const tasks = taskArrays[i];
-    const count = tasks.filter((t: { isHeader?: boolean }) => !t.isHeader).length;
+    const count = tasks.filter(t => !t.id.startsWith('header-')).length;
     days[dateStr] = { count, tasks };
   });
 
