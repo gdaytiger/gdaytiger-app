@@ -441,7 +441,8 @@ export default function Home() {
   const selectedShift = selectedDate ? shifts.find(s => s.date === selectedDate) : null;
   const displayDayLabel = isViewingOtherDay && selectedShift ? selectedShift.label : null;
 
-  const dailyDone = displayedTasks.filter(t => t.checked).length;
+  const dailyTasks = displayedTasks.filter(t => !t.isHeader);
+  const dailyDone = dailyTasks.filter(t => t.checked).length;
   const projectsDone = data.projects.flatMap(p => p.todos).filter(t => t.checked).length;
   const projectsTotal = data.projects.flatMap(p => p.todos).length;
 
@@ -471,7 +472,7 @@ export default function Home() {
         {/* DAILY TO DO */}
         <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'} onEmojiClick={() => setDeleteMode(d => !d)} emojiActive={deleteMode}>
           <div className="flex items-center justify-between -mt-2">
-            <span className="text-xs text-gray-400">{dailyDone}/{displayedTasks.length} done</span>
+            <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
             {isViewingOtherDay && (
               <button
                 onClick={() => setSelectedDate(null)}
@@ -486,9 +487,9 @@ export default function Home() {
               <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p>
             ) : (
               displayedTasks.map(task => task.isHeader ? (
-                <div key={task.id} className="pt-1 pb-0.5">
-                  <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: '#bbb' }}>
-                    {task.text}
+                <div key={task.id} className="pt-2 pb-0.5">
+                  <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>
+                    {task.text.toUpperCase()}
                   </span>
                 </div>
               ) : (
