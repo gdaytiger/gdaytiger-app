@@ -79,8 +79,8 @@ function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
       WebkitBackdropFilter: 'blur(24px) saturate(180%)',
       border: '1px solid rgba(255, 255, 255, 0.7)',
       boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
-    }} className="rounded-3xl p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2">
+    }} className="rounded-3xl p-5 flex flex-col gap-4" style={{ height: '440px' }}>
+      <div className="flex items-center gap-2 shrink-0">
         <span
           className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`}
           style={{
@@ -91,7 +91,9 @@ function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
         >{emoji}</span>
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#fbcdad', textShadow: '0px 2px 6px rgba(0,0,0,0.12)' }}>{title}</span>
       </div>
-      {children}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {children}
+      </div>
     </div>
   );
 }
