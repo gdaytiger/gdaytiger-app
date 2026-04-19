@@ -119,7 +119,9 @@ export async function GET() {
 
   const days: Record<string, { count: number; tasks: { id: string; text: string; checked: boolean }[] }> = {};
   dateStrs.forEach((dateStr, i) => {
-    days[dateStr] = { count: taskArrays[i].length, tasks: taskArrays[i] };
+    const tasks = taskArrays[i];
+    const count = tasks.filter((t: { isHeader?: boolean }) => !t.isHeader).length;
+    days[dateStr] = { count, tasks };
   });
 
   return NextResponse.json({ days });
