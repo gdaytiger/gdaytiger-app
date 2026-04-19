@@ -76,9 +76,7 @@ function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
           className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`}
           style={{
             filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))',
-            background: emojiActive ? 'rgba(239,68,68,0.12)' : 'transparent',
-            borderRadius: '6px',
-            padding: emojiActive ? '2px 4px' : '0',
+            background: 'transparent',
           }}
           onClick={onEmojiClick}
         >{emoji}</span>
