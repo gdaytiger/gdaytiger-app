@@ -6,6 +6,7 @@ interface Todo {
   id: string;
   text: string;
   checked: boolean;
+  isHeader?: boolean;
 }
 
 interface Project {
@@ -56,7 +57,7 @@ const saveCheckedState = (state: Record<string, boolean>, date?: string) => {
 };
 
 const applyChecked = (todos: Todo[], state: Record<string, boolean>): Todo[] =>
-  todos.map(t => ({ ...t, checked: state[t.id] !== undefined ? state[t.id] : t.checked }));
+  todos.map(t => t.isHeader ? t : { ...t, checked: state[t.id] !== undefined ? state[t.id] : t.checked });
 
 function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
   emoji: string; title: string; children: React.ReactNode;
@@ -339,6 +340,7 @@ export default function Home() {
     projectId?: string,
     date?: string,
   ) => {
+    if (blockId.startsWith('header-')) return;
     const storageDate = section === 'week' ? date : undefined;
     const state = loadCheckedState(storageDate);
     state[blockId] = checked;
@@ -448,7 +450,13 @@ export default function Home() {
             {displayedTasks.length === 0 ? (
               <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p>
             ) : (
-              displayedTasks.map(task => (
+              displayedTasks.map(task => task.isHeader ? (
+                <div key={task.id} className="pt-1 pb-0.5">
+                  <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: '#bbb' }}>
+                    {task.text}
+                  </span>
+                </div>
+              ) : (
                 <CheckItem
                   key={task.id}
                   id={task.id}

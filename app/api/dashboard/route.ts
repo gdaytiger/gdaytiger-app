@@ -83,44 +83,58 @@ async function getDailyTasks(dayOfWeek: number, today: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
   const todayStr = `${today.getUTCFullYear()}-${pad(today.getUTCMonth() + 1)}-${pad(today.getUTCDate())}`;
 
-  const tasks = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type RawItem = { type: 'header' | 'task'; id: string; text: string };
+  const rawItems: RawItem[] = [];
+
   for (const block of (data.results || [])) {
+    // Category headings
+    if (block.type === 'heading_2' || block.type === 'heading_3') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const text = (block[block.type]?.rich_text || []).map((r: any) => r.plain_text).join('').trim();
+      if (text) rawItems.push({ type: 'header', id: block.id, text });
+      continue;
+    }
+
     if (block.type === 'bulleted_list_item') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
       if (!raw.trim()) continue;
 
-      // [YYYY-MM-DD] prefix = one-off task added via app
       const dateMatch = raw.match(DATE_PREFIX_RE);
       if (dateMatch) {
         const taskDate = dateMatch[1];
-        if (taskDate < todayStr) {
-          // Past — silently delete from Notion
-          deleteBlock(block.id);
-          continue;
-        }
-        if (taskDate === todayStr) {
-          tasks.push({ id: block.id, text: raw.replace(DATE_PREFIX_RE, '').trim(), checked: false });
-        }
-        // Future date — don't show yet
+        if (taskDate < todayStr) { deleteBlock(block.id); continue; }
+        if (taskDate === todayStr) rawItems.push({ type: 'task', id: block.id, text: raw.replace(DATE_PREFIX_RE, '').trim() });
         continue;
       }
-
-      // [F] = fortnightly — only show on odd ISO weeks
       if (raw.startsWith('[F]')) {
         if (!isOddWeek) continue;
-        tasks.push({ id: block.id, text: raw.replace('[F]', '').trim(), checked: false });
+        rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F]', '').trim() });
         continue;
       }
-
-      // [M] = monthly — only show on first occurrence of this weekday in the month
       if (raw.startsWith('[M]')) {
         if (today.getDate() > 7) continue;
-        tasks.push({ id: block.id, text: raw.replace('[M]', '').trim(), checked: false });
+        rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim() });
         continue;
       }
+      rawItems.push({ type: 'task', id: block.id, text: raw.trim() });
+    }
+  }
 
-      tasks.push({ id: block.id, text: raw.trim(), checked: false });
+  // Build final list — skip headers that have no tasks beneath them
+  const tasks = [];
+  for (let i = 0; i < rawItems.length; i++) {
+    const item = rawItems[i];
+    if (item.type === 'header') {
+      let hasTask = false;
+      for (let j = i + 1; j < rawItems.length; j++) {
+        if (rawItems[j].type === 'header') break;
+        if (rawItems[j].type === 'task') { hasTask = true; break; }
+      }
+      if (hasTask) tasks.push({ id: `header-${item.id}`, text: item.text, checked: false, isHeader: true });
+    } else {
+      tasks.push({ id: item.id, text: item.text, checked: false });
     }
   }
   return tasks;
