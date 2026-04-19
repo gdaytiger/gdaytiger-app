@@ -79,7 +79,7 @@ function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
       WebkitBackdropFilter: 'blur(24px) saturate(180%)',
       border: '1px solid rgba(255, 255, 255, 0.7)',
       boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
-      height: '440px',
+      height: '540px',
       overflow: 'hidden',
     }} className="rounded-3xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2 shrink-0">
