@@ -58,7 +58,11 @@ const saveCheckedState = (state: Record<string, boolean>, date?: string) => {
 const applyChecked = (todos: Todo[], state: Record<string, boolean>): Todo[] =>
   todos.map(t => ({ ...t, checked: state[t.id] !== undefined ? state[t.id] : t.checked }));
 
-function Card({ emoji, title, children }: { emoji: string; title: string; children: React.ReactNode }) {
+function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
+  emoji: string; title: string; children: React.ReactNode;
+  onEmojiClick?: () => void;
+  emojiActive?: boolean;
+}) {
   return (
     <div style={{
       background: 'rgba(255, 255, 255, 0.45)',
@@ -68,7 +72,16 @@ function Card({ emoji, title, children }: { emoji: string; title: string; childr
       boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
     }} className="rounded-3xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2">
-        <span className="text-base" style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>{emoji}</span>
+        <span
+          className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`}
+          style={{
+            filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))',
+            background: emojiActive ? 'rgba(239,68,68,0.12)' : 'transparent',
+            borderRadius: '6px',
+            padding: emojiActive ? '2px 4px' : '0',
+          }}
+          onClick={onEmojiClick}
+        >{emoji}</span>
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#fbcdad', textShadow: '0px 2px 6px rgba(0,0,0,0.12)' }}>{title}</span>
       </div>
       {children}
@@ -251,6 +264,7 @@ export default function Home() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [deleteMode, setDeleteMode] = useState(false);
 
   const todayStr = data?.todayStr ?? '';
 
@@ -419,7 +433,7 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-5 pb-10 grid grid-cols-1 md:grid-cols-2 gap-4 relative">
 
         {/* DAILY TO DO */}
-        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'}>
+        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'} onEmojiClick={() => setDeleteMode(d => !d)} emojiActive={deleteMode}>
           <div className="flex items-center justify-between -mt-2">
             <span className="text-xs text-gray-400">{dailyDone}/{displayedTasks.length} done</span>
             {isViewingOtherDay && (
@@ -447,11 +461,11 @@ export default function Home() {
                     undefined,
                     isViewingOtherDay ? selectedDate! : undefined
                   )}
-                  onDelete={(id) => handleDeleteTask(
+                  onDelete={deleteMode ? (id) => handleDeleteTask(
                     id,
                     isViewingOtherDay ? 'week' : 'daily',
                     isViewingOtherDay ? selectedDate! : undefined
-                  )}
+                  ) : undefined}
                 />
               ))
             )}
