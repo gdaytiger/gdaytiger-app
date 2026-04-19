@@ -40,6 +40,14 @@ interface WeekDay {
   tasks: Todo[];
 }
 
+const SUPPLIER_LINKS: Record<string, string> = {
+  'dench': 'https://denchbakers.cybakeshop.com.au/home',
+  'seven seeds': 'https://sevenseedswholesale.com.au/account/',
+  'noisette': 'https://connect.noisette.com.au/',
+  'redimilk': 'tel:0397024262',
+  'candied': `mailto:hello@candiedbakery.com.au?subject=${encodeURIComponent("G'DAY TIGER Order")}&body=${encodeURIComponent("Hey Guys,\n\nCan we please get\nx Paninis\nx Marshmallow Cookies\nx Candied Pies\nx Brownie Slab\nx Maple Pecan\n\nThanks,\nJono")}`,
+};
+
 const getStorageKey = (date?: string) =>
   `gdaytiger-checked-${date ?? new Date().toISOString().split('T')[0]}`;
 
@@ -111,11 +119,32 @@ function CheckItem({
           </svg>
         )}
       </div>
-      <span
-        onClick={() => onChange(id, !checked)}
-        className={`flex-1 text-sm leading-snug transition-colors cursor-pointer ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}
-      >
-        {text}
+      <span className="flex-1 text-sm leading-snug">
+        {(() => {
+          const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
+          if (supplierUrl && !checked) {
+            return (
+              <a
+                href={supplierUrl}
+                target={supplierUrl.startsWith('http') ? '_blank' : undefined}
+                rel="noopener noreferrer"
+                className="font-medium underline underline-offset-2"
+                style={{ color: '#c8926a' }}
+                onClick={e => e.stopPropagation()}
+              >
+                {text}
+              </a>
+            );
+          }
+          return (
+            <span
+              onClick={() => onChange(id, !checked)}
+              className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}
+            >
+              {text}
+            </span>
+          );
+        })()}
       </span>
       {onDelete && (
         <button
