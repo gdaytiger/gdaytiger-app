@@ -239,7 +239,8 @@ function RosterRow({
         <button
           onClick={submit}
           disabled={saving || !taskText.trim()}
-          className="text-xs bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0"
+          className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0"
+          style={{ background: '#fbcdad', color: '#333' }}
         >
           {saving ? '...' : 'Add'}
         </button>
