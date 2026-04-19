@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 
 const DEPUTY_ENDPOINT = process.env.DEPUTY_ENDPOINT;
-const DEPUTY_CLIENT_ID = process.env.DEPUTY_CLIENT_ID;
-const DEPUTY_CLIENT_SECRET = process.env.DEPUTY_CLIENT_SECRET;
 
 const AREA_NAMES: Record<number, string> = {
   3: 'Open',
@@ -11,35 +9,19 @@ const AREA_NAMES: Record<number, string> = {
   7: 'Next Door',
 };
 
-async function getValidToken(): Promise<string> {
-  const refreshToken = process.env.DEPUTY_REFRESH_TOKEN;
-  const res = await fetch(`${DEPUTY_ENDPOINT}/oauth/access_token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: DEPUTY_CLIENT_ID!,
-      client_secret: DEPUTY_CLIENT_SECRET!,
-      refresh_token: refreshToken!,
-      grant_type: 'refresh_token',
-    }),
-  });
-  const data = await res.json();
-  if (data.access_token) return data.access_token;
-  return process.env.DEPUTY_ACCESS_TOKEN!;
-}
-
 export async function GET() {
   try {
-    const token = await getValidToken();
-
-    const today = new Date();
-    const eightDays = new Date(today.getTime() + 8 * 24 * 60 * 60 * 1000);
+    const token = process.env.DEPUTY_ACCESS_TOKEN!;
 
     const pad = (n: number) => String(n).padStart(2, '0');
-    const formatDate = (d: Date) =>
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-    const startDate = formatDate(today);
+    const melbNow = new Date(Date.now() + 10 * 60 * 60 * 1000);
+    const eightDays = new Date(melbNow.getTime() + 8 * 24 * 60 * 60 * 1000);
+
+    const formatDate = (d: Date) =>
+      `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+
+    const startDate = formatDate(melbNow);
     const endDate = formatDate(eightDays);
 
     const rosterRes = await fetch(
@@ -61,7 +43,9 @@ export async function GET() {
       }
     );
 
-    const rosters = await rosterRes.json();
+    const rosterText = await rosterRes.text();
+    if (!rosterText) return NextResponse.json({ shifts: [], error: 'Deputy returned empty response' });
+    const rosters = JSON.parse(rosterText);
 
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -77,7 +61,6 @@ export async function GET() {
       return `${h}${m > 0 ? `:${pad(m)}` : ''}${ampm}`;
     };
 
-    // Normalize any date value from Deputy to YYYY-MM-DD
     const normalizeDate = (val: string | number): string => {
       if (typeof val === 'number') {
         const melb = new Date(val * 1000 + 10 * 60 * 60 * 1000);
@@ -86,7 +69,6 @@ export async function GET() {
       return String(val).substring(0, 10);
     };
 
-    // Build map of date -> shift from Deputy
     const shiftMap: Record<string, { start: string; end: string; area: string; comment: string }> = {};
     if (Array.isArray(rosters)) {
       for (const r of rosters as {
@@ -106,8 +88,6 @@ export async function GET() {
       }
     }
 
-    // Generate all 7 days in Melbourne time (UTC+10), fill gaps with "not working"
-    const melbNow = new Date(Date.now() + 10 * 60 * 60 * 1000);
     const shifts = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(melbNow.getTime() + i * 24 * 60 * 60 * 1000);
