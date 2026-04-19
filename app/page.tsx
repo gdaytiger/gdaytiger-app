@@ -91,7 +91,7 @@ function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
           }}
           onClick={onEmojiClick}
         >{emoji}</span>
-        <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#fbcdad', textShadow: '0px 2px 6px rgba(0,0,0,0.12)' }}>{title}</span>
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         {children}
