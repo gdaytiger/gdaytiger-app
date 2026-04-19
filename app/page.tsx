@@ -208,8 +208,9 @@ function RosterRow({
     >
       {/* Normal row — slides left out */}
       <div
-        className="absolute inset-0 flex items-center justify-between py-2 px-3 transition-transform duration-300 ease-in-out"
+        className="absolute inset-0 flex items-center justify-between py-2 px-3 transition-transform duration-300 ease-in-out cursor-pointer"
         style={{ transform: isAdding ? 'translateX(-100%)' : 'translateX(0)' }}
+        onClick={() => onSelectDay(shift.date)}
       >
         <div>
           <span className={`text-sm font-semibold ${shift.working ? 'text-gray-800' : 'text-gray-400'}`}>
@@ -454,7 +455,8 @@ export default function Home() {
           <h1 className="text-4xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif', fontWeight: 700, fontStyle: 'italic', fontVariationSettings: "'opsz' 18, 'wght' 700" }}>
             TIGER <span style={{ color: '#fbcdad' }}>OS</span>
           </h1>
-          <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr} &nbsp;·&nbsp; {data.weather}</p>
+          <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr}</p>
+          <p className="text-xs text-gray-400 mt-0.5 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.weather}</p>
         </div>
         <img src="/logo.png" alt="G'Day Tiger" style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0px 4px 12px rgba(0,0,0,0.3))' }} />
       </div>

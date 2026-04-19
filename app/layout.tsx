@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tiger OS",
+  title: "TIGER OS",
   description: "G'Day Tiger Café OS",
 };
 
@@ -14,6 +14,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <head>
+        <link rel="preconnect" href="https://use.typekit.net" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://use.typekit.net" />
         <link rel="stylesheet" href="https://use.typekit.net/ssp5nld.css" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/icon-192.png" type="image/png" />
