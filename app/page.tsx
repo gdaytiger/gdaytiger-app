@@ -303,6 +303,27 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
+  // Poll for cross-device state changes every 30 seconds
+  useEffect(() => {
+    if (loading) return;
+    const interval = setInterval(async () => {
+      const state = await fetchServerState();
+      setData(prev => prev ? {
+        ...prev,
+        dailyTasks: applyServerChecked(prev.dailyTasks, prev.todayStr, state),
+      } : prev);
+      setWeekTasks(prev => {
+        const updated: Record<string, WeekDay> = {};
+        for (const [date, day] of Object.entries(prev)) {
+          updated[date] = { ...day, tasks: applyServerChecked(day.tasks, date, state) };
+        }
+        return updated;
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
   const syncCheckedState = (blockId: string, date: string, checked: boolean) => {
     setServerState(prev => {
       const next = { ...prev };
