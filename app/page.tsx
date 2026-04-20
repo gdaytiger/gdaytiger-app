@@ -453,17 +453,6 @@ export default function Home() {
           )}
         </Card>
 
-        {/* PERSONAL TO DO */}
-        <Card emoji="👤" title="Personal To Do">
-          <div className="space-y-3">
-            {data.personalTodos.length === 0 ? <p className="text-sm text-gray-400 italic">Nothing here</p> : (
-              data.personalTodos.map(todo => (
-                <CheckItem key={todo.id} id={todo.id} text={todo.text} checked={todo.checked} onChange={(id, checked) => toggleTodo(id, checked, 'personal')} />
-              ))
-            )}
-          </div>
-        </Card>
-
       </div>
 
       {/* CLAUDE CHAT DRAWER */}
