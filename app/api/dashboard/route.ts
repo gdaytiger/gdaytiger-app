@@ -75,7 +75,7 @@ const DATE_PREFIX_RE = /^\[(\d{4}-\d{2}-\d{2})\]\s*/;
 
 async function getDailyTasks(dayOfWeek: number, today: Date) {
   const pageId = DAY_PAGES[dayOfWeek];
-  const data = await notionFetch(`/blocks/${pageId}/children?page_size=100`);
+  const data = await notionFetch(`/blocks/${pageId}/children?page_size=500`);
 
   const weekNum = getISOWeek(today);
   const isOddWeek = weekNum % 2 === 1;
@@ -153,12 +153,11 @@ async function getProjects() {
   for (const p of (data.results || [])) {
     const name = p.properties.Name?.title?.[0]?.plain_text || 'Untitled';
     const status = p.properties.Status?.select?.name || 'No Status';
-    const childData = await notionFetch(`/blocks/${p.id}/children?page_size=10`);
+    const childData = await notionFetch(`/blocks/${p.id}/children?page_size=50`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const todos = (childData.results || [])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((b: any) => b.type === 'to_do')
-      .slice(0, 3)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((b: any) => ({
         id: b.id,
@@ -176,7 +175,7 @@ async function getPersonalTodos() {
   let allBlocks: any[] = [];
   let cursor: string | undefined;
   do {
-    const url = `/blocks/${NOTION_PAGE_ID}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ''}`;
+    const url = `/blocks/${NOTION_PAGE_ID}/children?page_size=500${cursor ? `&start_cursor=${cursor}` : ''}`;
     const data = await notionFetch(url);
     allBlocks = allBlocks.concat(data.results || []);
     cursor = data.has_more ? data.next_cursor : undefined;
