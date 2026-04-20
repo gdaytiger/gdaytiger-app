@@ -52,6 +52,20 @@ interface ClaudePanelState {
   messages: ClaudeMessage[];
 }
 
+interface CostingProduct {
+  id: string;
+  name: string;
+  category: string;
+  cost: number | null;
+  sellPrice: number | null;
+  margin: number | null;
+  marginDollar: number | null;
+  lastReviewedStr: string | null;
+  daysSinceReview: number | null;
+  needsReview: boolean;
+  notes: string;
+}
+
 const SUPPLIER_LINKS: Record<string, string> = {
   'dench': 'https://denchbakers.cybakeshop.com.au/home',
   'seven seeds': 'https://sevenseedswholesale.com.au/account/',
@@ -94,21 +108,13 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate }: {
         {(() => {
           const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
           if (supplierUrl && !checked) {
-            return (
-              <a href={supplierUrl} target={supplierUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="font-medium underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text}</a>
-            );
+            return <a href={supplierUrl} target={supplierUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="font-medium underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text}</a>;
           }
-          return (
-            <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>
-          );
+          return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
         })()}
       </span>
-      {onDelegate && (
-        <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none mt-0.5 opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>
-      )}
-      {onDelete && (
-        <button onClick={() => onDelete(id)} className="shrink-0 transition-colors leading-none mt-0.5" style={{ fontSize: '16px', lineHeight: 1, color: '#ccc' }} onTouchStart={e => (e.currentTarget.style.color = '#ef4444')} onTouchEnd={e => (e.currentTarget.style.color = '#ccc')} aria-label="Delete task">×</button>
-      )}
+      {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none mt-0.5 opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
+      {onDelete && <button onClick={() => onDelete(id)} className="shrink-0 transition-colors leading-none mt-0.5" style={{ fontSize: '16px', lineHeight: 1, color: '#ccc' }} onTouchStart={e => (e.currentTarget.style.color = '#ef4444')} onTouchEnd={e => (e.currentTarget.style.color = '#ccc')} aria-label="Delete task">×</button>}
     </div>
   );
 }
@@ -122,11 +128,9 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   const [taskText, setTaskText] = useState('');
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
   const openInput = (e: React.MouseEvent) => { e.stopPropagation(); setIsAdding(true); setTimeout(() => inputRef.current?.focus(), 320); };
   const close = () => { setIsAdding(false); setTaskText(''); };
   const submit = async () => { if (!taskText.trim()) return; setSaving(true); await onAdd(shift.date, taskText); setSaving(false); close(); };
-
   return (
     <div className={`relative overflow-hidden rounded-xl ${isHighlighted ? 'border' : 'bg-white/30'}`} style={isHighlighted ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}>
       <div className="absolute inset-0 flex items-center justify-between py-2 px-3 transition-transform duration-300 ease-in-out cursor-pointer" style={{ transform: isAdding ? 'translateX(-100%)' : 'translateX(0)' }} onClick={() => onSelectDay(shift.date)}>
@@ -169,6 +173,7 @@ export default function Home() {
   const [claudePanel, setClaudePanel] = useState<ClaudePanelState | null>(null);
   const [claudeInput, setClaudeInput] = useState('');
   const [claudeLoading, setClaudeLoading] = useState(false);
+  const [costings, setCostings] = useState<CostingProduct[]>([]);
   const claudeMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const todayStr = data?.todayStr ?? '';
@@ -206,6 +211,7 @@ export default function Home() {
       ]);
       setShifts(rosterData.shifts || []);
       await Promise.all([fetchDashboard(state).catch(() => {}), fetchWeekTasks(state).catch(() => {})]);
+      fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
       setLoading(false);
     };
     init();
@@ -343,6 +349,8 @@ export default function Home() {
   const projectsDone = data.projects.flatMap(p => p.todos).filter(t => t.checked).length;
   const projectsTotal = data.projects.flatMap(p => p.todos).length;
 
+  const CATEGORIES = ['Coffee', 'Food', 'Retail', 'Vending', 'Uncategorised'];
+
   return (
     <div className="min-h-screen text-gray-900" style={{ background: 'linear-gradient(135deg, #e8eeff 0%, #fff8f0 40%, #f0fdf4 100%)' }}>
       <div style={{ position: 'fixed', top: '-10%', right: '-5%', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(251,146,60,0.18) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
@@ -369,9 +377,7 @@ export default function Home() {
             {isViewingOtherDay && <button onClick={() => setSelectedDate(null)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← Back to today</button>}
           </div>
           <div className="space-y-3">
-            {displayedTasks.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p>
-            ) : (
+            {displayedTasks.length === 0 ? <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p> : (
               displayedTasks.map(task => task.isHeader ? (
                 <div key={task.id} className="pt-2 pb-0.5">
                   <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>{task.text.toUpperCase()}</span>
@@ -452,6 +458,72 @@ export default function Home() {
             </div>
           )}
         </Card>
+
+        {/* PRODUCT COSTINGS */}
+        <div className="md:col-span-2">
+          <Card emoji="💰" title="Product Costings">
+            {costings.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No products yet — add them to the Product Costings database in Notion</p>
+            ) : (
+              <div className="space-y-5">
+                {(() => {
+                  const reviewCount = costings.filter(p => p.needsReview).length;
+                  const withMargin = costings.filter(p => p.margin !== null);
+                  const avgMargin = withMargin.length > 0 ? withMargin.reduce((s, p) => s + p.margin!, 0) / withMargin.length : null;
+                  return (
+                    <div className="flex items-center gap-4 pb-3" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                      {avgMargin !== null && <span className="text-xs text-gray-500">Avg margin <span className="font-bold text-gray-700">{avgMargin.toFixed(1)}%</span></span>}
+                      {reviewCount > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>⚠️ {reviewCount} need{reviewCount === 1 ? 's' : ''} review</span>}
+                      <span className="text-xs text-gray-400">{costings.length} products</span>
+                    </div>
+                  );
+                })()}
+                {CATEGORIES.map(cat => {
+                  const items = costings.filter(p => p.category === cat);
+                  if (items.length === 0) return null;
+                  const withM = items.filter(p => p.margin !== null);
+                  const catAvg = withM.length > 0 ? withM.reduce((s, p) => s + p.margin!, 0) / withM.length : null;
+                  return (
+                    <div key={cat}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>{cat}</span>
+                        {catAvg !== null && <span className="text-xs text-gray-400">avg {catAvg.toFixed(1)}%</span>}
+                      </div>
+                      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+                        {items.map(p => {
+                          const mc = p.margin === null ? '#9ca3af' : p.margin >= 65 ? '#16a34a' : p.margin >= 50 ? '#d97706' : '#dc2626';
+                          const mb = p.margin === null ? 'rgba(0,0,0,0.03)' : p.margin >= 65 ? 'rgba(22,163,74,0.07)' : p.margin >= 50 ? 'rgba(217,119,6,0.07)' : 'rgba(220,38,38,0.07)';
+                          return (
+                            <div key={p.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: mb }}>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium text-gray-800 truncate">{p.name}</span>
+                                  {p.needsReview && <span title={p.lastReviewedStr ? `Last reviewed ${p.daysSinceReview}d ago` : 'Never reviewed'}>⚠️</span>}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {p.sellPrice !== null && <span className="text-xs text-gray-500">sell ${p.sellPrice.toFixed(2)}</span>}
+                                  {p.cost !== null && <span className="text-xs text-gray-400">cost ${p.cost.toFixed(2)}</span>}
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                {p.margin !== null ? (
+                                  <>
+                                    <p className="text-sm font-bold" style={{ color: mc }}>{p.margin.toFixed(1)}%</p>
+                                    {p.marginDollar !== null && <p className="text-xs" style={{ color: mc }}>${p.marginDollar.toFixed(2)}</p>}
+                                  </>
+                                ) : <p className="text-xs text-gray-400">—</p>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
 
       </div>
 
