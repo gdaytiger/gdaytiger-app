@@ -89,7 +89,6 @@ function CheckItem({
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
 }) {
-  const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
   return (
     <div className="flex items-start gap-3 group">
       <div
@@ -107,25 +106,31 @@ function CheckItem({
         )}
       </div>
       <span className="flex-1 text-sm leading-snug">
-        {supplierUrl && !checked ? (
-          
-            href={supplierUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium underline underline-offset-2"
-            style={{ color: '#c8926a' }}
-            onClick={e => e.stopPropagation()}
-          >
-            {text}
-          </a>
-        ) : (
-          <span
-            onClick={() => onChange(id, !checked)}
-            className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}
-          >
-            {text}
-          </span>
-        )}
+        {(() => {
+          const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
+          if (supplierUrl && !checked) {
+            return (
+              <a
+                href={supplierUrl}
+                target={supplierUrl.startsWith('http') ? '_blank' : undefined}
+                rel="noopener noreferrer"
+                className="font-medium underline underline-offset-2"
+                style={{ color: '#c8926a' }}
+                onClick={e => e.stopPropagation()}
+              >
+                {text}
+              </a>
+            );
+          }
+          return (
+            <span
+              onClick={() => onChange(id, !checked)}
+              className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}
+            >
+              {text}
+            </span>
+          );
+        })()}
       </span>
       {onDelete && (
         <button
