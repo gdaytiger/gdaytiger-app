@@ -45,7 +45,7 @@ const SUPPLIER_LINKS: Record<string, string> = {
   'seven seeds': 'https://sevenseedswholesale.com.au/account/',
   'noisette': 'https://connect.noisette.com.au/',
   'redimilk': 'tel:0397024262',
-  'candied': `mailto:hello@candiedbakery.com.au?subject=${encodeURIComponent("G'DAY TIGER Order")}&body=${encodeURIComponent("Hey Guys,\n\nCan we please get\nx Paninis\nx Marshmallow Cookies\nx Candied Pies\nx Brownie Slab\nx Maple Pecan\n\nThanks,\nJono")}`,
+  'candied': 'mailto:hello@candiedbakery.com.au?subject=G%27DAY%20TIGER%20Order&body=Hey%20Guys%2C%0A%0ACan%20we%20please%20get%0Ax%20Paninis%0Ax%20Marshmallow%20Cookies%0Ax%20Candied%20Pies%0Ax%20Brownie%20Slab%0Ax%20Maple%20Pecan%0A%0AThanks%2C%0AJono',
 };
 
 const applyServerChecked = (todos: Todo[], date: string, state: Record<string, string[]>): Todo[] => {
@@ -53,10 +53,9 @@ const applyServerChecked = (todos: Todo[], date: string, state: Record<string, s
   return todos.map(t => t.isHeader ? t : { ...t, checked: checkedIds.has(t.id) });
 };
 
-function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
+function Card({ emoji, title, children, onEmojiClick }: {
   emoji: string; title: string; children: React.ReactNode;
   onEmojiClick?: () => void;
-  emojiActive?: boolean;
 }) {
   return (
     <div style={{
@@ -90,6 +89,7 @@ function CheckItem({
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
 }) {
+  const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
   return (
     <div className="flex items-start gap-3 group">
       <div
@@ -107,31 +107,25 @@ function CheckItem({
         )}
       </div>
       <span className="flex-1 text-sm leading-snug">
-        {(() => {
-          const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
-          if (supplierUrl && !checked) {
-            return (
-              
-                href={supplierUrl}
-                target={supplierUrl.startsWith('http') ? '_blank' : undefined}
-                rel="noopener noreferrer"
-                className="font-medium underline underline-offset-2"
-                style={{ color: '#c8926a' }}
-                onClick={e => e.stopPropagation()}
-              >
-                {text}
-              </a>
-            );
-          }
-          return (
-            <span
-              onClick={() => onChange(id, !checked)}
-              className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}
-            >
-              {text}
-            </span>
-          );
-        })()}
+        {supplierUrl && !checked ? (
+          
+            href={supplierUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium underline underline-offset-2"
+            style={{ color: '#c8926a' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {text}
+          </a>
+        ) : (
+          <span
+            onClick={() => onChange(id, !checked)}
+            className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}
+          >
+            {text}
+          </span>
+        )}
       </span>
       {onDelete && (
         <button
@@ -197,7 +191,6 @@ function RosterRow({
             onClick={() => onSelectDay(shift.date)}
             className="flex items-center justify-center rounded-full font-bold transition-all hover:scale-110"
             style={{ width: '22px', height: '22px', background: taskCount > 0 ? '#fbcdad' : 'rgba(0,0,0,0.06)', color: taskCount > 0 ? '#333' : '#aaa', flexShrink: 0, fontSize: '11px' }}
-            title={`${taskCount} task${taskCount !== 1 ? 's' : ''}`}
           >
             {taskCount}
           </button>
@@ -287,26 +280,7 @@ export default function Home() {
     };
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);// Poll for cross-device state changes every 30 seconds
-  useEffect(() => {
-    if (loading) return;
-    const interval = setInterval(async () => {
-      const state = await fetchServerState();
-      setData(prev => prev ? {
-        ...prev,
-        dailyTasks: applyServerChecked(prev.dailyTasks, prev.todayStr, state),
-      } : prev);
-      setWeekTasks(prev => {
-        const updated: Record<string, WeekDay> = {};
-        for (const [date, day] of Object.entries(prev)) {
-          updated[date] = { ...day, tasks: applyServerChecked(day.tasks, date, state) };
-        }
-        return updated;
-      });
-    }, 30000);
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  }, []);
 
   // Poll for cross-device state changes every 30 seconds
   useEffect(() => {
@@ -460,7 +434,7 @@ export default function Home() {
 
       <div className="max-w-5xl mx-auto px-5 pb-10 grid grid-cols-1 md:grid-cols-2 gap-4 relative">
 
-        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'} onEmojiClick={() => setDeleteMode(d => !d)} emojiActive={deleteMode}>
+        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'} onEmojiClick={() => setDeleteMode(d => !d)}>
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
             {isViewingOtherDay && (
