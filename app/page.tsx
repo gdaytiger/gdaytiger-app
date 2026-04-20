@@ -40,6 +40,18 @@ interface WeekDay {
   tasks: Todo[];
 }
 
+interface ClaudeMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface ClaudePanelState {
+  projectId: string;
+  projectName: string;
+  actionText: string;
+  messages: ClaudeMessage[];
+}
+
 const SUPPLIER_LINKS: Record<string, string> = {
   'dench': 'https://denchbakers.cybakeshop.com.au/home',
   'seven seeds': 'https://sevenseedswholesale.com.au/account/',
@@ -78,6 +90,39 @@ function Card({ emoji, title, children, onEmojiClick }: {
       <div className="flex-1 overflow-y-auto min-h-0">
         {children}
       </div>
+
+      {/* Claude Chat Drawer */}
+      {claudePanel && (
+        <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col" style={{ background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 -8px 32px rgba(0,0,0,0.12)', maxHeight: '52vh' }}>
+          <div className="flex items-center gap-3 px-5 py-3 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+            <span className="text-base">🤖</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#6b7280' }}>Claude</p>
+              <p className="text-xs text-gray-400 truncate">{claudePanel.projectName} — {claudePanel.actionText}</p>
+            </div>
+            <button onClick={() => { setClaudePanel(null); setClaudeInput(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
+            {claudePanel.messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-prose rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${m.role === 'user' ? 'text-gray-800' : 'text-gray-800 bg-white'}`} style={m.role === 'user' ? { background: '#fbcdad' } : { border: '1px solid rgba(0,0,0,0.07)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {claudeLoading && (
+              <div className="flex justify-start">
+                <div className="rounded-2xl px-4 py-2.5 text-sm text-gray-400 animate-pulse bg-white" style={{ border: '1px solid rgba(0,0,0,0.07)' }}>Thinking...</div>
+              </div>
+            )}
+            <div ref={claudeMessagesEndRef} />
+          </div>
+          <div className="flex gap-2 px-5 py-3 shrink-0" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+            <input value={claudeInput} onChange={e => setClaudeInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && claudeInput.trim() && !claudeLoading) handleClaudeChat(claudePanel, claudeInput); }} placeholder="Ask Claude anything about this task..." className="flex-1 min-w-0 text-sm px-4 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }} />
+            <button onClick={() => { if (claudeInput.trim() && !claudeLoading) handleClaudeChat(claudePanel, claudeInput); }} disabled={claudeLoading || !claudeInput.trim()} className="text-sm disabled:opacity-40 px-4 py-2.5 rounded-xl font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Send</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -88,6 +133,7 @@ function CheckItem({
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
+  onDelegate?: () => void;
 }) {
   return (
     <div className="flex items-start gap-3 group">
@@ -132,6 +178,9 @@ function CheckItem({
           );
         })()}
       </span>
+      {onDelegate && (
+        <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none mt-0.5 opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>
+      )}
       {onDelete && (
         <button
           onClick={() => onDelete(id)}
@@ -222,6 +271,39 @@ function RosterRow({
         </button>
         <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
       </div>
+
+      {/* Claude Chat Drawer */}
+      {claudePanel && (
+        <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col" style={{ background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 -8px 32px rgba(0,0,0,0.12)', maxHeight: '52vh' }}>
+          <div className="flex items-center gap-3 px-5 py-3 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+            <span className="text-base">🤖</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#6b7280' }}>Claude</p>
+              <p className="text-xs text-gray-400 truncate">{claudePanel.projectName} — {claudePanel.actionText}</p>
+            </div>
+            <button onClick={() => { setClaudePanel(null); setClaudeInput(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
+            {claudePanel.messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-prose rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${m.role === 'user' ? 'text-gray-800' : 'text-gray-800 bg-white'}`} style={m.role === 'user' ? { background: '#fbcdad' } : { border: '1px solid rgba(0,0,0,0.07)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {claudeLoading && (
+              <div className="flex justify-start">
+                <div className="rounded-2xl px-4 py-2.5 text-sm text-gray-400 animate-pulse bg-white" style={{ border: '1px solid rgba(0,0,0,0.07)' }}>Thinking...</div>
+              </div>
+            )}
+            <div ref={claudeMessagesEndRef} />
+          </div>
+          <div className="flex gap-2 px-5 py-3 shrink-0" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+            <input value={claudeInput} onChange={e => setClaudeInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && claudeInput.trim() && !claudeLoading) handleClaudeChat(claudePanel, claudeInput); }} placeholder="Ask Claude anything about this task..." className="flex-1 min-w-0 text-sm px-4 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }} />
+            <button onClick={() => { if (claudeInput.trim() && !claudeLoading) handleClaudeChat(claudePanel, claudeInput); }} disabled={claudeLoading || !claudeInput.trim()} className="text-sm disabled:opacity-40 px-4 py-2.5 rounded-xl font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Send</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -239,6 +321,10 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
   const [serverState, setServerState] = useState<Record<string, string[]>>({});
+  const [claudePanel, setClaudePanel] = useState<ClaudePanelState | null>(null);
+  const [claudeInput, setClaudeInput] = useState('');
+  const [claudeLoading, setClaudeLoading] = useState(false);
+  const claudeMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const todayStr = data?.todayStr ?? '';
 
@@ -308,6 +394,13 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
+  // Scroll Claude chat to bottom on new messages
+  useEffect(() => {
+    if (claudePanel) {
+      setTimeout(() => claudeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+  }, [claudePanel?.messages.length, claudePanel]);
+
   // Poll for cross-device state changes every 30 seconds
   useEffect(() => {
     if (loading) return;
@@ -328,6 +421,13 @@ export default function Home() {
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
+
+  // Scroll Claude chat to bottom on new messages
+  useEffect(() => {
+    if (claudePanel) {
+      setTimeout(() => claudeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+  }, [claudePanel?.messages.length, claudePanel]);
 
   const syncCheckedState = (blockId: string, date: string, checked: boolean) => {
     setServerState(prev => {
@@ -376,6 +476,44 @@ export default function Home() {
     const state = await fetchServerState();
     await fetchWeekTasks(state);
     if (date === todayStr) await fetchDashboard(state);
+  };
+
+  const handleClaudeChat = async (panel: ClaudePanelState, userMessage: string) => {
+    const newMessages: ClaudeMessage[] = [...panel.messages, { role: 'user', content: userMessage }];
+    setClaudePanel(prev => prev ? { ...prev, messages: newMessages } : prev);
+    setClaudeInput('');
+    setClaudeLoading(true);
+    try {
+      const res = await fetch('/api/claude-assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newMessages, projectName: panel.projectName, actionText: panel.actionText }),
+      });
+      const d = await res.json();
+      setClaudePanel(prev => prev ? { ...prev, messages: [...newMessages, { role: 'assistant', content: d.content }] } : prev);
+    } catch {
+      setClaudePanel(prev => prev ? { ...prev, messages: [...newMessages, { role: 'assistant', content: 'Something went wrong. Check your API key is set in Vercel.' }] } : prev);
+    }
+    setClaudeLoading(false);
+  };
+
+  const openClaudePanel = (project: Project, todo: Todo) => {
+    const firstMessages: ClaudeMessage[] = [{ role: 'user', content: `Help me with this action item: "${todo.text}"` }];
+    const panel: ClaudePanelState = { projectId: project.id, projectName: project.name, actionText: todo.text, messages: firstMessages };
+    setClaudePanel(panel);
+    setClaudeInput('');
+    setClaudeLoading(true);
+    fetch('/api/claude-assist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: firstMessages, projectName: project.name, actionText: todo.text }),
+    }).then(r => r.json()).then(d => {
+      setClaudePanel(prev => prev ? { ...prev, messages: [...firstMessages, { role: 'assistant', content: d.content }] } : prev);
+      setClaudeLoading(false);
+    }).catch(() => {
+      setClaudePanel(prev => prev ? { ...prev, messages: [...firstMessages, { role: 'assistant', content: 'Could not reach Claude. Check ANTHROPIC_API_KEY is set in Vercel environment variables.' }] } : prev);
+      setClaudeLoading(false);
+    });
   };
 
   const toggleTodo = async (
@@ -602,6 +740,39 @@ export default function Home() {
         </Card>
 
       </div>
+
+      {/* Claude Chat Drawer */}
+      {claudePanel && (
+        <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col" style={{ background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 -8px 32px rgba(0,0,0,0.12)', maxHeight: '52vh' }}>
+          <div className="flex items-center gap-3 px-5 py-3 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+            <span className="text-base">🤖</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#6b7280' }}>Claude</p>
+              <p className="text-xs text-gray-400 truncate">{claudePanel.projectName} — {claudePanel.actionText}</p>
+            </div>
+            <button onClick={() => { setClaudePanel(null); setClaudeInput(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
+            {claudePanel.messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-prose rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${m.role === 'user' ? 'text-gray-800' : 'text-gray-800 bg-white'}`} style={m.role === 'user' ? { background: '#fbcdad' } : { border: '1px solid rgba(0,0,0,0.07)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {claudeLoading && (
+              <div className="flex justify-start">
+                <div className="rounded-2xl px-4 py-2.5 text-sm text-gray-400 animate-pulse bg-white" style={{ border: '1px solid rgba(0,0,0,0.07)' }}>Thinking...</div>
+              </div>
+            )}
+            <div ref={claudeMessagesEndRef} />
+          </div>
+          <div className="flex gap-2 px-5 py-3 shrink-0" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+            <input value={claudeInput} onChange={e => setClaudeInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && claudeInput.trim() && !claudeLoading) handleClaudeChat(claudePanel, claudeInput); }} placeholder="Ask Claude anything about this task..." className="flex-1 min-w-0 text-sm px-4 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }} />
+            <button onClick={() => { if (claudeInput.trim() && !claudeLoading) handleClaudeChat(claudePanel, claudeInput); }} disabled={claudeLoading || !claudeInput.trim()} className="text-sm disabled:opacity-40 px-4 py-2.5 rounded-xl font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Send</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
