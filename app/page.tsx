@@ -48,24 +48,11 @@ const SUPPLIER_LINKS: Record<string, string> = {
   'candied': `mailto:hello@candiedbakery.com.au?subject=${encodeURIComponent("G'DAY TIGER Order")}&body=${encodeURIComponent("Hey Guys,\n\nCan we please get\nx Paninis\nx Marshmallow Cookies\nx Candied Pies\nx Brownie Slab\nx Maple Pecan\n\nThanks,\nJono")}`,
 };
 
-const getStorageKey = (date?: string) =>
-  `gdaytiger-checked-${date ?? new Date().toISOString().split('T')[0]}`;
-
-const loadCheckedState = (date?: string): Record<string, boolean> => {
-  try {
-    const stored = localStorage.getItem(getStorageKey(date));
-    return stored ? JSON.parse(stored) : {};
-  } catch { return {}; }
+// Apply server-side checked state (date-keyed map of block ID arrays) to a list of todos
+const applyServerChecked = (todos: Todo[], date: string, state: Record<string, string[]>): Todo[] => {
+  const checkedIds = new Set(state[date] || []);
+  return todos.map(t => t.isHeader ? t : { ...t, checked: checkedIds.has(t.id) });
 };
-
-const saveCheckedState = (state: Record<string, boolean>, date?: string) => {
-  try {
-    localStorage.setItem(getStorageKey(date), JSON.stringify(state));
-  } catch {}
-};
-
-const applyChecked = (todos: Todo[], state: Record<string, boolean>): Todo[] =>
-  todos.map(t => t.isHeader ? t : { ...t, checked: state[t.id] !== undefined ? state[t.id] : t.checked });
 
 function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
   emoji: string; title: string; children: React.ReactNode;
@@ -85,10 +72,7 @@ function Card({ emoji, title, children, onEmojiClick, emojiActive }: {
       <div className="flex items-center gap-2 shrink-0">
         <span
           className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`}
-          style={{
-            filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))',
-            background: 'transparent',
-          }}
+          style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))', background: 'transparent' }}
           onClick={onEmojiClick}
         >{emoji}</span>
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
@@ -167,17 +151,9 @@ function CheckItem({
 }
 
 function RosterRow({
-  shift,
-  isToday,
-  isHighlighted,
-  taskCount,
-  onAdd,
-  onSelectDay,
+  shift, isToday, isHighlighted, taskCount, onAdd, onSelectDay,
 }: {
-  shift: Shift;
-  isToday: boolean;
-  isHighlighted: boolean;
-  taskCount: number;
+  shift: Shift; isToday: boolean; isHighlighted: boolean; taskCount: number;
   onAdd: (date: string, text: string) => Promise<void>;
   onSelectDay: (date: string) => void;
 }) {
@@ -186,17 +162,8 @@ function RosterRow({
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const openInput = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsAdding(true);
-    setTimeout(() => inputRef.current?.focus(), 320);
-  };
-
-  const close = () => {
-    setIsAdding(false);
-    setTaskText('');
-  };
-
+  const openInput = (e: React.MouseEvent) => { e.stopPropagation(); setIsAdding(true); setTimeout(() => inputRef.current?.focus(), 320); };
+  const close = () => { setIsAdding(false); setTaskText(''); };
   const submit = async () => {
     if (!taskText.trim()) return;
     setSaving(true);
@@ -210,7 +177,6 @@ function RosterRow({
       className={`relative overflow-hidden rounded-xl ${isHighlighted ? 'border' : 'bg-white/30'}`}
       style={isHighlighted ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}
     >
-      {/* Normal row — slides left out */}
       <div
         className="absolute inset-0 flex items-center justify-between py-2 px-3 transition-transform duration-300 ease-in-out cursor-pointer"
         style={{ transform: isAdding ? 'translateX(-100%)' : 'translateX(0)' }}
@@ -228,40 +194,23 @@ function RosterRow({
           <span className={`text-sm font-medium ${shift.working ? 'text-gray-500' : 'text-gray-300'}`}>
             {shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}
           </span>
-          {/* Task count circle */}
           <button
             onClick={() => onSelectDay(shift.date)}
             className="flex items-center justify-center rounded-full font-bold transition-all hover:scale-110"
-            style={{
-              width: '22px',
-              height: '22px',
-              background: taskCount > 0 ? '#fbcdad' : 'rgba(0,0,0,0.06)',
-              color: taskCount > 0 ? '#333' : '#aaa',
-              flexShrink: 0,
-              fontSize: '11px',
-            }}
+            style={{ width: '22px', height: '22px', background: taskCount > 0 ? '#fbcdad' : 'rgba(0,0,0,0.06)', color: taskCount > 0 ? '#333' : '#aaa', flexShrink: 0, fontSize: '11px' }}
             title={`${taskCount} task${taskCount !== 1 ? 's' : ''}`}
           >
             {taskCount}
           </button>
-          <button
-            onClick={openInput}
-            className="transition-colors text-xl leading-none font-light text-gray-300 hover:text-gray-400"
-            aria-label="Add task"
-          >
-            +
-          </button>
+          <button onClick={openInput} className="transition-colors text-xl leading-none font-light text-gray-300 hover:text-gray-400" aria-label="Add task">+</button>
         </div>
       </div>
 
-      {/* Input row — slides in from right */}
       <div
         className="absolute inset-0 flex items-center gap-2 py-2 px-3 transition-transform duration-300 ease-in-out"
         style={{ transform: isAdding ? 'translateX(0)' : 'translateX(100%)' }}
       >
-        <span className="text-xs font-semibold shrink-0 text-gray-500">
-          {shift.label.split(' ')[0]}
-        </span>
+        <span className="text-xs font-semibold shrink-0 text-gray-500">{shift.label.split(' ')[0]}</span>
         <input
           ref={inputRef}
           value={taskText}
@@ -271,17 +220,10 @@ function RosterRow({
           className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
           style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }}
         />
-        <button
-          onClick={submit}
-          disabled={saving || !taskText.trim()}
-          className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0"
-          style={{ background: '#fbcdad', color: '#333' }}
-        >
+        <button onClick={submit} disabled={saving || !taskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>
           {saving ? '...' : 'Add'}
         </button>
-        <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">
-          ✕
-        </button>
+        <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
       </div>
     </div>
   );
@@ -299,49 +241,81 @@ export default function Home() {
   const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [serverState, setServerState] = useState<Record<string, string[]>>({});
 
   const todayStr = data?.todayStr ?? '';
 
-  const fetchDashboard = async () => {
+  const fetchServerState = async (): Promise<Record<string, string[]>> => {
+    try {
+      const d = await fetch('/api/checked-state').then(r => r.json());
+      const state = d.state || {};
+      setServerState(state);
+      return state;
+    } catch { return {}; }
+  };
+
+  const fetchDashboard = async (state: Record<string, string[]>) => {
     const res = await fetch('/api/dashboard');
     if (res.status === 401) { window.location.href = '/login'; return; }
     const d = await res.json();
-    const state = loadCheckedState();
     setData({
       ...d,
-      dailyTasks: applyChecked(d.dailyTasks, state),
-      projects: d.projects.map((p: Project) => ({ ...p, todos: applyChecked(p.todos, state) })),
-      personalTodos: applyChecked(d.personalTodos, state),
+      dailyTasks: applyServerChecked(d.dailyTasks, d.todayStr, state),
+      // projects and personalTodos come with correct checked state from Notion
     });
   };
 
-  const fetchWeekTasks = async () => {
+  const fetchWeekTasks = async (state: Record<string, string[]>) => {
     const d = await fetch('/api/week-tasks').then(r => r.json());
     const enriched: Record<string, WeekDay> = {};
     for (const [date, day] of Object.entries(d.days as Record<string, WeekDay>)) {
-      // Each day uses its own date-specific storage key so checks don't bleed across weeks
-      const state = loadCheckedState(date);
-      enriched[date] = { ...day, tasks: applyChecked(day.tasks, state) };
+      enriched[date] = { ...day, tasks: applyServerChecked(day.tasks, date, state) };
     }
     setWeekTasks(enriched);
   };
 
   useEffect(() => {
-    fetch('/api/roster')
-      .then(r => r.json())
-      .then(d => setShifts(d.shifts || []));
-    fetchDashboard()
-      .then(() => setLoading(false))
-      .catch(() => setLoading(false));
-    fetchWeekTasks().catch(() => {});
+    const init = async () => {
+      const [rosterData, state] = await Promise.all([
+        fetch('/api/roster').then(r => r.json()).catch(() => ({ shifts: [] })),
+        fetchServerState(),
+      ]);
+      setShifts(rosterData.shifts || []);
+      await Promise.all([
+        fetchDashboard(state).catch(() => {}),
+        fetchWeekTasks(state).catch(() => {}),
+      ]);
+      setLoading(false);
+    };
+    init();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const syncCheckedState = (blockId: string, date: string, checked: boolean) => {
+    // Optimistic local state update
+    setServerState(prev => {
+      const next = { ...prev };
+      if (checked) {
+        next[date] = [...new Set([...(next[date] || []), blockId])];
+      } else {
+        next[date] = (next[date] || []).filter(id => id !== blockId);
+        if (!next[date].length) delete next[date];
+      }
+      return next;
+    });
+    // Fire-and-forget to server
+    fetch('/api/checked-state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blockId, date, checked }),
+    }).catch(() => {});
+  };
 
   const handleSelectDay = (date: string) => {
     setSelectedDate(prev => prev === date ? null : date);
   };
 
   const handleDeleteTask = async (blockId: string, section: 'daily' | 'week', date?: string) => {
-    // Optimistic UI update
     if (section === 'daily') {
       setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(t => t.id !== blockId) } : prev);
     } else if (section === 'week' && date) {
@@ -363,8 +337,9 @@ export default function Home() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date, text }),
     });
-    await fetchWeekTasks();
-    if (date === todayStr) await fetchDashboard();
+    const state = await fetchServerState();
+    await fetchWeekTasks(state);
+    if (date === todayStr) await fetchDashboard(state);
   };
 
   const toggleTodo = async (
@@ -375,18 +350,16 @@ export default function Home() {
     date?: string,
   ) => {
     if (blockId.startsWith('header-')) return;
-    const storageDate = section === 'week' ? date : undefined;
-    const state = loadCheckedState(storageDate);
-    state[blockId] = checked;
-    saveCheckedState(state, storageDate);
 
     if (section === 'daily') {
       setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
+      syncCheckedState(blockId, todayStr, checked);
     } else if (section === 'week' && date) {
       setWeekTasks(prev => ({
         ...prev,
         [date]: { ...prev[date], tasks: prev[date].tasks.map(t => t.id === blockId ? { ...t, checked } : t) },
       }));
+      syncCheckedState(blockId, date, checked);
     } else if (section === 'project' && projectId) {
       setData(prev => prev ? {
         ...prev,
@@ -394,15 +367,11 @@ export default function Home() {
           ...p, todos: p.todos.map(t => t.id === blockId ? { ...t, checked } : t),
         } : p),
       } : prev);
+      await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
     } else if (section === 'personal') {
       setData(prev => prev ? { ...prev, personalTodos: prev.personalTodos.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
+      await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
     }
-
-    await fetch('/api/todos', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ blockId, checked }),
-    });
   };
 
   const handlePromote = async () => {
@@ -413,31 +382,21 @@ export default function Home() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectName, nextActions, ideaText: braindump }),
     });
-    await fetchDashboard();
-    setBraindump('');
-    setProjectName('');
-    setNextActions(['', '', '']);
-    setShowPromote(false);
-    setPromoting(false);
+    const state = await fetchServerState();
+    await fetchDashboard(state);
+    setBraindump(''); setProjectName(''); setNextActions(['', '', '']); setShowPromote(false); setPromoting(false);
   };
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{
-      background: 'linear-gradient(135deg, #f0f4ff 0%, #fef9f0 50%, #f0fff4 100%)',
-    }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #f0f4ff 0%, #fef9f0 50%, #f0fff4 100%)' }}>
       <p className="text-gray-400 text-xs tracking-widest uppercase animate-pulse">Loading...</p>
     </div>
   );
 
   if (!data) return null;
 
-  // Determine which tasks to show in Daily To Do
   const isViewingOtherDay = selectedDate !== null && selectedDate !== todayStr;
-  const displayedTasks = isViewingOtherDay
-    ? (weekTasks[selectedDate!]?.tasks ?? [])
-    : data.dailyTasks;
-
-  // Label for the selected day
+  const displayedTasks = isViewingOtherDay ? (weekTasks[selectedDate!]?.tasks ?? []) : data.dailyTasks;
   const selectedShift = selectedDate ? shifts.find(s => s.date === selectedDate) : null;
   const displayDayLabel = isViewingOtherDay && selectedShift ? selectedShift.label : null;
 
@@ -447,9 +406,7 @@ export default function Home() {
   const projectsTotal = data.projects.flatMap(p => p.todos).length;
 
   return (
-    <div className="min-h-screen text-gray-900" style={{
-      background: 'linear-gradient(135deg, #e8eeff 0%, #fff8f0 40%, #f0fdf4 100%)',
-    }}>
+    <div className="min-h-screen text-gray-900" style={{ background: 'linear-gradient(135deg, #e8eeff 0%, #fff8f0 40%, #f0fdf4 100%)' }}>
       <div style={{ position: 'fixed', top: '-10%', right: '-5%', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(251,146,60,0.18) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
       <div style={{ position: 'fixed', bottom: '-10%', left: '-5%', width: '500px', height: '500px', background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
       <div style={{ position: 'fixed', top: '40%', left: '30%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
@@ -474,12 +431,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
             {isViewingOtherDay && (
-              <button
-                onClick={() => setSelectedDate(null)}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                ← Back to today
-              </button>
+              <button onClick={() => setSelectedDate(null)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← Back to today</button>
             )}
           </div>
           <div className="space-y-3">
@@ -498,17 +450,8 @@ export default function Home() {
                   id={task.id}
                   text={task.text}
                   checked={task.checked}
-                  onChange={(id, checked) => toggleTodo(
-                    id, checked,
-                    isViewingOtherDay ? 'week' : 'daily',
-                    undefined,
-                    isViewingOtherDay ? selectedDate! : undefined
-                  )}
-                  onDelete={deleteMode ? (id) => handleDeleteTask(
-                    id,
-                    isViewingOtherDay ? 'week' : 'daily',
-                    isViewingOtherDay ? selectedDate! : undefined
-                  ) : undefined}
+                  onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
+                  onDelete={deleteMode ? (id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined) : undefined}
                 />
               ))
             )}
