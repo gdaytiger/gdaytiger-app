@@ -48,7 +48,6 @@ const SUPPLIER_LINKS: Record<string, string> = {
   'candied': `mailto:hello@candiedbakery.com.au?subject=${encodeURIComponent("G'DAY TIGER Order")}&body=${encodeURIComponent("Hey Guys,\n\nCan we please get\nx Paninis\nx Marshmallow Cookies\nx Candied Pies\nx Brownie Slab\nx Maple Pecan\n\nThanks,\nJono")}`,
 };
 
-// Apply server-side checked state (date-keyed map of block ID arrays) to a list of todos
 const applyServerChecked = (todos: Todo[], date: string, state: Record<string, string[]>): Todo[] => {
   const checkedIds = new Set(state[date] || []);
   return todos.map(t => t.isHeader ? t : { ...t, checked: checkedIds.has(t.id) });
@@ -112,7 +111,7 @@ function CheckItem({
           const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
           if (supplierUrl && !checked) {
             return (
-              <a
+              
                 href={supplierUrl}
                 target={supplierUrl.startsWith('http') ? '_blank' : undefined}
                 rel="noopener noreferrer"
@@ -261,7 +260,6 @@ export default function Home() {
     setData({
       ...d,
       dailyTasks: applyServerChecked(d.dailyTasks, d.todayStr, state),
-      // projects and personalTodos come with correct checked state from Notion
     });
   };
 
@@ -291,8 +289,28 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Poll for cross-device state changes every 30 seconds
+  useEffect(() => {
+    if (loading) return;
+    const interval = setInterval(async () => {
+      const state = await fetchServerState();
+      setData(prev => prev ? {
+        ...prev,
+        dailyTasks: applyServerChecked(prev.dailyTasks, prev.todayStr, state),
+      } : prev);
+      setWeekTasks(prev => {
+        const updated: Record<string, WeekDay> = {};
+        for (const [date, day] of Object.entries(prev)) {
+          updated[date] = { ...day, tasks: applyServerChecked(day.tasks, date, state) };
+        }
+        return updated;
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
   const syncCheckedState = (blockId: string, date: string, checked: boolean) => {
-    // Optimistic local state update
     setServerState(prev => {
       const next = { ...prev };
       if (checked) {
@@ -303,7 +321,6 @@ export default function Home() {
       }
       return next;
     });
-    // Fire-and-forget to server
     fetch('/api/checked-state', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -411,7 +428,6 @@ export default function Home() {
       <div style={{ position: 'fixed', bottom: '-10%', left: '-5%', width: '500px', height: '500px', background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
       <div style={{ position: 'fixed', top: '40%', left: '30%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
 
-      {/* Header */}
       <div className="max-w-5xl mx-auto px-5 pt-8 pb-4 flex items-center justify-between relative">
         <div>
           <h1 className="text-4xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif', fontWeight: 700, fontStyle: 'italic', fontVariationSettings: "'opsz' 18, 'wght' 700" }}>
@@ -423,10 +439,8 @@ export default function Home() {
         <img src="/logo.png" alt="G'Day Tiger" style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0px 4px 12px rgba(0,0,0,0.3))' }} />
       </div>
 
-      {/* Grid */}
       <div className="max-w-5xl mx-auto px-5 pb-10 grid grid-cols-1 md:grid-cols-2 gap-4 relative">
 
-        {/* DAILY TO DO */}
         <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'} onEmojiClick={() => setDeleteMode(d => !d)} emojiActive={deleteMode}>
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
@@ -458,7 +472,6 @@ export default function Home() {
           </div>
         </Card>
 
-        {/* THE WEEK AHEAD */}
         <Card emoji="📅" title="The Week Ahead">
           <div className="space-y-2">
             {shifts.length === 0 ? (
@@ -479,7 +492,6 @@ export default function Home() {
           </div>
         </Card>
 
-        {/* ONGOING PROJECTS */}
         <Card emoji="🎯" title="Ongoing Projects">
           <span className="text-xs text-gray-400 -mt-2">{projectsDone}/{projectsTotal} actions done</span>
           <div className="space-y-5">
@@ -512,7 +524,6 @@ export default function Home() {
           </div>
         </Card>
 
-        {/* BRAIN DUMP */}
         <Card emoji="🧠" title="Brain Dump">
           {!showPromote ? (
             <div className="space-y-3">
@@ -558,7 +569,6 @@ export default function Home() {
           )}
         </Card>
 
-        {/* PERSONAL TO DO */}
         <Card emoji="👤" title="Personal To Do">
           <div className="space-y-3">
             {data.personalTodos.length === 0 ? (
