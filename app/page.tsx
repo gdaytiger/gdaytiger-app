@@ -111,6 +111,8 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   const [dismissed, setDismissed] = useState(false);
   const THRESHOLD = 90;
 
+  const mouseDownRef = useRef(false);
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !onSwipeRight) return;
@@ -119,6 +121,53 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
     return () => el.removeEventListener('touchmove', preventScroll);
   }, [onSwipeRight]);
 
+  // Mouse handlers (desktop)
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!onSwipeRight) return;
+    touchStartX.current = e.clientX;
+    touchStartY.current = e.clientY;
+    swipeOffsetRef.current = 0;
+    mouseDownRef.current = true;
+    isHorizontal.current = false;
+    setSwiping(false);
+  };
+
+  useEffect(() => {
+    if (!onSwipeRight) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!mouseDownRef.current) return;
+      const dx = e.clientX - touchStartX.current;
+      const dy = e.clientY - touchStartY.current;
+      if (!isHorizontal.current && Math.abs(dy) > Math.abs(dx)) return;
+      if (dx > 2) {
+        isHorizontal.current = true;
+        setSwiping(true);
+        const clamped = Math.min(dx, 160);
+        swipeOffsetRef.current = clamped;
+        setSwipeOffset(clamped);
+        setCommitted(clamped >= THRESHOLD);
+      }
+    };
+    const handleMouseUp = () => {
+      if (!mouseDownRef.current) return;
+      mouseDownRef.current = false;
+      isHorizontal.current = false;
+      setSwiping(false);
+      if (swipeOffsetRef.current >= THRESHOLD) {
+        setDismissed(true);
+        setTimeout(() => onSwipeRight(), 360);
+      } else {
+        setSwipeOffset(0);
+        setCommitted(false);
+      }
+      swipeOffsetRef.current = 0;
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
+  }, [onSwipeRight]);
+
+  // Touch handlers (mobile)
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!onSwipeRight) return;
     touchStartX.current = e.touches[0].clientX;
@@ -165,9 +214,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
 
   return (
     <div ref={containerRef} className="relative overflow-hidden rounded-xl"
+      onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      style={{ cursor: onSwipeRight ? 'grab' : undefined, userSelect: 'none' }}
     >
       {onSwipeRight && (
         <div className="absolute inset-0 flex items-center pl-4 rounded-xl pointer-events-none"
@@ -183,9 +234,8 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
             opacity: eased,
             transform: `translateX(${(1 - eased) * -8}px)`,
             transition: swiping ? 'none' : 'all 0.2s ease',
-            display: 'flex', alignItems: 'center', gap: '5px',
           }}>
-            <span style={{ fontSize: '14px' }}>📅</span> Tomorrow
+            → Tomorrow
           </span>
         </div>
       )}
