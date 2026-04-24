@@ -634,7 +634,7 @@ export default function Home() {
                 [...items].filter(p => p.margin !== null).sort((a, b) => a.margin! - b.margin!).slice(0, 5);
 
               const coffeeItems = bottom5(costings.filter(p => p.category === 'Coffee'));
-              const drinksItems = bottom5(costings.filter(p => p.category === 'Vending' || p.category === 'Retail'));
+              const drinksItems = bottom5(costings.filter(p => p.category !== 'Coffee'));
 
               const ProductCard = ({ p }: { p: CostingProduct }) => {
                 const mc = p.margin === null ? '#9ca3af' : p.margin >= 65 ? '#16a34a' : p.margin >= 50 ? '#d97706' : '#dc2626';
