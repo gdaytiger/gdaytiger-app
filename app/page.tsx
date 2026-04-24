@@ -101,55 +101,88 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   onSwipeRight?: () => void;
 }) {
   const touchStartX = useRef<number>(0);
+  const touchStartY = useRef<number>(0);
+  const swipeOffsetRef = useRef(0);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swiping, setSwiping] = useState(false);
+  const [committed, setCommitted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const THRESHOLD = 100;
+  const THRESHOLD = 90;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!onSwipeRight) return;
     touchStartX.current = e.touches[0].clientX;
-    setSwiping(true);
+    touchStartY.current = e.touches[0].clientY;
+    swipeOffsetRef.current = 0;
+    setSwiping(false);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!onSwipeRight || !swiping) return;
+    if (!onSwipeRight) return;
     const dx = e.touches[0].clientX - touchStartX.current;
-    if (dx > 0) setSwipeOffset(Math.min(dx, 180));
+    const dy = e.touches[0].clientY - touchStartY.current;
+    if (!swiping && Math.abs(dy) > Math.abs(dx)) return;
+    if (dx > 2) {
+      setSwiping(true);
+      const clamped = Math.min(dx, 160);
+      swipeOffsetRef.current = clamped;
+      setSwipeOffset(clamped);
+      if (clamped >= THRESHOLD && !committed) setCommitted(true);
+      if (clamped < THRESHOLD && committed) setCommitted(false);
+    }
   };
 
   const handleTouchEnd = () => {
     if (!onSwipeRight) return;
     setSwiping(false);
-    if (swipeOffset >= THRESHOLD) {
+    if (swipeOffsetRef.current >= THRESHOLD) {
       setDismissed(true);
-      setTimeout(() => onSwipeRight(), 280);
+      setTimeout(() => onSwipeRight(), 360);
     } else {
       setSwipeOffset(0);
+      setCommitted(false);
     }
+    swipeOffsetRef.current = 0;
   };
 
   if (dismissed) return null;
 
   const swipeProgress = Math.min(swipeOffset / THRESHOLD, 1);
+  const eased = swipeProgress < 0.5 ? 2 * swipeProgress * swipeProgress : 1 - Math.pow(-2 * swipeProgress + 2, 2) / 2;
 
   return (
-    <div className="relative overflow-hidden rounded-lg"
+    <div className="relative overflow-hidden rounded-xl"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {onSwipeRight && swipeOffset > 0 && (
-        <div className="absolute inset-0 flex items-center pl-4 rounded-lg pointer-events-none" style={{ background: swipeProgress >= 1 ? '#fbcdad' : `rgba(251,205,173,${swipeProgress * 0.8})` }}>
-          <span className="text-xs font-bold tracking-wide" style={{ color: '#7c4a2d', opacity: swipeProgress }}>→ Tomorrow</span>
+      {onSwipeRight && (
+        <div className="absolute inset-0 flex items-center pl-4 rounded-xl pointer-events-none"
+          style={{
+            background: committed
+              ? 'linear-gradient(90deg, #fbcdad 0%, #f9b48a 100%)'
+              : `linear-gradient(90deg, rgba(251,205,173,${eased * 0.9}) 0%, rgba(249,180,138,${eased * 0.7}) 100%)`,
+            opacity: swipeOffset > 0 ? 1 : 0,
+            transition: swiping ? 'none' : 'background 0.2s ease',
+          }}>
+          <span style={{
+            fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: '#7c4a2d',
+            opacity: eased,
+            transform: `translateX(${(1 - eased) * -8}px)`,
+            transition: swiping ? 'none' : 'all 0.2s ease',
+            display: 'flex', alignItems: 'center', gap: '5px',
+          }}>
+            <span style={{ fontSize: '14px' }}>📅</span> Tomorrow
+          </span>
         </div>
       )}
       <div
         className="flex items-start gap-3 group"
         style={{
-          transform: dismissed ? 'translateX(110%)' : `translateX(${swipeOffset}px)`,
-          transition: swiping ? 'none' : 'transform 0.28s ease',
-          background: 'transparent',
+          transform: dismissed ? 'translateX(115%)' : `translateX(${swipeOffset}px)`,
+          opacity: dismissed ? 0 : 1,
+          transition: swiping ? 'none' : dismissed ? 'transform 0.36s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+          willChange: 'transform',
         }}
       >
         <div onClick={() => onChange(id, !checked)} className="mt-0.5 shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
