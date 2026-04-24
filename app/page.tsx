@@ -637,8 +637,8 @@ export default function Home() {
               const drinksItems = bottom5(costings.filter(p => p.category !== 'Coffee'));
 
               const ProductCard = ({ p }: { p: CostingProduct }) => {
-                const mc = p.margin === null ? '#9ca3af' : p.margin >= 65 ? '#16a34a' : p.margin >= 50 ? '#d97706' : '#dc2626';
-                const mb = p.margin === null ? 'rgba(0,0,0,0.03)' : p.margin >= 65 ? 'rgba(22,163,74,0.07)' : p.margin >= 50 ? 'rgba(217,119,6,0.07)' : 'rgba(220,38,38,0.07)';
+                const mc = p.margin === null ? '#9ca3af' : p.margin >= 70 ? '#16a34a' : p.margin >= 60 ? '#d97706' : '#dc2626';
+                const mb = p.margin === null ? 'rgba(0,0,0,0.03)' : p.margin >= 70 ? 'rgba(22,163,74,0.07)' : p.margin >= 60 ? 'rgba(217,119,6,0.07)' : 'rgba(220,38,38,0.07)';
                 return (
                   <div className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: mb }}>
                     <div className="flex-1 min-w-0">
@@ -663,8 +663,8 @@ export default function Home() {
                 );
               };
 
-              const SectionRow = ({ label, items }: { label: string; items: CostingProduct[] }) => (
-                <div>
+              const SectionCol = ({ label, items }: { label: string; items: CostingProduct[] }) => (
+                <div className="flex-1 min-w-0">
                   <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>{label}</span>
                   <div className="flex flex-col gap-2 mt-2">
                     {items.length === 0 ? <p className="text-xs text-gray-400 italic">No data</p> : items.map(p => <ProductCard key={p.id} p={p} />)}
@@ -673,13 +673,15 @@ export default function Home() {
               );
 
               return (
-                <div className="space-y-5">
+                <div className="space-y-4">
                   <div className="flex items-center gap-4 pb-3" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
                     {avgMargin !== null && <span className="text-xs text-gray-500">Avg margin <span className="font-bold text-gray-700">{avgMargin.toFixed(1)}%</span></span>}
                     <span className="text-xs text-gray-400">{costings.length} products — lowest 5 by margin</span>
                   </div>
-                  <SectionRow label="Coffee" items={coffeeItems} />
-                  <SectionRow label="Drinks" items={drinksItems} />
+                  <div className="flex gap-6">
+                    <SectionCol label="Coffee" items={coffeeItems} />
+                    <SectionCol label="Food" items={drinksItems} />
+                  </div>
                 </div>
               );
             })()}
