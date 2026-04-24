@@ -93,28 +93,80 @@ function Card({ emoji, title, children, onEmojiClick }: {
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
   onDelegate?: () => void;
+  onSwipeRight?: () => void;
 }) {
+  const touchStartX = useRef<number>(0);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const THRESHOLD = 100;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!onSwipeRight) return;
+    touchStartX.current = e.touches[0].clientX;
+    setSwiping(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!onSwipeRight || !swiping) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    if (dx > 0) setSwipeOffset(Math.min(dx, 180));
+  };
+
+  const handleTouchEnd = () => {
+    if (!onSwipeRight) return;
+    setSwiping(false);
+    if (swipeOffset >= THRESHOLD) {
+      setDismissed(true);
+      setTimeout(() => onSwipeRight(), 280);
+    } else {
+      setSwipeOffset(0);
+    }
+  };
+
+  if (dismissed) return null;
+
+  const swipeProgress = Math.min(swipeOffset / THRESHOLD, 1);
+
   return (
-    <div className="flex items-start gap-3 group">
-      <div onClick={() => onChange(id, !checked)} className="mt-0.5 shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
-        {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+    <div className="relative overflow-hidden rounded-lg"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {onSwipeRight && swipeOffset > 0 && (
+        <div className="absolute inset-0 flex items-center pl-4 rounded-lg pointer-events-none" style={{ background: swipeProgress >= 1 ? '#fbcdad' : `rgba(251,205,173,${swipeProgress * 0.8})` }}>
+          <span className="text-xs font-bold tracking-wide" style={{ color: '#7c4a2d', opacity: swipeProgress }}>→ Tomorrow</span>
+        </div>
+      )}
+      <div
+        className="flex items-start gap-3 group"
+        style={{
+          transform: dismissed ? 'translateX(110%)' : `translateX(${swipeOffset}px)`,
+          transition: swiping ? 'none' : 'transform 0.28s ease',
+          background: 'transparent',
+        }}
+      >
+        <div onClick={() => onChange(id, !checked)} className="mt-0.5 shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
+          {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+        </div>
+        <span className="flex-1 text-sm leading-snug">
+          {(() => {
+            const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
+            if (supplierUrl && !checked) {
+              return <a href={supplierUrl} target={supplierUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="font-medium underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text}</a>;
+            }
+            return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
+          })()}
+        </span>
+        {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none mt-0.5 opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
+        {onDelete && <button onClick={() => onDelete(id)} className="shrink-0 transition-colors leading-none mt-0.5" style={{ fontSize: '16px', lineHeight: 1, color: '#ccc' }} onTouchStart={e => (e.currentTarget.style.color = '#ef4444')} onTouchEnd={e => (e.currentTarget.style.color = '#ccc')} aria-label="Delete task">×</button>}
       </div>
-      <span className="flex-1 text-sm leading-snug">
-        {(() => {
-          const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
-          if (supplierUrl && !checked) {
-            return <a href={supplierUrl} target={supplierUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="font-medium underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text}</a>;
-          }
-          return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
-        })()}
-      </span>
-      {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none mt-0.5 opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
-      {onDelete && <button onClick={() => onDelete(id)} className="shrink-0 transition-colors leading-none mt-0.5" style={{ fontSize: '16px', lineHeight: 1, color: '#ccc' }} onTouchStart={e => (e.currentTarget.style.color = '#ef4444')} onTouchEnd={e => (e.currentTarget.style.color = '#ccc')} aria-label="Delete task">×</button>}
     </div>
   );
 }
@@ -262,6 +314,19 @@ export default function Home() {
     if (date === todayStr) await fetchDashboard(state);
   };
 
+  const handleDeferToTomorrow = async (blockId: string, text: string) => {
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const t = new Date(y, m - 1, d + 1);
+    const tomorrowStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(task => task.id !== blockId) } : prev);
+    await Promise.all([
+      fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: tomorrowStr, text }) }),
+      fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) }),
+    ]);
+    const state = await fetchServerState();
+    await fetchWeekTasks(state);
+  };
+
   const handleClaudeChat = async (panel: ClaudePanelState, userMessage: string) => {
     const newMsgs: ClaudeMessage[] = [...panel.messages, { role: 'user', content: userMessage }];
     setClaudePanel(prev => prev ? { ...prev, messages: newMsgs } : prev);
@@ -385,7 +450,8 @@ export default function Home() {
               ) : (
                 <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked}
                   onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
-                  onDelete={deleteMode ? (id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined) : undefined} />
+                  onDelete={deleteMode ? (id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined) : undefined}
+                  onSwipeRight={!isViewingOtherDay ? () => handleDeferToTomorrow(task.id, task.text) : undefined} />
               ))
             )}
           </div>
