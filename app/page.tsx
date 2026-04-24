@@ -666,7 +666,7 @@ export default function Home() {
               const SectionRow = ({ label, items }: { label: string; items: CostingProduct[] }) => (
                 <div>
                   <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>{label}</span>
-                  <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+                  <div className="flex flex-col gap-2 mt-2">
                     {items.length === 0 ? <p className="text-xs text-gray-400 italic">No data</p> : items.map(p => <ProductCard key={p.id} p={p} />)}
                   </div>
                 </div>
