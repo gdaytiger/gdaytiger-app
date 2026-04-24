@@ -626,64 +626,63 @@ export default function Home() {
           <Card emoji="💰" title="Product Costings">
             {costings.length === 0 ? (
               <p className="text-sm text-gray-400 italic">No products yet — add them to the Product Costings database in Notion</p>
-            ) : (
-              <div className="space-y-5">
-                {(() => {
-                  const reviewCount = costings.filter(p => p.needsReview).length;
-                  const withMargin = costings.filter(p => p.margin !== null);
-                  const avgMargin = withMargin.length > 0 ? withMargin.reduce((s, p) => s + p.margin!, 0) / withMargin.length : null;
-                  return (
-                    <div className="flex items-center gap-4 pb-3" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-                      {avgMargin !== null && <span className="text-xs text-gray-500">Avg margin <span className="font-bold text-gray-700">{avgMargin.toFixed(1)}%</span></span>}
-                      {reviewCount > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>⚠️ {reviewCount} need{reviewCount === 1 ? 's' : ''} review</span>}
-                      <span className="text-xs text-gray-400">{costings.length} products</span>
-                    </div>
-                  );
-                })()}
-                {CATEGORIES.map(cat => {
-                  const items = costings.filter(p => p.category === cat);
-                  if (items.length === 0) return null;
-                  const withM = items.filter(p => p.margin !== null);
-                  const catAvg = withM.length > 0 ? withM.reduce((s, p) => s + p.margin!, 0) / withM.length : null;
-                  return (
-                    <div key={cat}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>{cat}</span>
-                        {catAvg !== null && <span className="text-xs text-gray-400">avg {catAvg.toFixed(1)}%</span>}
+            ) : (() => {
+              const withMargin = costings.filter(p => p.margin !== null);
+              const avgMargin = withMargin.length > 0 ? withMargin.reduce((s, p) => s + p.margin!, 0) / withMargin.length : null;
+
+              const bottom5 = (items: CostingProduct[]) =>
+                [...items].filter(p => p.margin !== null).sort((a, b) => a.margin! - b.margin!).slice(0, 5);
+
+              const coffeeItems = bottom5(costings.filter(p => p.category === 'Coffee'));
+              const drinksItems = bottom5(costings.filter(p => p.category === 'Vending' || p.category === 'Retail'));
+
+              const ProductCard = ({ p }: { p: CostingProduct }) => {
+                const mc = p.margin === null ? '#9ca3af' : p.margin >= 65 ? '#16a34a' : p.margin >= 50 ? '#d97706' : '#dc2626';
+                const mb = p.margin === null ? 'rgba(0,0,0,0.03)' : p.margin >= 65 ? 'rgba(22,163,74,0.07)' : p.margin >= 50 ? 'rgba(217,119,6,0.07)' : 'rgba(220,38,38,0.07)';
+                return (
+                  <div className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: mb }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium text-gray-800 truncate">{p.name}</span>
+                        {p.needsReview && <span title={p.lastReviewedStr ? `Last reviewed ${p.daysSinceReview}d ago` : 'Never reviewed'}>⚠️</span>}
                       </div>
-                      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-                        {items.map(p => {
-                          const mc = p.margin === null ? '#9ca3af' : p.margin >= 65 ? '#16a34a' : p.margin >= 50 ? '#d97706' : '#dc2626';
-                          const mb = p.margin === null ? 'rgba(0,0,0,0.03)' : p.margin >= 65 ? 'rgba(22,163,74,0.07)' : p.margin >= 50 ? 'rgba(217,119,6,0.07)' : 'rgba(220,38,38,0.07)';
-                          return (
-                            <div key={p.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: mb }}>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium text-gray-800 truncate">{p.name}</span>
-                                  {p.needsReview && <span title={p.lastReviewedStr ? `Last reviewed ${p.daysSinceReview}d ago` : 'Never reviewed'}>⚠️</span>}
-                                </div>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  {p.sellPrice !== null && <span className="text-xs text-gray-500">sell ${p.sellPrice.toFixed(2)}</span>}
-                                  {p.cost !== null && <span className="text-xs text-gray-400">cost ${p.cost.toFixed(2)}</span>}
-                                </div>
-                              </div>
-                              <div className="shrink-0 text-right">
-                                {p.margin !== null ? (
-                                  <>
-                                    <p className="text-sm font-bold" style={{ color: mc }}>{p.margin.toFixed(1)}%</p>
-                                    {p.marginDollar !== null && <p className="text-xs" style={{ color: mc }}>${p.marginDollar.toFixed(2)}</p>}
-                                  </>
-                                ) : <p className="text-xs text-gray-400">—</p>}
-                              </div>
-                            </div>
-                          );
-                        })}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {p.sellPrice !== null && <span className="text-xs text-gray-500">sell ${p.sellPrice.toFixed(2)}</span>}
+                        {p.cost !== null && <span className="text-xs text-gray-400">cost ${p.cost.toFixed(2)}</span>}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <div className="shrink-0 text-right">
+                      {p.margin !== null ? (
+                        <>
+                          <p className="text-sm font-bold" style={{ color: mc }}>{p.margin.toFixed(1)}%</p>
+                          {p.marginDollar !== null && <p className="text-xs" style={{ color: mc }}>${p.marginDollar.toFixed(2)}</p>}
+                        </>
+                      ) : <p className="text-xs text-gray-400">—</p>}
+                    </div>
+                  </div>
+                );
+              };
+
+              const SectionRow = ({ label, items }: { label: string; items: CostingProduct[] }) => (
+                <div>
+                  <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>{label}</span>
+                  <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+                    {items.length === 0 ? <p className="text-xs text-gray-400 italic">No data</p> : items.map(p => <ProductCard key={p.id} p={p} />)}
+                  </div>
+                </div>
+              );
+
+              return (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-4 pb-3" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                    {avgMargin !== null && <span className="text-xs text-gray-500">Avg margin <span className="font-bold text-gray-700">{avgMargin.toFixed(1)}%</span></span>}
+                    <span className="text-xs text-gray-400">{costings.length} products — lowest 5 by margin</span>
+                  </div>
+                  <SectionRow label="Coffee" items={coffeeItems} />
+                  <SectionRow label="Drinks" items={drinksItems} />
+                </div>
+              );
+            })()}
           </Card>
         </div>
 
