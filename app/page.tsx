@@ -100,20 +100,31 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   onDelegate?: () => void;
   onSwipeRight?: () => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
   const swipeOffsetRef = useRef(0);
+  const isHorizontal = useRef(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const [committed, setCommitted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const THRESHOLD = 90;
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !onSwipeRight) return;
+    const preventScroll = (e: TouchEvent) => { if (isHorizontal.current) e.preventDefault(); };
+    el.addEventListener('touchmove', preventScroll, { passive: false });
+    return () => el.removeEventListener('touchmove', preventScroll);
+  }, [onSwipeRight]);
+
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!onSwipeRight) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     swipeOffsetRef.current = 0;
+    isHorizontal.current = false;
     setSwiping(false);
   };
 
@@ -121,8 +132,9 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
     if (!onSwipeRight) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
-    if (!swiping && Math.abs(dy) > Math.abs(dx)) return;
+    if (!isHorizontal.current && Math.abs(dy) > Math.abs(dx)) return;
     if (dx > 2) {
+      isHorizontal.current = true;
       setSwiping(true);
       const clamped = Math.min(dx, 160);
       swipeOffsetRef.current = clamped;
@@ -134,6 +146,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
 
   const handleTouchEnd = () => {
     if (!onSwipeRight) return;
+    isHorizontal.current = false;
     setSwiping(false);
     if (swipeOffsetRef.current >= THRESHOLD) {
       setDismissed(true);
@@ -151,7 +164,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   const eased = swipeProgress < 0.5 ? 2 * swipeProgress * swipeProgress : 1 - Math.pow(-2 * swipeProgress + 2, 2) / 2;
 
   return (
-    <div className="relative overflow-hidden rounded-xl"
+    <div ref={containerRef} className="relative overflow-hidden rounded-xl"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
