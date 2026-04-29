@@ -54,7 +54,7 @@ async function getTasksForDay(dateStr: string): Promise<{ id: string; text: stri
   });
   const data = await res.json();
 
-  type RawItem = { type: 'header' | 'task'; id: string; text: string };
+  type RawItem = { type: 'header' | 'task'; id: string; text: string; isRecurring?: boolean };
   const rawItems: RawItem[] = [];
 
   for (const block of (data.results || [])) {
@@ -73,20 +73,20 @@ async function getTasksForDay(dateStr: string): Promise<{ id: string; text: stri
     if (dateMatch) {
       const taskDate = dateMatch[1];
       if (taskDate < todayStr) { deleteBlock(block.id); continue; }
-      if (taskDate === dateStr) rawItems.push({ type: 'task', id: block.id, text: raw.replace(DATE_PREFIX_RE, '').trim() });
+      if (taskDate === dateStr) rawItems.push({ type: 'task', id: block.id, text: raw.replace(DATE_PREFIX_RE, '').trim(), isRecurring: false });
       continue;
     }
     if (raw.startsWith('[F]')) {
       if (!isOddWeek) continue;
-      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F]', '').trim() });
+      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F]', '').trim(), isRecurring: true });
       continue;
     }
     if (raw.startsWith('[M]')) {
       if (d.getDate() > 7) continue;
-      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim() });
+      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim(), isRecurring: true });
       continue;
     }
-    rawItems.push({ type: 'task', id: block.id, text: raw.trim() });
+    rawItems.push({ type: 'task', id: block.id, text: raw.trim(), isRecurring: true });
   }
 
   const tasks = [];
@@ -100,7 +100,7 @@ async function getTasksForDay(dateStr: string): Promise<{ id: string; text: stri
       }
       if (hasTask) tasks.push({ id: `header-${item.id}`, text: item.text, checked: false, isHeader: true });
     } else {
-      tasks.push({ id: item.id, text: item.text, checked: false });
+      tasks.push({ id: item.id, text: item.text, checked: false, isRecurring: item.isRecurring });
     }
   }
   return tasks;

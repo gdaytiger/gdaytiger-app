@@ -7,6 +7,7 @@ interface Todo {
   text: string;
   checked: boolean;
   isHeader?: boolean;
+  isRecurring?: boolean;
 }
 
 interface Project {
@@ -112,18 +113,21 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   const THRESHOLD = 90;
 
   const mouseDownRef = useRef(false);
+  const canSwipeRight = !!onSwipeRight;
+  const canSwipeLeft = !!onDelete;
+  const canSwipe = canSwipeRight || canSwipeLeft;
 
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !onSwipeRight) return;
+    if (!el || !canSwipe) return;
     const preventScroll = (e: TouchEvent) => { if (isHorizontal.current) e.preventDefault(); };
     el.addEventListener('touchmove', preventScroll, { passive: false });
     return () => el.removeEventListener('touchmove', preventScroll);
-  }, [onSwipeRight]);
+  }, [canSwipe]);
 
   // Mouse handlers (desktop)
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!onSwipeRight) return;
+    if (!canSwipe) return;
     touchStartX.current = e.clientX;
     touchStartY.current = e.clientY;
     swipeOffsetRef.current = 0;
@@ -133,19 +137,26 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   };
 
   useEffect(() => {
-    if (!onSwipeRight) return;
+    if (!canSwipe) return;
     const handleMouseMove = (e: MouseEvent) => {
       if (!mouseDownRef.current) return;
       const dx = e.clientX - touchStartX.current;
       const dy = e.clientY - touchStartY.current;
       if (!isHorizontal.current && Math.abs(dy) > Math.abs(dx)) return;
-      if (dx > 2) {
+      if (dx > 2 && canSwipeRight) {
         isHorizontal.current = true;
         setSwiping(true);
         const clamped = Math.min(dx, 160);
         swipeOffsetRef.current = clamped;
         setSwipeOffset(clamped);
         setCommitted(clamped >= THRESHOLD);
+      } else if (dx < -2 && canSwipeLeft) {
+        isHorizontal.current = true;
+        setSwiping(true);
+        const clamped = Math.max(dx, -160);
+        swipeOffsetRef.current = clamped;
+        setSwipeOffset(clamped);
+        setCommitted(clamped <= -THRESHOLD);
       }
     };
     const handleMouseUp = () => {
@@ -153,9 +164,12 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
       mouseDownRef.current = false;
       isHorizontal.current = false;
       setSwiping(false);
-      if (swipeOffsetRef.current >= THRESHOLD) {
+      if (swipeOffsetRef.current >= THRESHOLD && canSwipeRight) {
         setDismissed(true);
-        setTimeout(() => onSwipeRight(), 360);
+        setTimeout(() => onSwipeRight!(), 360);
+      } else if (swipeOffsetRef.current <= -THRESHOLD && canSwipeLeft) {
+        setDismissed(true);
+        setTimeout(() => onDelete!(id), 360);
       } else {
         setSwipeOffset(0);
         setCommitted(false);
@@ -165,11 +179,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
-  }, [onSwipeRight]);
+  }, [canSwipe, canSwipeRight, canSwipeLeft, onSwipeRight, onDelete, id]);
 
   // Touch handlers (mobile)
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (!onSwipeRight) return;
+    if (!canSwipe) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     swipeOffsetRef.current = 0;
@@ -178,11 +192,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!onSwipeRight) return;
+    if (!canSwipe) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
     if (!isHorizontal.current && Math.abs(dy) > Math.abs(dx)) return;
-    if (dx > 2) {
+    if (dx > 2 && canSwipeRight) {
       isHorizontal.current = true;
       setSwiping(true);
       const clamped = Math.min(dx, 160);
@@ -190,16 +204,27 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
       setSwipeOffset(clamped);
       if (clamped >= THRESHOLD && !committed) setCommitted(true);
       if (clamped < THRESHOLD && committed) setCommitted(false);
+    } else if (dx < -2 && canSwipeLeft) {
+      isHorizontal.current = true;
+      setSwiping(true);
+      const clamped = Math.max(dx, -160);
+      swipeOffsetRef.current = clamped;
+      setSwipeOffset(clamped);
+      if (clamped <= -THRESHOLD && !committed) setCommitted(true);
+      if (clamped > -THRESHOLD && committed) setCommitted(false);
     }
   };
 
   const handleTouchEnd = () => {
-    if (!onSwipeRight) return;
+    if (!canSwipe) return;
     isHorizontal.current = false;
     setSwiping(false);
-    if (swipeOffsetRef.current >= THRESHOLD) {
+    if (swipeOffsetRef.current >= THRESHOLD && canSwipeRight) {
       setDismissed(true);
-      setTimeout(() => onSwipeRight(), 360);
+      setTimeout(() => onSwipeRight!(), 360);
+    } else if (swipeOffsetRef.current <= -THRESHOLD && canSwipeLeft) {
+      setDismissed(true);
+      setTimeout(() => onDelete!(id), 360);
     } else {
       setSwipeOffset(0);
       setCommitted(false);
@@ -209,8 +234,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
 
   if (dismissed) return null;
 
-  const swipeProgress = Math.min(swipeOffset / THRESHOLD, 1);
+  const absOffset = Math.abs(swipeOffset);
+  const swipeProgress = Math.min(absOffset / THRESHOLD, 1);
   const eased = swipeProgress < 0.5 ? 2 * swipeProgress * swipeProgress : 1 - Math.pow(-2 * swipeProgress + 2, 2) / 2;
+  const isRightSwipe = swipeOffset > 0;
+  const isLeftSwipe = swipeOffset < 0;
 
   return (
     <div ref={containerRef} className="relative overflow-hidden rounded-xl"
@@ -218,20 +246,21 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ cursor: onSwipeRight ? 'grab' : undefined, userSelect: 'none' }}
+      style={{ cursor: canSwipe ? 'grab' : undefined, userSelect: 'none' }}
     >
-      {onSwipeRight && (
+      {/* Right swipe reveal — tomorrow */}
+      {canSwipeRight && (
         <div className="absolute inset-0 flex items-center pl-4 rounded-xl pointer-events-none"
           style={{
-            background: committed
+            background: committed && isRightSwipe
               ? 'linear-gradient(90deg, #fbcdad 0%, #f9b48a 100%)'
               : `linear-gradient(90deg, rgba(251,205,173,${eased * 0.9}) 0%, rgba(249,180,138,${eased * 0.7}) 100%)`,
-            opacity: swipeOffset > 0 ? 1 : 0,
+            opacity: isRightSwipe ? 1 : 0,
             transition: swiping ? 'none' : 'background 0.2s ease',
           }}>
           <span style={{
             fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: '#7c4a2d',
-            opacity: eased,
+            opacity: isRightSwipe ? eased : 0,
             transform: `translateX(${(1 - eased) * -8}px)`,
             transition: swiping ? 'none' : 'all 0.2s ease',
           }}>
@@ -239,12 +268,31 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           </span>
         </div>
       )}
+      {/* Left swipe reveal — delete */}
+      {canSwipeLeft && (
+        <div className="absolute inset-0 flex items-center justify-end pr-4 rounded-xl pointer-events-none"
+          style={{
+            background: committed && isLeftSwipe
+              ? 'linear-gradient(270deg, #ef4444 0%, #fca5a5 100%)'
+              : `linear-gradient(270deg, rgba(239,68,68,${eased * 0.9}) 0%, rgba(252,165,165,${eased * 0.7}) 100%)`,
+            opacity: isLeftSwipe ? 1 : 0,
+            transition: swiping ? 'none' : 'background 0.2s ease',
+          }}>
+          <span style={{
+            fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: '#7f1d1d',
+            opacity: isLeftSwipe ? eased : 0,
+            transform: `translateX(${(1 - eased) * 8}px)`,
+            transition: swiping ? 'none' : 'all 0.2s ease',
+          }}>
+            DELETE ←
+          </span>
+        </div>
+      )}
       <div
         className="flex items-start gap-3 group"
         style={{
-          transform: dismissed ? 'translateX(115%)' : `translateX(${swipeOffset}px)`,
-          opacity: dismissed ? 0 : 1,
-          transition: swiping ? 'none' : dismissed ? 'transform 0.36s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+          transform: `translateX(${swipeOffset}px)`,
+          transition: swiping ? 'none' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
           willChange: 'transform',
         }}
       >
@@ -261,7 +309,6 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           })()}
         </span>
         {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none mt-0.5 opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
-        {onDelete && <button onClick={() => onDelete(id)} className="shrink-0 transition-colors leading-none mt-0.5" style={{ fontSize: '16px', lineHeight: 1, color: '#ccc' }} onTouchStart={e => (e.currentTarget.style.color = '#ef4444')} onTouchEnd={e => (e.currentTarget.style.color = '#ccc')} aria-label="Delete task">×</button>}
       </div>
     </div>
   );
@@ -314,7 +361,6 @@ export default function Home() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [deleteMode, setDeleteMode] = useState(false);
   const [addingActionFor, setAddingActionFor] = useState<string | null>(null);
   const [newActionText, setNewActionText] = useState('');
   const [serverState, setServerState] = useState<Record<string, string[]>>({});
@@ -410,15 +456,20 @@ export default function Home() {
     if (date === todayStr) await fetchDashboard(state);
   };
 
-  const handleDeferToTomorrow = async (blockId: string, text: string) => {
+  const handleDeferToTomorrow = async (blockId: string, text: string, isRecurring?: boolean) => {
     const [y, m, d] = todayStr.split('-').map(Number);
     const t = new Date(y, m - 1, d + 1);
     const tomorrowStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
     setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(task => task.id !== blockId) } : prev);
-    await Promise.all([
+    const ops: Promise<Response>[] = [
       fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: tomorrowStr, text }) }),
-      fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) }),
-    ]);
+    ];
+    // Only delete the Notion block for one-time (date-prefixed) tasks.
+    // Recurring tasks (no prefix, [F], [M]) must stay in Notion so they reappear next cycle.
+    if (!isRecurring) {
+      ops.push(fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) }));
+    }
+    await Promise.all(ops);
     const state = await fetchServerState();
     await fetchWeekTasks(state);
   };
@@ -532,7 +583,7 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-5 pb-10 grid grid-cols-1 md:grid-cols-2 gap-4 relative">
 
         {/* DAILY TO DO */}
-        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'} onEmojiClick={() => setDeleteMode(d => !d)}>
+        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'}>
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
             {isViewingOtherDay && <button onClick={() => setSelectedDate(null)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← Back to today</button>}
@@ -546,8 +597,8 @@ export default function Home() {
               ) : (
                 <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked}
                   onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
-                  onDelete={deleteMode ? (id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined) : undefined}
-                  onSwipeRight={!isViewingOtherDay ? () => handleDeferToTomorrow(task.id, task.text) : undefined} />
+                  onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
+                  onSwipeRight={!isViewingOtherDay ? () => handleDeferToTomorrow(task.id, task.text, task.isRecurring) : undefined} />
               ))
             )}
           </div>
