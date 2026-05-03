@@ -845,7 +845,7 @@ export default function Home() {
         {/* ONGOING PROJECTS */}
         <Card emoji="🎯" title="Ongoing Projects">
           <span className="text-xs text-gray-400 -mt-2">{projectsDone}/{projectsTotal} actions done</span>
-          <div className="space-y-5">
+          <div className="space-y-2">
             {data.projects.length === 0 ? <p className="text-sm text-gray-400 italic">No active projects</p> : (
               data.projects.map(project => (
                 <div key={project.id}>
@@ -878,14 +878,14 @@ export default function Home() {
         {/* BRAIN DUMP */}
         <Card emoji="🧠" title="Brain Dump">
           {!showPromote ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               <textarea value={braindump} onChange={e => setBraindump(e.target.value)} placeholder="Drop an idea..." style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }} className="w-full rounded-xl px-3 py-2 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" rows={4} />
               {braindump.trim() && (
                 <button onClick={() => { setProjectName(braindump.trim()); setShowPromote(true); }} className="text-xs px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: '#fbcdad', color: '#333' }}>Move to Projects →</button>
               )}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               <p className="text-xs text-gray-400 italic">&ldquo;{braindump}&rdquo;</p>
               <input value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="Project name" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }} className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
               {nextActions.map((action, i) => (
@@ -917,7 +917,7 @@ export default function Home() {
             </div>
             <button onClick={() => { setClaudePanel(null); setClaudeInput(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">✕</button>
           </div>
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2 min-h-0">
             {claudePanel.messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-prose rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${m.role === 'user' ? 'text-gray-800' : 'text-gray-800 bg-white'}`} style={m.role === 'user' ? { background: '#fbcdad' } : { border: '1px solid rgba(0,0,0,0.07)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>

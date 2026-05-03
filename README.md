@@ -95,7 +95,7 @@ Live margin view pulled from the Notion Product Costings database.
 
 ## Costing Automation (Google Apps Script)
 
-All scripts live in the standalone Apps Script project linked to the Food Costings spreadsheet.  
+All scripts live in the Apps Script project linked to the Food Costings spreadsheet.  
 Access: [script.google.com/home](https://script.google.com/home) → open the project linked to the Food Costings sheet.
 
 Local copies saved to: `/Users/gdaytiger/Documents/Claude/Projects/TIGER OS/`
@@ -104,24 +104,60 @@ Local copies saved to: `/Users/gdaytiger/Documents/Claude/Projects/TIGER OS/`
 
 | File | Purpose | Trigger |
 |---|---|---|
-| `ScanSuppliers.gs` | Invoice scanner — reads Drive/Gmail for new invoices and writes updated ingredient prices to Food + Coffee Costings sheets | Hourly via `createScanTrigger()` |
+| `SaveInvoicesToDrive.gs` | Gmail watcher — sweeps all supplier inboxes hourly, saves PDF attachments to `Supplier Invoices/[Supplier]/[Year]/` in Drive, labels processed emails `invoice-saved` | Hourly via `createSaveToDriveTrigger()` |
+| `ScanSuppliers.gs` | Price scanner — reads Drive PDFs and writes updated ingredient prices to Food + Coffee Costings sheets. Gmail direct for PFD and Trio Supplies | Hourly via `createScanTrigger()` |
 | `SyncCostingsToNotion.gs` | Reads Sell Price + Profit % from both sheets, pushes to Notion Product Costings DB | Every 30 min via `updateSyncTrigger()` |
 | `CoffeeCostingsSetup.gs` | One-time setup — archives old Coffee Notion items, recreates 52 fresh ones from COFFEE COSTINGS sheet | Run manually after major Coffee sheet changes |
 
-### Invoice scanner supplier coverage
+### How the pipeline works
+
+```
+Gmail → SaveInvoicesToDrive (hourly) → Drive folders
+                                           ↓
+                                    ScanSuppliers (hourly) → Food/Coffee Costings sheets
+                                                                        ↓
+                                                           SyncCostingsToNotion (30 min) → Notion → TIGER OS dashboard
+```
+
+### SaveInvoicesToDrive — supplier coverage
+
+**Regular PDF invoice emails:**
+- Noisette — orders@noisette.com.au / billings@noisette.com.au
+- PFD Foods — ar@pfdfoods.com.au
+- 5Ways Foodservice — prontodocuments@5ways.com.au
+- Sciclunas Wholesale — orders@fresho.com / ar@sciclunas.com.au
+- Dench Bakers — messaging-service@post.xero.com (subject: "Dench Bakers")
+- Redi Milk — hello@redimilk.com.au
+- Seven Seeds Coffee — Xero / Stripe
+- Little Bertha — messaging-service@post.xero.com (subject: "Little Bertha")
+- Candied Bakery — messaging-service@post.xero.com (subject: "Tea and Cake")
+- Product Distribution — noreply@unleashedsoftware.com
+- WF Plastics — sales@wfplastic.com.au
+- Trio Supplies — sales@triosuppliesaustralia.com.au (subject: "Invoice from Trio")
+
+**Self-forwarded (email to yourself with subject keyword):**
+- Mork Chocolate, Matsu Tea, Woolworths
+
+**Ordermentum (email body → PDF, no attachment):**
+- Assembly (teas — no price rules)
+- Uncle's Smallgoods (pastrami price extraction)
+
+### ScanSuppliers — price extraction coverage
 
 **Food sheet (FOOD tab):**
-- 5Ways — Drive TAX INVOICEs
-- Sciclunas — Drive FreshoInvoice PDFs
-- Uncle's — Drive Order Confirmation PDFs
-- Woolworths — Drive eReceipt PDFs
-- PFD Foods — Gmail (PFDPortal@pfdfoods.com.au)
-- Abicor/Trio — Gmail (abicorsouthern.com.au) — built, verify on next invoice
-- Dench Bakers — Drive Invoice PDFs (Xero format)
-- Noisette, Product Distribution, Candied Bakery — Drive
+- 5Ways — Drive TAX INVOICE PDFs (~20 items: meats, cheese, veg, sauces, pantry)
+- Sciclunas — Drive FreshoInvoice PDFs (14 items: vegetables, eggs)
+- Uncle's — Drive Order Confirmation PDFs (pastrami)
+- Woolworths — Drive eReceipt PDFs (parmesan /kg)
+- Dench Bakers — Drive Invoice PDFs (sourdough, ciabatta)
+- Noisette, Product Distribution, Candied Bakery — Drive PDFs
+- PFD Foods — Gmail direct (sales@PFDPortal@pfdfoods.com.au) — chicken, sauerkraut
+- Trio Supplies — Gmail direct (sales@triosuppliesaustralia.com.au) — napkins, trays
 
 **Coffee sheet (COFFEE tab):**
-- Seven Seeds, Mörk, Matsu Tea, Redi Milk, 5Ways (Bundaberg Sugar)
+- Seven Seeds, Mörk, Matsu Tea — Drive PDFs
+- Redi Milk — Drive PDFs (all milks; also cross-writes FOOD R12)
+- 5Ways — Drive TAX INVOICE PDFs (Bundaberg Sugar)
 
 ### Margin thresholds
 - 🔴 Red: below 60%
