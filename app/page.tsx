@@ -295,26 +295,28 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         </div>
       )}
       <div
-        className="flex items-center gap-3 group px-3 py-2.5"
+        className="flex items-start gap-3 group px-3 py-2.5"
         style={{
           transform: `translateX(${swipeOffset}px)`,
           transition: swiping ? 'none' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
           willChange: 'transform',
         }}
       >
-        <div onClick={() => onChange(id, !checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
+        <div onClick={() => onChange(id, !checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
           {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
-        <span className="flex-1 text-sm leading-snug">
-          {(() => {
-            const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
-            if (supplierUrl && !checked) {
-              return <a href={supplierUrl} target={supplierUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="font-semibold underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text}</a>;
-            }
-            return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
-          })()}
-        </span>
-        {label && <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.1em', color: '#bbb', textTransform: 'uppercase', flexShrink: 0 }}>{label}</span>}
+        <div className="flex-1 min-w-0">
+          <div className="text-sm leading-snug">
+            {(() => {
+              const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
+              if (supplierUrl && !checked) {
+                return <a href={supplierUrl} target={supplierUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="font-semibold underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text}</a>;
+              }
+              return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
+            })()}
+          </div>
+          {label && <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.1em', color: '#bbb', textTransform: 'uppercase', marginTop: '2px' }}>{label}</div>}
+        </div>
         {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
       </div>
     </div>
