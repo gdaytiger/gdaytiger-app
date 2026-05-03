@@ -306,7 +306,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
             if (supplierUrl && !checked) {
               return <a href={supplierUrl} target={supplierUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="font-medium underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text}</a>;
             }
-            return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
+            return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
           })()}
         </span>
         {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
