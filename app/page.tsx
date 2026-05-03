@@ -816,7 +816,7 @@ export default function Home() {
                 if (task.isHeader) { currentCategory = task.text; return null; }
                 const cat = currentCategory;
                 return (
-                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={cat || undefined}
+                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={!isViewingOtherDay ? (cat || undefined) : undefined}
                     onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
                     onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
                     onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr)}
