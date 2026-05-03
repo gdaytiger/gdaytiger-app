@@ -244,6 +244,8 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
 
   return (
     <div ref={containerRef} className="relative overflow-hidden rounded-2xl"
+      draggable={!!onDragStart}
+      onDragStart={onDragStart}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -311,15 +313,6 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           })()}
         </span>
         {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
-        {onDragStart && (
-          <span
-            draggable
-            onDragStart={onDragStart}
-            className="shrink-0 opacity-20 hover:opacity-60 transition-opacity cursor-grab active:cursor-grabbing select-none"
-            style={{ fontSize: '14px', lineHeight: 1 }}
-            title="Drag to another day"
-          >⠿</span>
-        )}
       </div>
     </div>
   );
