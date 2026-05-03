@@ -242,12 +242,12 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   const isLeftSwipe = swipeOffset < 0;
 
   return (
-    <div ref={containerRef} className="relative overflow-hidden rounded-xl"
+    <div ref={containerRef} className="relative overflow-hidden rounded-2xl"
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ cursor: canSwipe ? 'grab' : undefined, userSelect: 'none' }}
+      style={{ cursor: canSwipe ? 'grab' : undefined, userSelect: 'none', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}
     >
       {/* Right swipe reveal — tomorrow */}
       {canSwipeRight && (
@@ -290,7 +290,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         </div>
       )}
       <div
-        className="flex items-start gap-3 group"
+        className="flex items-start gap-3 group px-3 py-2.5"
         style={{
           transform: `translateX(${swipeOffset}px)`,
           transition: swiping ? 'none' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
