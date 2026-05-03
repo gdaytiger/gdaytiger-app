@@ -244,13 +244,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
 
   return (
     <div ref={containerRef} className="relative overflow-hidden rounded-2xl"
-      draggable={!!onDragStart}
-      onDragStart={onDragStart}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ cursor: onDragStart ? 'grab' : canSwipe ? 'grab' : undefined, userSelect: 'none', minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}
+      style={{ userSelect: 'none', minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}
     >
       {/* Right swipe reveal — tomorrow */}
       {canSwipeRight && (
@@ -313,6 +311,15 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           })()}
         </span>
         {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
+        {onDragStart && (
+          <span
+            draggable
+            onDragStart={onDragStart}
+            className="shrink-0 opacity-20 hover:opacity-60 transition-opacity cursor-grab active:cursor-grabbing select-none"
+            style={{ fontSize: '14px', lineHeight: 1 }}
+            title="Drag to another day"
+          >⠿</span>
+        )}
       </div>
     </div>
   );
