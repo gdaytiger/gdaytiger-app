@@ -790,40 +790,8 @@ export default function Home() {
           </div>
         </Card>
 
-        {/* ONGOING PROJECTS + BRAIN DUMP */}
+        {/* ONGOING PROJECTS */}
         <Card emoji="🎯" title="Ongoing Projects">
-          {/* Brain Dump — inline at top */}
-          <div className="mb-4 pb-4 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-            {!showPromote ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span style={{ fontSize: '13px' }}>🧠</span>
-                  <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>Brain Dump</span>
-                </div>
-                <textarea value={braindump} onChange={e => setBraindump(e.target.value)} placeholder="Drop an idea..." style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }} className="w-full rounded-xl px-3 py-2 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" rows={2} />
-                {braindump.trim() && (
-                  <button onClick={() => { setProjectName(braindump.trim()); setShowPromote(true); }} className="text-xs px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: '#fbcdad', color: '#333' }}>Move to Projects →</button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span style={{ fontSize: '13px' }}>🧠</span>
-                  <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>New Project</span>
-                </div>
-                <p className="text-xs text-gray-400 italic">&ldquo;{braindump}&rdquo;</p>
-                <input value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="Project name" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }} className="w-full rounded-lg px-3 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
-                {nextActions.map((action, i) => (
-                  <input key={i} value={action} onChange={e => { const a = [...nextActions]; a[i] = e.target.value; setNextActions(a); }} placeholder={`Next action ${i + 1}`} style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }} className="w-full rounded-lg px-3 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
-                ))}
-                <div className="flex gap-2 pt-1">
-                  <button onClick={handlePromote} disabled={promoting || !projectName.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: '#fbcdad', color: '#333' }}>{promoting ? 'Creating...' : 'Create Project'}</button>
-                  <button onClick={() => { setShowPromote(false); setProjectName(''); setNextActions(['', '', '']); }} className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 transition-colors font-bold uppercase tracking-wider">Cancel</button>
-                </div>
-              </div>
-            )}
-          </div>
-
           <span className="text-xs text-gray-400 -mt-2">{projectsDone}/{projectsTotal} actions done</span>
           <div className="space-y-5">
             {data.projects.length === 0 ? <p className="text-sm text-gray-400 italic">No active projects</p> : (
@@ -853,6 +821,30 @@ export default function Home() {
               ))
             )}
           </div>
+        </Card>
+
+        {/* BRAIN DUMP */}
+        <Card emoji="🧠" title="Brain Dump">
+          {!showPromote ? (
+            <div className="space-y-3">
+              <textarea value={braindump} onChange={e => setBraindump(e.target.value)} placeholder="Drop an idea..." style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }} className="w-full rounded-xl px-3 py-2 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" rows={4} />
+              {braindump.trim() && (
+                <button onClick={() => { setProjectName(braindump.trim()); setShowPromote(true); }} className="text-xs px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: '#fbcdad', color: '#333' }}>Move to Projects →</button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-400 italic">&ldquo;{braindump}&rdquo;</p>
+              <input value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="Project name" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }} className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
+              {nextActions.map((action, i) => (
+                <input key={i} value={action} onChange={e => { const a = [...nextActions]; a[i] = e.target.value; setNextActions(a); }} placeholder={`Next action ${i + 1}`} style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }} className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
+              ))}
+              <div className="flex gap-2 pt-1">
+                <button onClick={handlePromote} disabled={promoting || !projectName.trim()} className="text-xs disabled:opacity-40 px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: '#fbcdad', color: '#333' }}>{promoting ? 'Creating...' : 'Create Project'}</button>
+                <button onClick={() => { setShowPromote(false); setProjectName(''); setNextActions(['', '', '']); }} className="text-xs text-gray-400 hover:text-gray-600 px-3 py-2 transition-colors font-bold uppercase tracking-wider">Cancel</button>
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* PRODUCT COSTINGS — carousel + price changes */}
