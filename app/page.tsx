@@ -59,6 +59,7 @@ interface CostingProduct {
   category: string;
   cost: number | null;
   sellPrice: number | null;
+  profitPct: number | null;
   margin: number | null;
   marginDollar: number | null;
   lastReviewedStr: string | null;
@@ -347,6 +348,195 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
         <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
       </div>
     </div>
+  );
+}
+
+const SNAP_KEY = 'gdt_costings_snap_v2';
+
+function CostingsCard({ costings }: { costings: CostingProduct[] }) {
+  const sorted = [...costings].filter(p => p.margin !== null).sort((a, b) => a.margin! - b.margin!);
+  const total = sorted.length;
+  const [idx, setIdx] = useState(0);
+  const [fading, setFading] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Price change tracking via localStorage
+  const [changes, setChanges] = useState<{ name: string; category: string; oldPct: number; newPct: number; dp: number; dc: number }[]>([]);
+  const [firstLoad, setFirstLoad] = useState(false);
+  const [changesOpen, setChangesOpen] = useState(true);
+
+  useEffect(() => {
+    if (total === 0) return;
+    let prev: { ts: number; d: Record<string, { p: number; s: number }> } | null = null;
+    try { prev = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); } catch { /* ignore */ }
+    setFirstLoad(!prev);
+    if (prev) {
+      const detected: typeof changes = [];
+      sorted.forEach(item => {
+        const old = prev!.d[item.name];
+        if (!old) return;
+        const dp = item.margin! - old.p;
+        if (Math.abs(dp) < 0.15) return;
+        const dc = item.sellPrice
+          ? item.sellPrice * (1 - item.margin! / 100) - item.sellPrice * (1 - old.p / 100)
+          : 0;
+        detected.push({ name: item.name, category: item.category, oldPct: old.p, newPct: item.margin!, dp, dc });
+      });
+      detected.sort((a, b) => a.dp - b.dp);
+      setChanges(detected);
+    }
+    // Save new snapshot
+    const snap = { ts: Date.now(), d: {} as Record<string, { p: number; s: number }> };
+    sorted.forEach(item => { snap.d[item.name] = { p: item.margin!, s: item.sellPrice ?? 0 }; });
+    try { localStorage.setItem(SNAP_KEY, JSON.stringify(snap)); } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total]);
+
+  const goTo = (next: number, userAction = false) => {
+    if (fading || next === idx) return;
+    if (userAction) {
+      setPaused(true);
+      if (pauseTimer.current) clearTimeout(pauseTimer.current);
+      pauseTimer.current = setTimeout(() => setPaused(false), 4000);
+    }
+    setFading(true);
+    setTimeout(() => { setIdx(((next % total) + total) % total); setFading(false); }, 320);
+  };
+
+  // Auto-advance
+  useEffect(() => {
+    if (total <= 1 || paused) return;
+    const t = setInterval(() => { if (!fading) goTo((idx + 1) % total); }, 4500);
+    return () => clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, fading, paused, total]);
+
+  if (total === 0) {
+    return (
+      <Card emoji="💰" title="Product Costings">
+        <p className="text-sm text-gray-400 italic">No products with margin data yet</p>
+      </Card>
+    );
+  }
+
+  const item = sorted[idx];
+  const mc = item.margin! >= 70 ? '#16a34a' : item.margin! >= 60 ? '#d97706' : '#dc2626';
+  const mb = item.margin! >= 70 ? 'rgba(22,163,74,0.06)' : item.margin! >= 60 ? 'rgba(217,119,6,0.06)' : 'rgba(220,38,38,0.06)';
+  const bar = Math.min(100, Math.max(0, item.margin!));
+
+  const withMargin = costings.filter(p => p.margin !== null);
+  const avg = withMargin.length > 0 ? withMargin.reduce((s, p) => s + p.margin!, 0) / withMargin.length : null;
+  const red    = withMargin.filter(p => p.margin! < 60).length;
+  const yellow = withMargin.filter(p => p.margin! >= 60 && p.margin! < 70).length;
+  const green  = withMargin.filter(p => p.margin! >= 70).length;
+
+  // Dots: show up to 7 around current
+  const MAX_DOTS = 7;
+  const half = Math.floor(MAX_DOTS / 2);
+  const dotStart = total <= MAX_DOTS ? 0 : Math.max(0, Math.min(idx - half, total - MAX_DOTS));
+  const dotEnd   = total <= MAX_DOTS ? total : dotStart + MAX_DOTS;
+
+  return (
+    <Card emoji="💰" title="Product Costings">
+      {/* Summary row */}
+      <div className="flex items-center gap-3 flex-wrap mb-3 pb-3" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+        {avg !== null && <span className="text-xs text-gray-500">Avg <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>}
+        <span className="text-xs font-semibold" style={{ color: '#dc2626' }}>🔴 {red} under 60%</span>
+        <span className="text-xs font-semibold" style={{ color: '#d97706' }}>🟡 {yellow} at 60–70%</span>
+        <span className="text-xs font-semibold" style={{ color: '#16a34a' }}>🟢 {green} over 70%</span>
+        <span className="text-xs text-gray-400 ml-auto">{total} products</span>
+      </div>
+
+      {/* Carousel */}
+      <div className="flex items-center gap-3 mb-2"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => { setPaused(false); if (pauseTimer.current) clearTimeout(pauseTimer.current); }}
+      >
+        <button onClick={() => goTo(idx - 1, true)} className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-lg text-gray-400 transition-colors hover:text-gray-700" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)' }}>‹</button>
+        <div className="flex-1 rounded-2xl px-4 py-3 transition-opacity duration-300" style={{ background: mb, border: `1px solid ${mc}22`, opacity: fading ? 0 : 1 }}>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-800 leading-snug">{item.name}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,0,0,0.05)', color: '#6b7280', fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{item.category}</span>
+                {item.sellPrice !== null && <span className="text-xs text-gray-500">${item.sellPrice.toFixed(2)}</span>}
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-2xl font-black leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>{item.margin!.toFixed(1)}%</p>
+              <p className="text-xs text-gray-400 mt-0.5">profit</p>
+            </div>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.08)' }}>
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${bar}%`, background: mc }} />
+          </div>
+        </div>
+        <button onClick={() => goTo(idx + 1, true)} className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-lg text-gray-400 transition-colors hover:text-gray-700" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)' }}>›</button>
+      </div>
+
+      {/* Dots + counter */}
+      <div className="flex items-center justify-center gap-3 mb-3">
+        <div className="flex gap-1 items-center">
+          {Array.from({ length: dotEnd - dotStart }, (_, i) => {
+            const di = dotStart + i;
+            const isActive = di === idx;
+            const isNear = Math.abs(di - idx) === 1;
+            return (
+              <button key={di} onClick={() => goTo(di, true)}
+                className="rounded-full transition-all duration-200"
+                style={{ width: isActive ? '18px' : '6px', height: '6px', background: isActive ? '#1a1a1a' : isNear ? '#ccc' : '#e5e7eb', flexShrink: 0 }}
+              />
+            );
+          })}
+        </div>
+        <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>{idx + 1} / {total}</span>
+        {paused && <span className="text-xs text-gray-300">⏸</span>}
+      </div>
+
+      {/* Price changes */}
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+        <button onClick={() => setChangesOpen(o => !o)} className="w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-black/5"
+          style={{ background: firstLoad ? 'rgba(0,0,0,0.02)' : changes.length > 0 ? 'rgba(251,205,173,0.18)' : 'rgba(0,0,0,0.02)' }}>
+          <div className="flex items-center gap-2">
+            <span className="text-xs">📊</span>
+            <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: changes.length > 0 ? '#7c4a2d' : '#9ca3af' }}>
+              Ingredient Price Changes
+            </span>
+            {changes.length > 0 && (
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fbcdad', color: '#7c4a2d' }}>{changes.length}</span>
+            )}
+          </div>
+          <span className="text-xs text-gray-400">{changesOpen ? '▲' : '▼'}</span>
+        </button>
+        {changesOpen && (
+          <div className="max-h-36 overflow-y-auto">
+            {firstLoad ? (
+              <p className="text-xs text-gray-400 px-3 py-2.5 italic">Baseline saved — cost movements will show here on your next load.</p>
+            ) : changes.length === 0 ? (
+              <p className="text-xs text-gray-400 px-3 py-2.5 italic">No margin changes detected since last load.</p>
+            ) : (
+              changes.map((c, i) => {
+                const dir = c.dp > 0 ? '#16a34a' : '#dc2626';
+                const dcSign = c.dc > 0 ? '+' : '−';
+                return (
+                  <div key={i} className="flex items-center gap-2 px-3 py-2 flex-wrap" style={{ borderTop: i === 0 ? 'none' : '1px solid rgba(0,0,0,0.04)' }}>
+                    <span className="text-xs font-semibold text-gray-800 flex-1 min-w-0 truncate">{c.name}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(0,0,0,0.05)', color: '#6b7280', fontSize: '10px' }}>{c.category}</span>
+                    <span className="text-xs font-medium shrink-0" style={{ color: dir, fontVariantNumeric: 'tabular-nums' }}>
+                      {c.oldPct.toFixed(1)}% → {c.newPct.toFixed(1)}%
+                    </span>
+                    <span className="text-xs text-gray-400 shrink-0">
+                      ({c.dp > 0 ? '+' : ''}{c.dp.toFixed(1)}pp · cost {dcSign}${Math.abs(c.dc).toFixed(3)})
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -672,71 +862,9 @@ export default function Home() {
           )}
         </Card>
 
-        {/* PRODUCT COSTINGS */}
+        {/* PRODUCT COSTINGS — carousel + price changes */}
         <div className="md:col-span-2">
-          <Card emoji="💰" title="Product Costings">
-            {costings.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No products yet — add them to the Product Costings database in Notion</p>
-            ) : (() => {
-              const withMargin = costings.filter(p => p.margin !== null);
-              const avgMargin = withMargin.length > 0 ? withMargin.reduce((s, p) => s + p.margin!, 0) / withMargin.length : null;
-
-              const bottom5 = (items: CostingProduct[]) =>
-                [...items].filter(p => p.margin !== null).sort((a, b) => a.margin! - b.margin!).slice(0, 5);
-
-              const coffeeItems = bottom5(costings.filter(p => p.category === 'Coffee'));
-              const drinksItems = bottom5(costings.filter(p => p.category !== 'Coffee'));
-
-              const ProductCard = ({ p }: { p: CostingProduct }) => {
-                const mc = p.margin === null ? '#9ca3af' : p.margin >= 70 ? '#16a34a' : p.margin >= 60 ? '#d97706' : '#dc2626';
-                const mb = p.margin === null ? 'rgba(0,0,0,0.03)' : p.margin >= 70 ? 'rgba(22,163,74,0.07)' : p.margin >= 60 ? 'rgba(217,119,6,0.07)' : 'rgba(220,38,38,0.07)';
-                return (
-                  <div className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: mb }}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-medium text-gray-800 truncate">{p.name}</span>
-                        {p.needsReview && <span title={p.lastReviewedStr ? `Last reviewed ${p.daysSinceReview}d ago` : 'Never reviewed'}>⚠️</span>}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {p.sellPrice !== null && <span className="text-xs text-gray-500">sell ${p.sellPrice.toFixed(2)}</span>}
-                        {p.cost !== null && <span className="text-xs text-gray-400">cost ${p.cost.toFixed(2)}</span>}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      {p.margin !== null ? (
-                        <>
-                          <p className="text-sm font-bold" style={{ color: mc }}>{p.margin.toFixed(1)}%</p>
-                          {p.marginDollar !== null && <p className="text-xs" style={{ color: mc }}>${p.marginDollar.toFixed(2)}</p>}
-                        </>
-                      ) : <p className="text-xs text-gray-400">—</p>}
-                    </div>
-                  </div>
-                );
-              };
-
-              const SectionCol = ({ label, items }: { label: string; items: CostingProduct[] }) => (
-                <div className="flex-1 min-w-0">
-                  <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>{label}</span>
-                  <div className="flex flex-col gap-2 mt-2">
-                    {items.length === 0 ? <p className="text-xs text-gray-400 italic">No data</p> : items.map(p => <ProductCard key={p.id} p={p} />)}
-                  </div>
-                </div>
-              );
-
-              return (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4 pb-3" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-                    {avgMargin !== null && <span className="text-xs text-gray-500">Avg margin <span className="font-bold text-gray-700">{avgMargin.toFixed(1)}%</span></span>}
-                    <span className="text-xs text-gray-400">{costings.length} products — lowest 5 by margin</span>
-                  </div>
-                  <div className="flex gap-6">
-                    <SectionCol label="Coffee" items={coffeeItems} />
-                    <SectionCol label="Food" items={drinksItems} />
-                  </div>
-                </div>
-              );
-            })()}
-          </Card>
+          <CostingsCard costings={costings} />
         </div>
 
       </div>
