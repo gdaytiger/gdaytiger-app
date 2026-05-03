@@ -85,12 +85,12 @@ function Card({ emoji, title, children, onEmojiClick }: {
   emoji: string; title: string; children: React.ReactNode; onEmojiClick?: () => void;
 }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', height: '540px', overflow: 'hidden' }} className="rounded-3xl p-5 flex flex-col gap-4">
+    <div style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)' }} className="rounded-3xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2 shrink-0">
         <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
       </div>
-      <div className="no-scrollbar flex-1 overflow-y-auto min-h-0">{children}</div>
+      <div>{children}</div>
     </div>
   );
 }
