@@ -315,7 +315,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
               return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
             })()}
           </div>
-          {label && <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.1em', color: '#bbb', textTransform: 'uppercase', marginTop: '2px' }}>{label}</div>}
+          {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
         </div>
         {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
       </div>
