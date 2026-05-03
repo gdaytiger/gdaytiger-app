@@ -538,6 +538,12 @@ function CostingsCard({ costings }: { costings: CostingProduct[] }) {
   );
 }
 
+const getNextDateStr = (dateStr: string): string => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const next = new Date(y, m - 1, d + 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+};
+
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -645,8 +651,13 @@ export default function Home() {
     if (date === todayStr) await fetchDashboard(state);
   };
 
-  const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean) => {
-    setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(task => task.id !== blockId) } : prev);
+  const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean, fromDate?: string) => {
+    const sourceDate = fromDate ?? todayStr;
+    if (sourceDate === todayStr) {
+      setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(task => task.id !== blockId) } : prev);
+    } else {
+      setWeekTasks(prev => ({ ...prev, [sourceDate]: { ...prev[sourceDate], count: prev[sourceDate].count - 1, tasks: prev[sourceDate].tasks.filter(t => t.id !== blockId) } }));
+    }
     const ops: Promise<Response>[] = [
       fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: targetDate, text }) }),
     ];
@@ -800,8 +811,8 @@ export default function Home() {
                 <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked}
                   onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
                   onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
-                  onSwipeRight={!isViewingOtherDay ? () => handleDeferToTomorrow(task.id, task.text, task.isRecurring) : undefined}
-                  onDragStart={!isViewingOtherDay ? (e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring })); e.dataTransfer.effectAllowed = 'move'; } : undefined} />
+                  onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr)}
+                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr })); e.dataTransfer.effectAllowed = 'move'; }} />
               ))
             )}
           </div>
