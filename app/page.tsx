@@ -461,9 +461,19 @@ function CostingsCard({ costings }: { costings: CostingProduct[] }) {
       {/* Summary row */}
       <div className="flex items-center gap-3 flex-wrap pb-3 mb-1" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
         {avg !== null && <span className="text-xs text-gray-500">Avg <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>}
-        <span className="text-xs font-semibold" style={{ color: '#dc2626' }}>🔴 {red}</span>
-        <span className="text-xs font-semibold" style={{ color: '#d97706' }}>🟡 {yellow}</span>
-        <span className="text-xs font-semibold" style={{ color: '#16a34a' }}>🟢 {green}</span>
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { count: red,    label: 'under 60%', bg: 'rgba(220,38,38,0.10)',   border: 'rgba(220,38,38,0.25)',   color: '#991b1b' },
+            { count: yellow, label: '60–70%',    bg: 'rgba(217,119,6,0.10)',   border: 'rgba(217,119,6,0.25)',   color: '#78350f' },
+            { count: green,  label: 'over 70%',  bg: 'rgba(22,163,74,0.10)',   border: 'rgba(22,163,74,0.25)',   color: '#14532d' },
+          ].map(({ count, label, bg, border, color }) => (
+            <span key={label} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
+              style={{ background: bg, border: `1px solid ${border}`, color, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+              <span className="font-black">{count}</span>
+              <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.8 }}>{label}</span>
+            </span>
+          ))}
+        </div>
         <span className="text-xs text-gray-400 ml-auto">{withMargin.length} products</span>
       </div>
 
