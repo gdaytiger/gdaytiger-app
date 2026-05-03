@@ -81,27 +81,29 @@ const applyServerChecked = (todos: Todo[], date: string, state: Record<string, s
   return todos.map(t => t.isHeader ? t : { ...t, checked: checkedIds.has(t.id) });
 };
 
-function Card({ emoji, title, children, onEmojiClick }: {
-  emoji: string; title: string; children: React.ReactNode; onEmojiClick?: () => void;
+function Card({ emoji, title, children, onEmojiClick, headerRight }: {
+  emoji: string; title: string; children: React.ReactNode; onEmojiClick?: () => void; headerRight?: React.ReactNode;
 }) {
   return (
     <div style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', height: '575px', overflow: 'hidden' }} className="rounded-3xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2 shrink-0">
         <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
+        {headerRight && <div className="ml-auto">{headerRight}</div>}
       </div>
       <div className="no-scrollbar flex-1 overflow-y-auto min-h-0">{children}</div>
     </div>
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, label }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
   onDelegate?: () => void;
   onSwipeRight?: () => void;
   onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+  label?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
@@ -312,6 +314,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
             return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
           })()}
         </span>
+        {label && <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.1em', color: '#bbb', textTransform: 'uppercase', flexShrink: 0 }}>{label}</span>}
         {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
       </div>
     </div>
@@ -796,25 +799,28 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-5 pb-10 grid grid-cols-1 md:grid-cols-2 gap-4 relative">
 
         {/* DAILY TO DO */}
-        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
-            {isViewingOtherDay && <button onClick={() => setSelectedDate(null)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← Back to today</button>}
-          </div>
+        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'}
+          headerRight={
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
+              {isViewingOtherDay && <button onClick={() => setSelectedDate(null)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← Back</button>}
+            </div>
+          }>
           <div className="space-y-3">
-            {displayedTasks.length === 0 ? <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p> : (
-              displayedTasks.map(task => task.isHeader ? (
-                <div key={task.id} className="pt-2 pb-0.5">
-                  <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa' }}>{task.text.toUpperCase()}</span>
-                </div>
-              ) : (
-                <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked}
-                  onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
-                  onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
-                  onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr)}
-                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr })); e.dataTransfer.effectAllowed = 'move'; }} />
-              ))
-            )}
+            {displayedTasks.length === 0 ? <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p> : (() => {
+              let currentCategory = '';
+              return displayedTasks.map(task => {
+                if (task.isHeader) { currentCategory = task.text; return null; }
+                const cat = currentCategory;
+                return (
+                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={cat || undefined}
+                    onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
+                    onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
+                    onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr)}
+                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr })); e.dataTransfer.effectAllowed = 'move'; }} />
+                );
+              });
+            })()}
           </div>
         </Card>
 
