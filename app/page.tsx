@@ -337,7 +337,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   return (
     <div
       className={`relative overflow-hidden rounded-xl transition-all ${isDragOver ? 'border' : isHighlighted ? 'border' : 'bg-white/30'}`}
-      style={isDragOver ? { minHeight: '52px', background: 'rgba(99,102,241,0.1)', borderColor: '#818cf8', boxShadow: '0 0 0 2px rgba(99,102,241,0.2)' } : isHighlighted ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}
+      style={isDragOver ? { minHeight: '52px', background: 'rgba(22,163,74,0.10)', borderColor: 'rgba(22,163,74,0.25)', boxShadow: '0 0 0 2px rgba(22,163,74,0.15)' } : isHighlighted ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}
       onDrop={onDrop}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
