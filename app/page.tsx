@@ -95,12 +95,13 @@ function Card({ emoji, title, children, onEmojiClick }: {
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
   onDelegate?: () => void;
   onSwipeRight?: () => void;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
@@ -243,11 +244,13 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
 
   return (
     <div ref={containerRef} className="relative overflow-hidden rounded-2xl"
+      draggable={!!onDragStart}
+      onDragStart={onDragStart}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ cursor: canSwipe ? 'grab' : undefined, userSelect: 'none', minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}
+      style={{ cursor: onDragStart ? 'grab' : canSwipe ? 'grab' : undefined, userSelect: 'none', minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}
     >
       {/* Right swipe reveal — tomorrow */}
       {canSwipeRight && (
@@ -315,10 +318,14 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   );
 }
 
-function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDay }: {
+function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDay, onDrop, onDragOver, onDragLeave, isDragOver }: {
   shift: Shift; isToday: boolean; isHighlighted: boolean; taskCount: number;
   onAdd: (date: string, text: string) => Promise<void>;
   onSelectDay: (date: string) => void;
+  onDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragLeave?: () => void;
+  isDragOver?: boolean;
 }) {
   const [isAdding, setIsAdding] = useState(false);
   const [taskText, setTaskText] = useState('');
@@ -328,7 +335,13 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   const close = () => { setIsAdding(false); setTaskText(''); };
   const submit = async () => { if (!taskText.trim()) return; setSaving(true); await onAdd(shift.date, taskText); setSaving(false); close(); };
   return (
-    <div className={`relative overflow-hidden rounded-xl ${isHighlighted ? 'border' : 'bg-white/30'}`} style={isHighlighted ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}>
+    <div
+      className={`relative overflow-hidden rounded-xl transition-all ${isDragOver ? 'border' : isHighlighted ? 'border' : 'bg-white/30'}`}
+      style={isDragOver ? { minHeight: '52px', background: 'rgba(99,102,241,0.1)', borderColor: '#818cf8', boxShadow: '0 0 0 2px rgba(99,102,241,0.2)' } : isHighlighted ? { minHeight: '52px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad' } : { minHeight: '52px' }}
+      onDrop={onDrop}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+    >
       <div className="absolute inset-0 flex items-center justify-between py-2 px-3 transition-transform duration-300 ease-in-out cursor-pointer" style={{ transform: isAdding ? 'translateX(-100%)' : 'translateX(0)' }} onClick={() => onSelectDay(shift.date)}>
         <div>
           <span className={`text-sm font-semibold ${shift.working ? 'text-gray-800' : 'text-gray-400'}`}>{shift.label}{isToday && <span className="ml-2 text-xs font-medium text-gray-400">TODAY</span>}</span>
@@ -543,6 +556,7 @@ export default function Home() {
   const [claudeInput, setClaudeInput] = useState('');
   const [claudeLoading, setClaudeLoading] = useState(false);
   const [costings, setCostings] = useState<CostingProduct[]>([]);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const claudeMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const todayStr = data?.todayStr ?? '';
@@ -629,6 +643,19 @@ export default function Home() {
     const state = await fetchServerState();
     await fetchWeekTasks(state);
     if (date === todayStr) await fetchDashboard(state);
+  };
+
+  const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean) => {
+    setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(task => task.id !== blockId) } : prev);
+    const ops: Promise<Response>[] = [
+      fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: targetDate, text }) }),
+    ];
+    if (!isRecurring) {
+      ops.push(fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) }));
+    }
+    await Promise.all(ops);
+    const state = await fetchServerState();
+    await fetchWeekTasks(state);
   };
 
   const handleDeferToTomorrow = async (blockId: string, text: string, isRecurring?: boolean) => {
@@ -773,7 +800,8 @@ export default function Home() {
                 <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked}
                   onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
                   onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
-                  onSwipeRight={!isViewingOtherDay ? () => handleDeferToTomorrow(task.id, task.text, task.isRecurring) : undefined} />
+                  onSwipeRight={!isViewingOtherDay ? () => handleDeferToTomorrow(task.id, task.text, task.isRecurring) : undefined}
+                  onDragStart={!isViewingOtherDay ? (e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring })); e.dataTransfer.effectAllowed = 'move'; } : undefined} />
               ))
             )}
           </div>
@@ -784,7 +812,12 @@ export default function Home() {
           <div className="space-y-2">
             {shifts.length === 0 ? <p className="text-sm text-gray-400 italic">No shifts found</p> : (
               shifts.map(shift => (
-                <RosterRow key={shift.date} shift={shift} isToday={shift.date === todayStr} isHighlighted={selectedDate ? shift.date === selectedDate : shift.date === todayStr} taskCount={weekTasks[shift.date]?.count ?? 0} onAdd={handleAddTask} onSelectDay={handleSelectDay} />
+                <RosterRow key={shift.date} shift={shift} isToday={shift.date === todayStr} isHighlighted={selectedDate ? shift.date === selectedDate : shift.date === todayStr} taskCount={weekTasks[shift.date]?.count ?? 0} onAdd={handleAddTask} onSelectDay={handleSelectDay}
+                  isDragOver={dragOverDate === shift.date}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverDate(shift.date); }}
+                  onDragLeave={() => setDragOverDate(null)}
+                  onDrop={(e) => { e.preventDefault(); setDragOverDate(null); try { const d = JSON.parse(e.dataTransfer.getData('application/json')); handleMoveToDay(d.id, d.text, shift.date, d.isRecurring); } catch { /* ignore */ } }}
+                />
               ))
             )}
           </div>
