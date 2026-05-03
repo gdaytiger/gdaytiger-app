@@ -808,7 +808,7 @@ export default function Home() {
               {isViewingOtherDay && <button onClick={() => setSelectedDate(null)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← Back</button>}
             </div>
           }>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {displayedTasks.length === 0 ? <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p> : (() => {
               let currentCategory = '';
               return displayedTasks.map(task => {
