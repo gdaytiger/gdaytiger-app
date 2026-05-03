@@ -2,7 +2,7 @@
 set -e
 
 # Clean up any stale git locks
-rm -f .git/index.lock .git/HEAD.lock .git/MERGE_HEAD.lock
+rm -f .git/index.lock .git/HEAD.lock .git/MERGE_HEAD.lock .git/config.lock .git/packed-refs.lock
 
 CURRENT=$(git branch --show-current)
 
