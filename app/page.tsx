@@ -90,7 +90,7 @@ function Card({ emoji, title, children, onEmojiClick }: {
         <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0">{children}</div>
+      <div className="no-scrollbar flex-1 overflow-y-auto min-h-0">{children}</div>
     </div>
   );
 }
@@ -247,7 +247,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ cursor: canSwipe ? 'grab' : undefined, userSelect: 'none', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}
+      style={{ cursor: canSwipe ? 'grab' : undefined, userSelect: 'none', minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}
     >
       {/* Right swipe reveal — tomorrow */}
       {canSwipeRight && (
@@ -290,14 +290,14 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         </div>
       )}
       <div
-        className="flex items-start gap-3 group px-3 py-2.5"
+        className="flex items-center gap-3 group px-3 py-2.5"
         style={{
           transform: `translateX(${swipeOffset}px)`,
           transition: swiping ? 'none' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
           willChange: 'transform',
         }}
       >
-        <div onClick={() => onChange(id, !checked)} className="mt-0.5 shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
+        <div onClick={() => onChange(id, !checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
           {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
         <span className="flex-1 text-sm leading-snug">
@@ -309,7 +309,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
             return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
           })()}
         </span>
-        {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none mt-0.5 opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
+        {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
       </div>
     </div>
   );
