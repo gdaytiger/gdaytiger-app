@@ -370,7 +370,20 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   );
 }
 
-const SNAP_KEY = 'gdt_costings_snap_v2';
+const HIST_KEY = 'gdt_costings_history_v1';
+
+type SnapEntry = { date: string; d: Record<string, { p: number; s: number }> };
+
+type MarginChange = {
+  name: string;
+  category: string;
+  oldPct: number;
+  newPct: number;
+  dp: number;
+  dc: number;
+  sellPrice: number | null;
+  daysAgo: number;
+};
 
 const LABEL_STYLE: React.CSSProperties = {
   fontFamily: '"stolzl", sans-serif',
@@ -382,6 +395,80 @@ const LABEL_STYLE: React.CSSProperties = {
 };
 
 const FADE_MASK = 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)';
+
+function ChangeCard({ c }: { c: MarginChange }) {
+  const [open, setOpen] = useState(false);
+  const isNeg = c.dp < 0;
+  const arrowCol = isNeg ? '#dc2626' : '#16a34a';
+  const newMc = c.newPct >= 70 ? '#16a34a' : c.newPct >= 60 ? '#d97706' : '#dc2626';
+  const oldBar = Math.min(100, Math.max(0, c.oldPct));
+  const newBar = Math.min(100, Math.max(0, c.newPct));
+  return (
+    <div
+      className="rounded-2xl px-3 py-2.5 mb-2 shrink-0 cursor-pointer select-none"
+      onClick={() => setOpen(o => !o)}
+      style={{
+        background: isNeg ? 'rgba(254,242,242,0.65)' : 'rgba(240,253,244,0.65)',
+        backdropFilter: 'blur(16px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+        border: `1px solid ${isNeg ? 'rgba(220,38,38,0.18)' : 'rgba(22,163,74,0.18)'}`,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
+        transition: 'box-shadow 0.15s',
+      }}
+    >
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <p className="text-sm font-semibold text-gray-800 leading-snug flex-1 min-w-0 truncate"
+          style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+          {c.name}
+        </p>
+        <span className="text-base font-black shrink-0 leading-none" style={{ color: arrowCol, fontVariantNumeric: 'tabular-nums' }}>
+          {c.dp > 0 ? '+' : ''}{c.dp.toFixed(1)}pp
+        </span>
+      </div>
+      {/* Margin transition row */}
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-xs shrink-0" style={{ color: '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>
+          {c.oldPct.toFixed(1)}%
+          <span className="mx-1 text-gray-300">→</span>
+          <span style={{ color: newMc, fontWeight: 700 }}>{c.newPct.toFixed(1)}%</span>
+        </span>
+        {/* Dual bar: ghost = old, solid = new */}
+        <div className="flex-1 h-1.5 rounded-full overflow-hidden relative" style={{ background: 'rgba(0,0,0,0.07)' }}>
+          <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${oldBar}%`, background: 'rgba(0,0,0,0.13)' }} />
+          <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${newBar}%`, background: newMc, opacity: 0.75, transition: 'width 0.5s ease' }} />
+        </div>
+      </div>
+      {/* Expanded detail */}
+      {open && (
+        <div className="mt-1.5 pt-2 flex flex-col gap-1.5" style={{ borderTop: `1px solid ${isNeg ? 'rgba(220,38,38,0.12)' : 'rgba(22,163,74,0.12)'}` }}>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-400">Sell price</span>
+            <span className="font-semibold text-gray-700" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {c.sellPrice !== null ? `$${c.sellPrice.toFixed(2)}` : '—'}
+            </span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-400">Margin shift</span>
+            <span className="font-semibold" style={{ color: arrowCol, fontVariantNumeric: 'tabular-nums' }}>
+              {c.oldPct.toFixed(1)}% → {c.newPct.toFixed(1)}% ({c.dp > 0 ? '+' : ''}{c.dp.toFixed(1)}pp)
+            </span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-400">Cost impact</span>
+            <span className="font-semibold" style={{ color: arrowCol, fontVariantNumeric: 'tabular-nums' }}>
+              {c.dc < 0 ? '+' : '−'}${Math.abs(c.dc).toFixed(3)} per serve
+            </span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-400">Compared to</span>
+            <span className="text-gray-500">{c.daysAgo <= 0 ? 'earlier today' : `${c.daysAgo}d ago`}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ProductItem({ p }: { p: CostingProduct }) {
   const mc = p.margin! >= 70 ? '#16a34a' : p.margin! >= 60 ? '#d97706' : '#dc2626';
@@ -448,30 +535,45 @@ function CostingsCard({ costings }: { costings: CostingProduct[] }) {
   const yellow = withMargin.filter(p => p.margin! >= 60 && p.margin! < 70).length;
   const green  = withMargin.filter(p => p.margin! >= 70).length;
 
-  const [changes, setChanges] = useState<{ name: string; category: string; oldPct: number; newPct: number; dp: number; dc: number }[]>([]);
+  const [changes, setChanges] = useState<MarginChange[]>([]);
   const [firstLoad, setFirstLoad] = useState(false);
-  const [changesOpen, setChangesOpen] = useState(true);
 
   useEffect(() => {
     if (withMargin.length === 0) return;
-    let prev: { ts: number; d: Record<string, { p: number; s: number }> } | null = null;
-    try { prev = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); } catch { /* ignore */ }
-    setFirstLoad(!prev);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let hist: SnapEntry[] = [];
+    try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { /* ignore */ }
+
+    // Find oldest snapshot within last 7 days (excluding today) as comparison baseline
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+    const prev = hist
+      .filter(e => e.date !== todayStr && new Date(e.date) >= cutoff)
+      .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+
+    setFirstLoad(!prev && hist.length === 0);
+
     if (prev) {
-      const detected: typeof changes = [];
+      const daysAgo = Math.round((new Date(todayStr).getTime() - new Date(prev.date).getTime()) / 86400000);
+      const detected: MarginChange[] = [];
       withMargin.forEach(item => {
-        const old = prev!.d[item.name];
+        const old = prev.d[item.name];
         if (!old) return;
         const dp = item.margin! - old.p;
         if (Math.abs(dp) < 0.15) return;
+        // dc: positive = cost went up (margin fell), negative = cost went down
         const dc = item.sellPrice ? item.sellPrice * (1 - item.margin! / 100) - item.sellPrice * (1 - old.p / 100) : 0;
-        detected.push({ name: item.name, category: item.category, oldPct: old.p, newPct: item.margin!, dp, dc });
+        detected.push({ name: item.name, category: item.category, oldPct: old.p, newPct: item.margin!, dp, dc, sellPrice: item.sellPrice, daysAgo });
       });
       setChanges(detected.sort((a, b) => a.dp - b.dp));
     }
-    const snap = { ts: Date.now(), d: {} as Record<string, { p: number; s: number }> };
+
+    // Save today's snapshot (replace if already have today's)
+    const snap: SnapEntry = { date: todayStr, d: {} };
     withMargin.forEach(item => { snap.d[item.name] = { p: item.margin!, s: item.sellPrice ?? 0 }; });
-    try { localStorage.setItem(SNAP_KEY, JSON.stringify(snap)); } catch { /* ignore */ }
+    const updated = [...hist.filter(e => e.date !== todayStr), snap]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 8);
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [withMargin.length]);
 
@@ -502,41 +604,28 @@ function CostingsCard({ costings }: { costings: CostingProduct[] }) {
         <ProductColumn label="Food" items={foodItems} />
       </div>
 
-      {/* Price changes */}
-      <div className="rounded-xl overflow-hidden mt-2" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
-        <button onClick={() => setChangesOpen(o => !o)}
-          className="w-full flex items-center justify-between px-3 py-2 text-left transition-colors hover:bg-black/5"
-          style={{ background: changes.length > 0 ? 'rgba(251,205,173,0.18)' : 'rgba(0,0,0,0.02)' }}>
-          <div className="flex items-center gap-2">
-            <span style={{ ...LABEL_STYLE, color: changes.length > 0 ? '#7c4a2d' : '#9ca3af' }}>
-              📊 Ingredient Price Changes
-            </span>
-            {changes.length > 0 && (
-              <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fbcdad', color: '#7c4a2d' }}>{changes.length}</span>
-            )}
-          </div>
-          <span className="text-xs text-gray-400">{changesOpen ? '▲' : '▼'}</span>
-        </button>
-        {changesOpen && (
-          <div className="no-scrollbar max-h-28 overflow-y-auto">
-            {firstLoad ? (
-              <p className="text-xs text-gray-400 px-3 py-2 italic">Baseline saved — cost movements will show here on next load.</p>
-            ) : changes.length === 0 ? (
-              <p className="text-xs text-gray-400 px-3 py-2 italic">No margin changes detected since last load.</p>
-            ) : changes.map((c, i) => {
-              const col = c.dp > 0 ? '#16a34a' : '#dc2626';
-              return (
-                <div key={i} className="flex items-center gap-2 px-3 py-1.5 flex-wrap" style={{ borderTop: i === 0 ? 'none' : '1px solid rgba(0,0,0,0.04)' }}>
-                  <span className="text-xs font-semibold text-gray-800 flex-1 min-w-0 truncate">{c.name}</span>
-                  <span className="text-xs font-medium shrink-0" style={{ color: col, fontVariantNumeric: 'tabular-nums' }}>
-                    {c.oldPct.toFixed(1)}% → {c.newPct.toFixed(1)}%
-                  </span>
-                  <span className="text-xs text-gray-400 shrink-0">
-                    ({c.dp > 0 ? '+' : ''}{c.dp.toFixed(1)}pp · cost {c.dc > 0 ? '+' : '−'}${Math.abs(c.dc).toFixed(3)})
-                  </span>
-                </div>
-              );
-            })}
+      {/* Price changes section */}
+      <div className="mt-1">
+        <div className="flex items-center gap-2 mb-2">
+          <span style={{ ...LABEL_STYLE, color: changes.length > 0 ? '#7c4a2d' : '#aaa' }}>
+            📊 Cost Changes (7 days)
+          </span>
+          {changes.length > 0 && (
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fbcdad', color: '#7c4a2d' }}>{changes.length}</span>
+          )}
+        </div>
+        {firstLoad ? (
+          <p className="text-xs text-gray-400 italic">Baseline saved — changes will appear after tomorrow&apos;s first load.</p>
+        ) : changes.length === 0 ? (
+          <p className="text-xs text-gray-400 italic">No margin movements in the last 7 days.</p>
+        ) : (
+          <div className="flex gap-4">
+            <div className="flex-1 min-w-0">
+              {changes.filter((_, i) => i % 2 === 0).map((c, i) => <ChangeCard key={i} c={c} />)}
+            </div>
+            <div className="flex-1 min-w-0">
+              {changes.filter((_, i) => i % 2 === 1).map((c, i) => <ChangeCard key={i} c={c} />)}
+            </div>
           </div>
         )}
       </div>
