@@ -97,7 +97,7 @@ function Card({ emoji, title, children, onEmojiClick, headerRight }: {
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, label }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, label, context, onContextSave }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
@@ -105,17 +105,24 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   onSwipeRight?: () => void;
   onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
   label?: string;
+  context?: string;
+  onContextSave?: (id: string, text: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
   const swipeOffsetRef = useRef(0);
   const isHorizontal = useRef(false);
+  const didSwipeRef = useRef(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const [committed, setCommitted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [localContext, setLocalContext] = useState(context ?? '');
   const THRESHOLD = 90;
+
+  useEffect(() => { setLocalContext(context ?? ''); }, [context]);
 
   const mouseDownRef = useRef(false);
   const canSwipeRight = !!onSwipeRight;
@@ -138,6 +145,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
     swipeOffsetRef.current = 0;
     mouseDownRef.current = true;
     isHorizontal.current = false;
+    didSwipeRef.current = false;
     setSwiping(false);
   };
 
@@ -170,12 +178,15 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
       isHorizontal.current = false;
       setSwiping(false);
       if (swipeOffsetRef.current >= THRESHOLD && canSwipeRight) {
+        didSwipeRef.current = true;
         setDismissed(true);
         setTimeout(() => onSwipeRight!(), 360);
       } else if (swipeOffsetRef.current <= -THRESHOLD && canSwipeLeft) {
+        didSwipeRef.current = true;
         setDismissed(true);
         setTimeout(() => onDelete!(id), 360);
       } else {
+        if (Math.abs(swipeOffsetRef.current) > 5) didSwipeRef.current = true;
         setSwipeOffset(0);
         setCommitted(false);
       }
@@ -193,6 +204,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
     touchStartY.current = e.touches[0].clientY;
     swipeOffsetRef.current = 0;
     isHorizontal.current = false;
+    didSwipeRef.current = false;
     setSwiping(false);
   };
 
@@ -225,12 +237,15 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
     isHorizontal.current = false;
     setSwiping(false);
     if (swipeOffsetRef.current >= THRESHOLD && canSwipeRight) {
+      didSwipeRef.current = true;
       setDismissed(true);
       setTimeout(() => onSwipeRight!(), 360);
     } else if (swipeOffsetRef.current <= -THRESHOLD && canSwipeLeft) {
+      didSwipeRef.current = true;
       setDismissed(true);
       setTimeout(() => onDelete!(id), 360);
     } else {
+      if (Math.abs(swipeOffsetRef.current) > 5) didSwipeRef.current = true;
       setSwipeOffset(0);
       setCommitted(false);
     }
@@ -302,8 +317,9 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           transition: swiping ? 'none' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
           willChange: 'transform',
         }}
+        onClick={() => { if (!didSwipeRef.current) setExpanded(e => !e); didSwipeRef.current = false; }}
       >
-        <div onClick={() => onChange(id, !checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
+        <div onClick={e => { e.stopPropagation(); onChange(id, !checked); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
           {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
         <div className="flex-1 min-w-0">
@@ -313,13 +329,29 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
               if (supplierUrl && !checked) {
                 return <a href={supplierUrl} target={supplierUrl.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="font-semibold underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text}</a>;
               }
-              return <span onClick={() => onChange(id, !checked)} className={`cursor-pointer transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
+              return <span className={`transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
             })()}
           </div>
           {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
         </div>
-        {onDelegate && <button onClick={onDelegate} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
+        {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: '#fbcdad' }} title="Has context" />}
+        {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
       </div>
+      {expanded && (
+        <div className="px-4 pb-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}>
+          <textarea
+            value={localContext}
+            onChange={e => setLocalContext(e.target.value)}
+            onBlur={() => onContextSave?.(id, localContext)}
+            placeholder="Add context…"
+            autoFocus
+            rows={3}
+            className="w-full text-xs text-gray-600 bg-transparent resize-none focus:outline-none placeholder-gray-300 mt-2 leading-relaxed"
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -658,9 +690,22 @@ export default function Home() {
   const [claudeLoading, setClaudeLoading] = useState(false);
   const [costings, setCostings] = useState<CostingProduct[]>([]);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const [taskContext, setTaskContext] = useState<Record<string, string>>({});
   const claudeMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const todayStr = data?.todayStr ?? '';
+
+  const fetchTaskContext = async () => {
+    try {
+      const d = await fetch('/api/task-context').then(r => r.json());
+      setTaskContext(d.context || {});
+    } catch {}
+  };
+
+  const handleContextSave = async (blockId: string, text: string) => {
+    setTaskContext(prev => text.trim() ? { ...prev, [blockId]: text.trim() } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== blockId)));
+    await fetch('/api/task-context', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, text }) });
+  };
 
   const fetchServerState = async (): Promise<Record<string, string[]>> => {
     try {
@@ -696,6 +741,7 @@ export default function Home() {
       setShifts(rosterData.shifts || []);
       await Promise.all([fetchDashboard(state).catch(() => {}), fetchWeekTasks(state).catch(() => {})]);
       fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
+      fetchTaskContext().catch(() => {});
       setLoading(false);
     };
     init();
@@ -905,7 +951,7 @@ export default function Home() {
                 if (task.isHeader) { currentCategory = task.text; return null; }
                 const cat = currentCategory;
                 return (
-                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={cat || undefined}
+                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={cat || undefined} context={taskContext[task.id]} onContextSave={handleContextSave}
                     onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
                     onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
                     onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, cat || undefined)}
