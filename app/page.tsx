@@ -657,7 +657,7 @@ export default function Home() {
     if (date === todayStr) await fetchDashboard(state);
   };
 
-  const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean, fromDate?: string) => {
+  const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean, fromDate?: string, category?: string) => {
     const sourceDate = fromDate ?? todayStr;
     if (sourceDate === todayStr) {
       setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(task => task.id !== blockId) } : prev);
@@ -665,7 +665,7 @@ export default function Home() {
       setWeekTasks(prev => ({ ...prev, [sourceDate]: { ...prev[sourceDate], count: prev[sourceDate].count - 1, tasks: prev[sourceDate].tasks.filter(t => t.id !== blockId) } }));
     }
     const ops: Promise<Response>[] = [
-      fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: targetDate, text }) }),
+      fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: targetDate, text, category }) }),
     ];
     if (!isRecurring) {
       ops.push(fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) }));
@@ -816,11 +816,11 @@ export default function Home() {
                 if (task.isHeader) { currentCategory = task.text; return null; }
                 const cat = currentCategory;
                 return (
-                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={!isViewingOtherDay ? (cat || undefined) : undefined}
+                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={cat || undefined}
                     onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
                     onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
-                    onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr)}
-                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr })); e.dataTransfer.effectAllowed = 'move'; }} />
+                    onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, cat || undefined)}
+                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: cat || undefined })); e.dataTransfer.effectAllowed = 'move'; }} />
                 );
               });
             })()}
@@ -836,7 +836,7 @@ export default function Home() {
                   isDragOver={dragOverDate === shift.date}
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverDate(shift.date); }}
                   onDragLeave={() => setDragOverDate(null)}
-                  onDrop={(e) => { e.preventDefault(); setDragOverDate(null); try { const d = JSON.parse(e.dataTransfer.getData('application/json')); handleMoveToDay(d.id, d.text, shift.date, d.isRecurring); } catch { /* ignore */ } }}
+                  onDrop={(e) => { e.preventDefault(); setDragOverDate(null); try { const d = JSON.parse(e.dataTransfer.getData('application/json')); handleMoveToDay(d.id, d.text, shift.date, d.isRecurring, undefined, d.category); } catch { /* ignore */ } }}
                 />
               ))
             )}
