@@ -71,6 +71,77 @@ function deleteBlock(blockId: string) {
   }).catch(() => {});
 }
 
+async function getCheckedState(): Promise<Record<string, string[]>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let allBlocks: any[] = [];
+  let cursor: string | undefined;
+  do {
+    const url = `/blocks/${NOTION_PAGE_ID}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ''}`;
+    const data = await notionFetch(url);
+    allBlocks = allBlocks.concat(data.results || []);
+    cursor = data.has_more ? data.next_cursor : undefined;
+  } while (cursor);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const codeBlock = allBlocks.find((b: any) => b.type === 'code' && b.code?.language === 'json');
+  if (codeBlock) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = (codeBlock.code?.rich_text || []).map((r: any) => r.plain_text).join('');
+    try { return JSON.parse(text || '{}'); } catch { return {}; }
+  }
+  return {};
+}
+
+async function getCarryOverTasks(today: Date, checkedState: Record<string, string[]>) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const todayStr = `${today.getUTCFullYear()}-${pad(today.getUTCMonth() + 1)}-${pad(today.getUTCDate())}`;
+
+  // Fetch the past 6 unique day pages in parallel
+  const pastDays = Array.from({ length: 6 }, (_, i) => {
+    const past = new Date(today.getTime() - (i + 1) * 24 * 60 * 60 * 1000);
+    return {
+      pageId: DAY_PAGES[past.getDay()],
+      dateStr: `${past.getUTCFullYear()}-${pad(past.getUTCMonth() + 1)}-${pad(past.getUTCDate())}`,
+    };
+  });
+
+  const pages = await Promise.all(
+    pastDays.map(async ({ pageId, dateStr }) => ({
+      dateStr,
+      data: await notionFetch(`/blocks/${pageId}/children?page_size=500`),
+    }))
+  );
+
+  const carries: { id: string; text: string; header: string }[] = [];
+  const seenIds = new Set<string>();
+
+  for (const { dateStr, data } of pages) {
+    let currentHeader = 'ADMIN';
+    for (const block of (data.results || [])) {
+      if (block.type === 'heading_2' || block.type === 'heading_3') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        currentHeader = (block[block.type]?.rich_text || []).map((r: any) => r.plain_text).join('').trim();
+        continue;
+      }
+      if (block.type !== 'bulleted_list_item') continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
+      if (!raw.startsWith('[CARRY]')) continue;
+      if (seenIds.has(block.id)) continue; // deduplicate across pages
+
+      // Carry if the task block ID hasn't been checked on ANY date from its origin up to yesterday
+      const wasChecked = Object.entries(checkedState).some(
+        ([ds, ids]) => ds >= dateStr && ds < todayStr && ids.includes(block.id)
+      );
+
+      if (!wasChecked) {
+        seenIds.add(block.id);
+        carries.push({ id: block.id, text: raw.replace('[CARRY]', '').trim(), header: currentHeader });
+      }
+    }
+  }
+  return carries;
+}
+
 const DATE_PREFIX_RE = /^\[(\d{4}-\d{2}-\d{2})\]\s*/;
 
 async function getDailyTasks(dayOfWeek: number, today: Date) {
@@ -116,6 +187,12 @@ async function getDailyTasks(dayOfWeek: number, today: Date) {
       if (raw.startsWith('[M]')) {
         if (today.getDate() > 7) continue;
         rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim(), isRecurring: true });
+        continue;
+      }
+      // [CARRY] tasks: show on home day with prefix stripped. Carry-over to subsequent
+      // days is handled separately in getCarryOverTasks().
+      if (raw.startsWith('[CARRY]')) {
+        rawItems.push({ type: 'task', id: block.id, text: raw.replace('[CARRY]', '').trim(), isRecurring: false });
         continue;
       }
       rawItems.push({ type: 'task', id: block.id, text: raw.trim(), isRecurring: true });
@@ -199,12 +276,30 @@ export async function GET() {
   const today = new Date(new Date().getTime() + 10 * 60 * 60 * 1000);
   const dayOfWeek = today.getDay();
 
-  const [weather, dailyTasks, projects, personalTodos] = await Promise.all([
+  const [weather, dailyTasks, projects, personalTodos, checkedState] = await Promise.all([
     getWeather(),
     getDailyTasks(dayOfWeek, today),
     getProjects(),
     getPersonalTodos(),
+    getCheckedState(),
   ]);
+
+  // Inject any [CARRY] tasks from past days that haven't been checked off yet
+  const carries = await getCarryOverTasks(today, checkedState);
+  for (const carry of carries) {
+    const carryTask = { id: carry.id, text: carry.text, checked: false, isRecurring: false };
+    const headerIdx = dailyTasks.findIndex((t: { isHeader?: boolean; text: string }) => t.isHeader && t.text === carry.header);
+    if (headerIdx !== -1) {
+      // Insert right after the existing header
+      dailyTasks.splice(headerIdx + 1, 0, carryTask);
+    } else {
+      // Header not on today's page — prepend it with the task
+      dailyTasks.unshift(
+        { id: `header-carry-${carry.header}`, text: carry.header, checked: false, isHeader: true },
+        carryTask,
+      );
+    }
+  }
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
