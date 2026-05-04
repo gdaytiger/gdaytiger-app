@@ -68,6 +68,8 @@ interface CostingProduct {
   notes: string;
 }
 
+const CATEGORY_ORDER = ['ORDER', 'ADMIN', 'MAINTENANCE', 'STAFF', 'COSTING', 'MERCHANDISE', 'PERSONAL'];
+
 const SUPPLIER_LINKS: Record<string, string> = {
   'dench': 'https://denchbakers.cybakeshop.com.au/home',
   'seven seeds': 'https://sevenseedswholesale.com.au/account/',
@@ -946,18 +948,36 @@ export default function Home() {
           }>
           <div className="space-y-2">
             {displayedTasks.length === 0 ? <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p> : (() => {
-              let currentCategory = '';
-              return displayedTasks.map(task => {
-                if (task.isHeader) { currentCategory = task.text; return null; }
-                const cat = currentCategory;
-                return (
-                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={cat || undefined} context={taskContext[task.id]} onContextSave={handleContextSave}
+              // Group tasks by category
+              const groups: { category: string; tasks: typeof displayedTasks }[] = [];
+              let currentGroup: { category: string; tasks: typeof displayedTasks } | null = null;
+              for (const task of displayedTasks) {
+                if (task.isHeader) {
+                  currentGroup = { category: task.text.toUpperCase(), tasks: [] };
+                  groups.push(currentGroup);
+                } else {
+                  if (!currentGroup) { currentGroup = { category: '', tasks: [] }; groups.push(currentGroup); }
+                  currentGroup.tasks.push(task);
+                }
+              }
+              // Sort groups by priority, uncategorised last
+              groups.sort((a, b) => {
+                const ai = CATEGORY_ORDER.indexOf(a.category);
+                const bi = CATEGORY_ORDER.indexOf(b.category);
+                return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+              });
+              // Within each group: unchecked first, checked last
+              groups.forEach(g => g.tasks.sort((a, b) => a.checked === b.checked ? 0 : a.checked ? 1 : -1));
+              // Render
+              return groups.flatMap(group =>
+                group.tasks.map(task => (
+                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={group.category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave}
                     onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
                     onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
-                    onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, cat || undefined)}
-                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: cat || undefined })); e.dataTransfer.effectAllowed = 'move'; }} />
-                );
-              });
+                    onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, group.category || undefined)}
+                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: group.category || undefined })); e.dataTransfer.effectAllowed = 'move'; }} />
+                ))
+              );
             })()}
           </div>
         </Card>
