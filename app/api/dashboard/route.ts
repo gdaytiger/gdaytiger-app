@@ -185,6 +185,12 @@ async function getDailyTasks(dayOfWeek: number, today: Date) {
         rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F]', '').trim(), isRecurring: true });
         continue;
       }
+      // [F2] = fortnightly on even ISO weeks (alternates with [F])
+      if (raw.startsWith('[F2]')) {
+        if (isOddWeek) continue;
+        rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F2]', '').trim(), isRecurring: true });
+        continue;
+      }
       if (raw.startsWith('[M]')) {
         if (today.getDate() > 7) continue;
         rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim(), isRecurring: true });
