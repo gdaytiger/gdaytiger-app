@@ -136,7 +136,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   //   mobile  → right swipe ✓, drag ✗
   //   desktop → right swipe ✗, drag ✓
   const canSwipeRight = !!onSwipeRight && isMobile;
-  const canSwipeLeft = !!onDelete;
+  const canSwipeLeft = !!onDelete && isMobile;
   const canSwipe = canSwipeRight || canSwipeLeft;
 
   useEffect(() => {
