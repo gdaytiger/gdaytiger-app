@@ -1,6 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+const VALID_CATEGORIES = ['ORDER', 'ADMIN', 'STAFF', 'MAINTENANCE', 'MERCHANDISE', 'PERSONAL', 'COSTING'];
+
+async function classifyCategory(text: string): Promise<string> {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY || '',
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 10,
+        messages: [{
+          role: 'user',
+          content: `You are classifying a task for a busy café. Reply with exactly one category name and nothing else.
+
+Categories:
+ORDER — supplier orders, purchasing ingredients/stock, calling suppliers, anything to buy or reorder
+ADMIN — banking, timesheets, invoices, paying bills, compliance, back-office paperwork
+STAFF — rostering, HR, team tasks, staff-related actions
+MAINTENANCE — equipment repairs, cleaning, facility upkeep, anything broken or needing fixing
+MERCHANDISE — merch ordering, retail product stock
+COSTING — price reviews, margin checks, recipe costing, pricing decisions
+PERSONAL — personal tasks mixed into the work day
+
+Task: "${text}"
+
+Category:`,
+        }],
+      }),
+    });
+    const data = await res.json();
+    const cat = data.content?.[0]?.text?.trim().toUpperCase();
+    if (cat && VALID_CATEGORIES.includes(cat)) return cat;
+  } catch { /* fall through */ }
+  return 'ORDER';
+}
 
 // Day of week → Notion page ID (0 = Sunday)
 const DAY_PAGES: Record<number, string> = {
@@ -32,7 +73,9 @@ async function getPageChildren(pageId: string): Promise<any[]> {
 }
 
 export async function POST(req: NextRequest) {
-  const { date, text, category } = await req.json();
+  const { date, text, category: rawCategory } = await req.json();
+  // Auto-classify if no category provided — uses Claude Haiku to pick the right section.
+  const category: string = rawCategory || await classifyCategory(text?.trim() || '');
 
   if (!date || !text?.trim()) {
     return NextResponse.json({ error: 'Missing date or text' }, { status: 400 });
