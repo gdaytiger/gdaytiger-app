@@ -127,7 +127,15 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   useEffect(() => { setLocalContext(context ?? ''); }, [context]);
 
   const mouseDownRef = useRef(false);
-  const canSwipeRight = !!onSwipeRight;
+  // Detect touch/mobile vs mouse/desktop once on mount
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    setIsMobile(window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+  }, []);
+  // Right swipe (→ tomorrow) and drag-and-drop are split by device:
+  //   mobile  → right swipe ✓, drag ✗
+  //   desktop → right swipe ✗, drag ✓
+  const canSwipeRight = !!onSwipeRight && isMobile;
   const canSwipeLeft = !!onDelete;
   const canSwipe = canSwipeRight || canSwipeLeft;
 
@@ -264,8 +272,8 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
 
   return (
     <div ref={containerRef} className="relative overflow-hidden rounded-2xl"
-      draggable={!!onDragStart}
-      onDragStart={onDragStart}
+      draggable={!!onDragStart && !isMobile}
+      onDragStart={!isMobile ? onDragStart : undefined}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
