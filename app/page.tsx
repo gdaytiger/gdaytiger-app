@@ -981,7 +981,7 @@ export default function Home() {
                 group.tasks.map(task => (
                   <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={group.category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave}
                     onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
-                    onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined)}
+                    onDelete={!task.isRecurring ? (id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined) : undefined}
                     onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, group.category || undefined)}
                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: group.category || undefined })); e.dataTransfer.effectAllowed = 'move'; }} />
                 ))
