@@ -81,11 +81,18 @@ async function getTasksForDay(dateStr: string): Promise<{ id: string; text: stri
       rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F]', '').trim(), isRecurring: true });
       continue;
     }
+    if (raw.startsWith('[F2]')) {
+      if (isOddWeek) continue;
+      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F2]', '').trim(), isRecurring: true });
+      continue;
+    }
     if (raw.startsWith('[M]')) {
       if (d.getDate() > 7) continue;
       rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim(), isRecurring: true });
       continue;
     }
+    // [CARRY] tasks are handled server-side by the dashboard carry-over logic — skip here
+    if (raw.startsWith('[CARRY]')) continue;
     rawItems.push({ type: 'task', id: block.id, text: raw.trim(), isRecurring: true });
   }
 
