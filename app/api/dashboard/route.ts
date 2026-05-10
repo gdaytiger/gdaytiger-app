@@ -95,9 +95,10 @@ async function getCarryOverTasks(today: Date, checkedState: Record<string, strin
   const pad = (n: number) => String(n).padStart(2, '0');
   const todayStr = `${today.getUTCFullYear()}-${pad(today.getUTCMonth() + 1)}-${pad(today.getUTCDate())}`;
 
-  // Fetch the past 6 unique day pages in parallel
-  const pastDays = Array.from({ length: 6 }, (_, i) => {
-    const past = new Date(today.getTime() - (i + 1) * 24 * 60 * 60 * 1000);
+  // Check today's page + past 6 days (7 total). Today is included so that [CARRY]
+  // tasks on their home day go through the same checked-state check as any other day.
+  const pastDays = Array.from({ length: 7 }, (_, i) => {
+    const past = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
     return {
       pageId: DAY_PAGES[past.getDay()],
       dateStr: `${past.getUTCFullYear()}-${pad(past.getUTCMonth() + 1)}-${pad(past.getUTCDate())}`,
@@ -128,10 +129,10 @@ async function getCarryOverTasks(today: Date, checkedState: Record<string, strin
       if (!raw.startsWith('[CARRY]')) continue;
       if (seenIds.has(block.id)) continue; // deduplicate across pages
 
-      // Carry if the task block ID hasn't been checked on ANY date from its origin up to yesterday
-      const wasChecked = Object.entries(checkedState).some(
-        ([ds, ids]) => ds >= dateStr && ds < todayStr && ids.includes(block.id)
-      );
+      // Carry if the task hasn't been checked on ANY date within the retention window.
+      // No date-range comparison — if the block ID appears anywhere in the checked state
+      // (retained for 8 days by /api/checked-state), suppress the task.
+      const wasChecked = Object.values(checkedState).some(ids => ids.includes(block.id));
 
       if (!wasChecked) {
         seenIds.add(block.id);
@@ -189,12 +190,9 @@ async function getDailyTasks(dayOfWeek: number, today: Date) {
         rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim(), isRecurring: true });
         continue;
       }
-      // [CARRY] tasks: show on home day with prefix stripped. Carry-over to subsequent
-      // days is handled separately in getCarryOverTasks().
-      if (raw.startsWith('[CARRY]')) {
-        rawItems.push({ type: 'task', id: block.id, text: raw.replace('[CARRY]', '').trim(), isRecurring: false });
-        continue;
-      }
+      // [CARRY] tasks are handled entirely by getCarryOverTasks() — which checks the
+      // checked state before injecting. Skip here to avoid bypassing that check.
+      if (raw.startsWith('[CARRY]')) continue;
       rawItems.push({ type: 'task', id: block.id, text: raw.trim(), isRecurring: true });
     }
   }
