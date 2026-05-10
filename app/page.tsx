@@ -412,9 +412,20 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   );
 }
 
-const HIST_KEY = 'gdt_costings_history_v1';
+const HIST_KEY     = 'gdt_costings_history_v1';
+const ING_HIST_KEY = 'gdt_ingredient_history_v1';
 
 type SnapEntry = { date: string; d: Record<string, { p: number; s: number }> };
+type IngSnap   = { date: string; d: Record<string, number> };
+
+type IngredientPrice = { key: string; name: string; price: number; unit: string; supplier: string };
+type IngredientPricesData = { type: string; updated: string | null; ingredients: IngredientPrice[] };
+
+type IngredientChange = {
+  key: string; name: string; unit: string; supplier: string; currentPrice: number;
+  oldPrice?: number; delta?: number; pct?: number; daysAgo?: number;
+  affectedProducts: MarginChange[];
+};
 
 type MarginChange = {
   name: string;
@@ -437,6 +448,128 @@ const LABEL_STYLE: React.CSSProperties = {
 };
 
 const FADE_MASK = 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)';
+
+function productMatchesIngredient(productName: string, ingredientKey: string): boolean {
+  const n = productName.toUpperCase();
+  type Rule = { inc: string[]; exc?: string[] };
+  const MAP: Record<string, Rule> = {
+    fc_milk_12l:   { inc: ['FC MILK', 'ICED LATTE', 'HOT CHOCOLATE', 'CHAI', 'MOCHA'], exc: ['SOY', 'OAT', 'ALMOND'] },
+    soy_milk_6l:   { inc: ['SOY'] },
+    oat_milk_2l:   { inc: ['OAT', 'ALMOND'] },
+    coffee_beans:  { inc: ['COFFEE', 'LATTE', 'MOCHA', 'ESPRESSO', 'LONG BLACK'], exc: ['HOT CHOCOLATE', 'DECAF'] },
+    decaf_beans:   { inc: ['DECAF'] },
+    chai:          { inc: ['CHAI'] },
+    chocolate:     { inc: ['HOT CHOCOLATE', 'MOCHA'] },
+    straw:         { inc: ['ICED LATTE'] },
+    sourdough:     { inc: ['H+C SANDWICH', 'BEEF SANDWICH', 'TUNA SANDWICH', 'CAPONATA SANDWICH', 'MUSHROOM SANDWICH'] },
+    ciabatta:      { inc: ['SALAMI PANINI'] },
+    potato_bun:    { inc: ['CHICKEN SCHNITTA'] },
+    croissant:     { inc: ['CROISSANT'] },
+    ham:           { inc: ['H+C SANDWICH', 'CROISSANT'], exc: ['TIGER STYLE'] },
+    beef_pastrami: { inc: ['BEEF SANDWICH', 'BEEF'] },
+    salami:        { inc: ['SALAMI'] },
+    tuna:          { inc: ['TUNA'] },
+    chicken:       { inc: ['CHICKEN'] },
+    mozzarella:    { inc: ['H+C SANDWICH', 'SALAMI PANINI', 'MUSHROOM', 'CAPONATA'] },
+    swiss_cheese:  { inc: ['BEEF SANDWICH', 'CROISSANT', 'CHICKEN SCHNITTA'] },
+    mushroom_mix:  { inc: ['MUSHROOM'] },
+    caponata:      { inc: ['CAPONATA'] },
+    eggs:          { inc: ['BANANA BREAD'] },
+    sauerkraut:    { inc: ['BEEF SANDWICH'] },
+    mayo:          { inc: ['TUNA SANDWICH', 'HONEY MUSTARD'] },
+    butter:        { inc: ['H+C SANDWICH', 'BEEF SANDWICH', 'MUSHROOM SANDWICH'] },
+    olive_oil:     { inc: ['CAPONATA', 'SALAMI PANINI'] },
+    cup_large:     { inc: ['TAKEAWAY'], exc: ['SOY', 'OAT', 'ALMOND', 'DECAF', 'FILTER', 'BATCH'] },
+    cup_medium:    { inc: ['TAKEAWAY SOY', 'TAKEAWAY OAT', 'TAKEAWAY ALMOND', 'TAKEAWAY DECAF'] },
+    lid_standard:  { inc: ['TAKEAWAY'] },
+  };
+  const rule = MAP[ingredientKey];
+  if (!rule) return false;
+  const included = rule.inc.some(p => n.includes(p));
+  if (!included) return false;
+  return !(rule.exc || []).some(p => n.includes(p));
+}
+
+function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
+  const [open, setOpen] = useState(false);
+  const hasPriceDelta = ing.delta !== undefined;
+  const isUp = hasPriceDelta && ing.delta! > 0;
+  const accentCol = isUp ? '#dc2626' : hasPriceDelta ? '#16a34a' : '#c8926a';
+  const bgCol = isUp ? 'rgba(254,242,242,0.7)' : hasPriceDelta ? 'rgba(240,253,244,0.7)' : 'rgba(255,248,240,0.7)';
+  const borderCol = isUp ? 'rgba(220,38,38,0.18)' : hasPriceDelta ? 'rgba(22,163,74,0.18)' : 'rgba(200,146,106,0.2)';
+
+  return (
+    <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0 cursor-pointer select-none"
+      onClick={() => setOpen(o => !o)}
+      style={{ background: bgCol, backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: `1px solid ${borderCol}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 mb-0.5">
+        <p className="text-sm font-semibold text-gray-800 leading-snug flex-1 min-w-0 truncate"
+          style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+          {ing.name}
+        </p>
+        {hasPriceDelta ? (
+          <span className="text-base font-black shrink-0 leading-none" style={{ color: accentCol, fontVariantNumeric: 'tabular-nums' }}>
+            {isUp ? '+' : ''}{ing.pct!.toFixed(1)}%
+          </span>
+        ) : (
+          <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(200,146,106,0.15)', color: '#7c4a2d' }}>
+            {ing.affectedProducts.length} products
+          </span>
+        )}
+      </div>
+
+      {/* Price + supplier row */}
+      <div className="flex items-center gap-1 mb-1.5">
+        <span className="text-xs" style={{ color: '#9ca3af' }}>{ing.supplier}</span>
+        <span className="text-xs text-gray-300">·</span>
+        {hasPriceDelta ? (
+          <span className="text-xs" style={{ fontVariantNumeric: 'tabular-nums', color: '#9ca3af' }}>
+            ${ing.oldPrice!.toFixed(2)} <span className="text-gray-300">→</span>{' '}
+            <span style={{ color: accentCol, fontWeight: 700 }}>${ing.currentPrice.toFixed(2)}</span>
+            {' '}/ {ing.unit}
+          </span>
+        ) : (
+          <span className="text-xs" style={{ fontVariantNumeric: 'tabular-nums', color: '#9ca3af' }}>
+            ${ing.currentPrice.toFixed(2)} / {ing.unit}
+          </span>
+        )}
+      </div>
+
+      {/* Tracking notice when no price delta yet */}
+      {!hasPriceDelta && (
+        <p className="text-xs italic mb-1.5" style={{ color: '#c8926a' }}>
+          Price tracking building — changes appear after 7 days
+        </p>
+      )}
+
+      {/* Affected products — expanded */}
+      {open && ing.affectedProducts.length > 0 && (
+        <div className="mt-1 pt-2 space-y-1.5" style={{ borderTop: `1px solid ${borderCol}` }}>
+          {ing.affectedProducts.map((p, i) => {
+            const col = p.dp < 0 ? '#dc2626' : '#16a34a';
+            return (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className="text-gray-600 flex-1 min-w-0 truncate">{p.name}</span>
+                <span style={{ color: col, fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {p.oldPct.toFixed(1)}%→{p.newPct.toFixed(1)}% ({p.dp > 0 ? '+' : ''}{p.dp.toFixed(1)}pp)
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Expand / collapse hint */}
+      {ing.affectedProducts.length > 0 && (
+        <p className="text-xs text-right mt-1" style={{ color: '#c8926a', opacity: 0.7 }}>
+          {open ? '▲ collapse' : `▼ ${ing.affectedProducts.length} affected`}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function ChangeCard({ c }: { c: MarginChange }) {
   const [open, setOpen] = useState(false);
@@ -567,7 +700,7 @@ function ProductColumn({ label, items }: { label: string; items: CostingProduct[
   );
 }
 
-function CostingsCard({ costings }: { costings: CostingProduct[] }) {
+function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null }) {
   const withMargin = costings.filter(p => p.margin !== null);
   const coffeeItems = [...withMargin].filter(p => p.category === 'Coffee').sort((a, b) => a.margin! - b.margin!);
   const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee').sort((a, b) => a.margin! - b.margin!);
@@ -579,45 +712,76 @@ function CostingsCard({ costings }: { costings: CostingProduct[] }) {
 
   const [changes, setChanges] = useState<MarginChange[]>([]);
   const [firstLoad, setFirstLoad] = useState(false);
+  const [ingredientChanges, setIngredientChanges] = useState<IngredientChange[]>([]);
 
   useEffect(() => {
     if (withMargin.length === 0) return;
     const todayStr = new Date().toISOString().slice(0, 10);
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+
+    // ── Product margin history ────────────────────────────────────────────────
     let hist: SnapEntry[] = [];
     try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { /* ignore */ }
-
-    // Find oldest snapshot within last 7 days (excluding today) as comparison baseline
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
-    const prev = hist
-      .filter(e => e.date !== todayStr && new Date(e.date) >= cutoff)
-      .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
-
+    const prev = hist.filter(e => e.date !== todayStr && new Date(e.date) >= cutoff).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
     setFirstLoad(!prev && hist.length === 0);
-
+    let detectedChanges: MarginChange[] = [];
     if (prev) {
       const daysAgo = Math.round((new Date(todayStr).getTime() - new Date(prev.date).getTime()) / 86400000);
-      const detected: MarginChange[] = [];
       withMargin.forEach(item => {
         const old = prev.d[item.name];
         if (!old) return;
         const dp = item.margin! - old.p;
         if (Math.abs(dp) < 0.15) return;
-        // dc: positive = cost went up (margin fell), negative = cost went down
         const dc = item.sellPrice ? item.sellPrice * (1 - item.margin! / 100) - item.sellPrice * (1 - old.p / 100) : 0;
-        detected.push({ name: item.name, category: item.category, oldPct: old.p, newPct: item.margin!, dp, dc, sellPrice: item.sellPrice, daysAgo });
+        detectedChanges.push({ name: item.name, category: item.category, oldPct: old.p, newPct: item.margin!, dp, dc, sellPrice: item.sellPrice, daysAgo });
       });
-      setChanges(detected.sort((a, b) => a.dp - b.dp));
+      detectedChanges.sort((a, b) => a.dp - b.dp);
+      setChanges(detectedChanges);
     }
-
-    // Save today's snapshot (replace if already have today's)
     const snap: SnapEntry = { date: todayStr, d: {} };
     withMargin.forEach(item => { snap.d[item.name] = { p: item.margin!, s: item.sellPrice ?? 0 }; });
-    const updated = [...hist.filter(e => e.date !== todayStr), snap]
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 8);
+    const updated = [...hist.filter(e => e.date !== todayStr), snap].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
     try { localStorage.setItem(HIST_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+
+    // ── Ingredient price history ──────────────────────────────────────────────
+    const ings = ingredientPrices?.ingredients ?? [];
+    if (ings.length > 0) {
+      let ingHist: IngSnap[] = [];
+      try { ingHist = JSON.parse(localStorage.getItem(ING_HIST_KEY) || '[]'); } catch { /* ignore */ }
+      const ingPrev = ingHist.filter(e => e.date !== todayStr && new Date(e.date) >= cutoff).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+
+      const ingResults: IngredientChange[] = ings.map(ing => {
+        const affected = detectedChanges.filter(c => productMatchesIngredient(c.name, ing.key));
+        const result: IngredientChange = { key: ing.key, name: ing.name, unit: ing.unit, supplier: ing.supplier, currentPrice: ing.price, affectedProducts: affected };
+        if (ingPrev?.d[ing.key] !== undefined) {
+          const oldPrice = ingPrev.d[ing.key];
+          if (Math.abs(ing.price - oldPrice) > 0.005) {
+            result.oldPrice = oldPrice;
+            result.delta = ing.price - oldPrice;
+            result.pct = ((ing.price - oldPrice) / oldPrice) * 100;
+            result.daysAgo = Math.round((new Date(todayStr).getTime() - new Date(ingPrev.date).getTime()) / 86400000);
+          }
+        }
+        return result;
+      })
+      // Show only ingredients with a confirmed price change OR ≥1 affected product
+      .filter(i => i.delta !== undefined || i.affectedProducts.length > 0)
+      // Sort: confirmed price changes first, then by number of affected products
+      .sort((a, b) => {
+        if ((a.delta !== undefined) !== (b.delta !== undefined)) return a.delta !== undefined ? -1 : 1;
+        return b.affectedProducts.length - a.affectedProducts.length;
+      });
+
+      setIngredientChanges(ingResults);
+
+      // Save ingredient price snapshot
+      const ingSnap: IngSnap = { date: todayStr, d: {} };
+      ings.forEach(ing => { ingSnap.d[ing.key] = ing.price; });
+      const updatedIng = [...ingHist.filter(e => e.date !== todayStr), ingSnap].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+      try { localStorage.setItem(ING_HIST_KEY, JSON.stringify(updatedIng)); } catch { /* ignore */ }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [withMargin.length]);
+  }, [withMargin.length, ingredientPrices]);
 
   return (
     <Card emoji="💰" title="Product Costings">
@@ -646,27 +810,29 @@ function CostingsCard({ costings }: { costings: CostingProduct[] }) {
         <ProductColumn label="Food" items={foodItems} />
       </div>
 
-      {/* Price changes section */}
+      {/* Ingredient price changes section */}
       <div className="mt-1">
         <div className="flex items-center gap-2 mb-2">
-          <span style={{ ...LABEL_STYLE, color: changes.length > 0 ? '#7c4a2d' : '#aaa' }}>
-            📊 Cost Changes (7 days)
+          <span style={{ ...LABEL_STYLE, color: ingredientChanges.length > 0 ? '#7c4a2d' : '#aaa' }}>
+            📦 Ingredient Prices (7 days)
           </span>
-          {changes.length > 0 && (
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fbcdad', color: '#7c4a2d' }}>{changes.length}</span>
+          {ingredientChanges.filter(i => i.delta !== undefined).length > 0 && (
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fbcdad', color: '#7c4a2d' }}>
+              {ingredientChanges.filter(i => i.delta !== undefined).length} changed
+            </span>
           )}
         </div>
         {firstLoad ? (
-          <p className="text-xs text-gray-400 italic">Baseline saved — changes will appear after tomorrow&apos;s first load.</p>
-        ) : changes.length === 0 ? (
-          <p className="text-xs text-gray-400 italic">No margin movements in the last 7 days.</p>
+          <p className="text-xs text-gray-400 italic">Baseline saved — ingredient changes appear from tomorrow.</p>
+        ) : ingredientChanges.length === 0 ? (
+          <p className="text-xs text-gray-400 italic">No ingredient data yet — sync will populate this shortly.</p>
         ) : (
           <div className="flex gap-4">
             <div className="flex-1 min-w-0">
-              {changes.filter((_, i) => i % 2 === 0).map((c, i) => <ChangeCard key={i} c={c} />)}
+              {ingredientChanges.filter((_, i) => i % 2 === 0).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
             </div>
             <div className="flex-1 min-w-0">
-              {changes.filter((_, i) => i % 2 === 1).map((c, i) => <ChangeCard key={i} c={c} />)}
+              {ingredientChanges.filter((_, i) => i % 2 === 1).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
             </div>
           </div>
         )}
@@ -699,6 +865,7 @@ export default function Home() {
   const [claudeInput, setClaudeInput] = useState('');
   const [claudeLoading, setClaudeLoading] = useState(false);
   const [costings, setCostings] = useState<CostingProduct[]>([]);
+  const [ingredientPrices, setIngredientPrices] = useState<IngredientPricesData | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [taskContext, setTaskContext] = useState<Record<string, string>>({});
   const claudeMessagesEndRef = useRef<HTMLDivElement>(null);
@@ -751,6 +918,7 @@ export default function Home() {
       setShifts(rosterData.shifts || []);
       await Promise.all([fetchDashboard(state).catch(() => {}), fetchWeekTasks(state).catch(() => {})]);
       fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
+      fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
       fetchTaskContext().catch(() => {});
       setLoading(false);
     };
@@ -1070,7 +1238,7 @@ export default function Home() {
 
         {/* PRODUCT COSTINGS — carousel + price changes */}
         <div className="md:col-span-2">
-          <CostingsCard costings={costings} />
+          <CostingsCard costings={costings} ingredientPrices={ingredientPrices} />
         </div>
 
       </div>
