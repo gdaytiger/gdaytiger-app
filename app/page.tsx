@@ -974,18 +974,23 @@ export default function Home() {
                 const bi = CATEGORY_ORDER.indexOf(b.category);
                 return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
               });
-              // Within each group: unchecked first, checked last
-              groups.forEach(g => g.tasks.sort((a, b) => a.checked === b.checked ? 0 : a.checked ? 1 : -1));
-              // Render
-              return groups.flatMap(group =>
-                group.tasks.map(task => (
-                  <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={group.category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave}
-                    onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
-                    onDelete={!task.isRecurring ? (id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined) : undefined}
-                    onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, group.category || undefined)}
-                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: group.category || undefined })); e.dataTransfer.effectAllowed = 'move'; }} />
-                ))
+              // Checked tasks sink to the absolute bottom of the list (across all categories)
+              const checkedBucket: { task: typeof displayedTasks[0]; category: string }[] = [];
+              const uncheckedGroups = groups.map(g => ({
+                ...g,
+                tasks: g.tasks.filter(t => { if (t.checked) { checkedBucket.push({ task: t, category: g.category }); return false; } return true; }),
+              })).filter(g => g.tasks.length > 0);
+              const renderTask = (task: typeof displayedTasks[0], category: string) => (
+                <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave}
+                  onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
+                  onDelete={!task.isRecurring ? (id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined) : undefined}
+                  onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined)}
+                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined })); e.dataTransfer.effectAllowed = 'move'; }} />
               );
+              return [
+                ...uncheckedGroups.flatMap(group => group.tasks.map(task => renderTask(task, group.category))),
+                ...checkedBucket.map(({ task, category }) => renderTask(task, category)),
+              ];
             })()}
           </div>
         </Card>
