@@ -720,20 +720,14 @@ function ProductItem({ p }: { p: CostingProduct }) {
   );
 }
 
-function ProductColumn({ label, items }: { label: string; items: CostingProduct[] }) {
+function ProductColumn({ items, height = 272 }: { items: CostingProduct[]; height?: number }) {
   return (
-    <div className="flex-1 min-w-0 flex flex-col gap-2">
-      <span style={LABEL_STYLE}>{label}</span>
+    <div className="flex-1 min-w-0">
       {items.length === 0 ? (
         <p className="text-xs text-gray-400 italic">No data</p>
       ) : (
-        <div className="relative" style={{ height: '272px' }}>
-          {/* Fade mask overlay — pointer-events: none so scrolling still works */}
-          <div className="absolute inset-0 pointer-events-none z-10" style={{
-            maskImage: FADE_MASK,
-            WebkitMaskImage: FADE_MASK,
-            background: 'transparent',
-          }} />
+        <div className="relative" style={{ height: `${height}px` }}>
+          <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
           <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
             {items.map(p => <ProductItem key={p.id} p={p} />)}
           </div>
@@ -743,17 +737,35 @@ function ProductColumn({ label, items }: { label: string; items: CostingProduct[
   );
 }
 
+function MarginBadges({ items }: { items: CostingProduct[] }) {
+  const avg    = items.length > 0 ? items.reduce((s, p) => s + p.margin!, 0) / items.length : null;
+  const red    = items.filter(p => p.margin! < 60).length;
+  const yellow = items.filter(p => p.margin! >= 60 && p.margin! < 70).length;
+  const green  = items.filter(p => p.margin! >= 70).length;
+  return (
+    <div className="flex items-center gap-2 flex-wrap pb-3 mb-1 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+      {avg !== null && <span className="text-xs text-gray-500">Avg <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>}
+      {[
+        { count: red,    label: 'under 60%', bg: 'rgba(220,38,38,0.10)',   border: 'rgba(220,38,38,0.25)',   color: '#991b1b' },
+        { count: yellow, label: '60–70%',    bg: 'rgba(217,119,6,0.10)',   border: 'rgba(217,119,6,0.25)',   color: '#78350f' },
+        { count: green,  label: 'over 70%',  bg: 'rgba(22,163,74,0.10)',   border: 'rgba(22,163,74,0.25)',   color: '#14532d' },
+      ].map(({ count, label, bg, border, color }) => (
+        <span key={label} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold"
+          style={{ background: bg, border: `1px solid ${border}`, color }}>
+          <span className="font-black">{count}</span>
+          <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.8 }}>{label}</span>
+        </span>
+      ))}
+      <span className="text-xs text-gray-400 ml-auto">{items.length} products</span>
+    </div>
+  );
+}
+
 function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null }) {
-  const withMargin = costings.filter(p => p.margin !== null);
+  const withMargin  = costings.filter(p => p.margin !== null);
   const coffeeItems = [...withMargin].filter(p => p.category === 'Coffee').sort((a, b) => a.margin! - b.margin!);
   const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee').sort((a, b) => a.margin! - b.margin!);
 
-  const avg    = withMargin.length > 0 ? withMargin.reduce((s, p) => s + p.margin!, 0) / withMargin.length : null;
-  const red    = withMargin.filter(p => p.margin! < 60).length;
-  const yellow = withMargin.filter(p => p.margin! >= 60 && p.margin! < 70).length;
-  const green  = withMargin.filter(p => p.margin! >= 70).length;
-
-  const [changes, setChanges] = useState<MarginChange[]>([]);
   const [firstLoad, setFirstLoad] = useState(false);
   const [ingredientChanges, setIngredientChanges] = useState<IngredientChange[]>([]);
 
@@ -762,7 +774,7 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
     const todayStr = new Date().toISOString().slice(0, 10);
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
 
-    // ── Product margin history ────────────────────────────────────────────────
+    // ── Product margin history (for ingredient impact mapping) ────────────────
     let hist: SnapEntry[] = [];
     try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { /* ignore */ }
     const prev = hist.filter(e => e.date !== todayStr && new Date(e.date) >= cutoff).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
@@ -778,8 +790,6 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
         const dc = item.sellPrice ? item.sellPrice * (1 - item.margin! / 100) - item.sellPrice * (1 - old.p / 100) : 0;
         detectedChanges.push({ name: item.name, category: item.category, oldPct: old.p, newPct: item.margin!, dp, dc, sellPrice: item.sellPrice, daysAgo });
       });
-      detectedChanges.sort((a, b) => a.dp - b.dp);
-      setChanges(detectedChanges);
     }
     const snap: SnapEntry = { date: todayStr, d: {} };
     withMargin.forEach(item => { snap.d[item.name] = { p: item.margin!, s: item.sellPrice ?? 0 }; });
@@ -812,9 +822,7 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
         }
         return result;
       })
-      // Show only ingredients with a confirmed price change OR ≥1 affected product
       .filter(i => i.delta !== undefined || i.affectedProducts.length > 0)
-      // Sort: confirmed price changes first, then by number of affected products
       .sort((a, b) => {
         if ((a.delta !== undefined) !== (b.delta !== undefined)) return a.delta !== undefined ? -1 : 1;
         return b.affectedProducts.length - a.affectedProducts.length;
@@ -822,7 +830,6 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
 
       setIngredientChanges(ingResults);
 
-      // Save ingredient price snapshot
       const ingSnap: IngSnap = { date: todayStr, d: {} };
       ings.forEach(ing => { ingSnap.d[ing.key] = ing.price; });
       const updatedIng = [...ingHist.filter(e => e.date !== todayStr), ingSnap].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
@@ -831,67 +838,58 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [withMargin.length, ingredientPrices]);
 
+  const changedCount = ingredientChanges.filter(i => i.delta !== undefined).length;
+
   return (
-    <Card emoji="💰" title="Product Costings">
-      {/* Summary row */}
-      <div className="flex items-center gap-3 flex-wrap pb-3 mb-1" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-        {avg !== null && <span className="text-xs text-gray-500">Avg <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>}
-        <div className="flex gap-2 flex-wrap">
-          {[
-            { count: red,    label: 'under 60%', bg: 'rgba(220,38,38,0.10)',   border: 'rgba(220,38,38,0.25)',   color: '#991b1b' },
-            { count: yellow, label: '60–70%',    bg: 'rgba(217,119,6,0.10)',   border: 'rgba(217,119,6,0.25)',   color: '#78350f' },
-            { count: green,  label: 'over 70%',  bg: 'rgba(22,163,74,0.10)',   border: 'rgba(22,163,74,0.25)',   color: '#14532d' },
-          ].map(({ count, label, bg, border, color }) => (
-            <span key={label} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
-              style={{ background: bg, border: `1px solid ${border}`, color, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
-              <span className="font-black">{count}</span>
-              <span style={{ fontFamily: '"stolzl", sans-serif', fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.8 }}>{label}</span>
-            </span>
-          ))}
-        </div>
-        <span className="text-xs text-gray-400 ml-auto">{withMargin.length} products</span>
-      </div>
+    <>
+      {/* ── Coffee Costings ── */}
+      <Card emoji="☕" title="Coffee Costings">
+        <MarginBadges items={coffeeItems} />
+        <ProductColumn items={coffeeItems} height={450} />
+      </Card>
 
-      {/* Two columns */}
-      <div className="flex gap-4">
-        <ProductColumn label="Coffee" items={coffeeItems} />
-        <ProductColumn label="Food" items={foodItems} />
-      </div>
+      {/* ── Food Costings ── */}
+      <Card emoji="🥗" title="Food Costings">
+        <MarginBadges items={foodItems} />
+        <ProductColumn items={foodItems} height={450} />
+      </Card>
 
-      {/* Ingredient price changes section */}
-      <div className="mt-1">
-        <div className="flex items-center gap-2 mb-2">
-          <span style={{ ...LABEL_STYLE, color: ingredientChanges.length > 0 ? '#7c4a2d' : '#aaa' }}>
-            📦 INGREDIENT PRICES (7 DAYS)
-          </span>
-          {ingredientChanges.filter(i => i.delta !== undefined).length > 0 && (
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fbcdad', color: '#7c4a2d' }}>
-              {ingredientChanges.filter(i => i.delta !== undefined).length} changed
-            </span>
+      {/* ── Ingredient Prices ── (full width) */}
+      <div className="md:col-span-2">
+        <Card emoji="📦" title="Ingredient Prices (7 Days)">
+          {firstLoad ? (
+            <p className="text-xs text-gray-400 italic">Baseline saved — ingredient changes appear from tomorrow.</p>
+          ) : ingredientChanges.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">No ingredient data yet — sync will populate this shortly.</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-2 shrink-0">
+                {changedCount > 0 && (
+                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fbcdad', color: '#7c4a2d' }}>
+                    {changedCount} price {changedCount === 1 ? 'change' : 'changes'}
+                  </span>
+                )}
+                <span className="text-xs text-gray-400 ml-auto">{ingredientChanges.length} ingredients tracked</span>
+              </div>
+              <div className="flex gap-4 flex-1 min-h-0">
+                <div className="flex-1 min-w-0 relative">
+                  <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
+                  <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
+                    {ingredientChanges.filter((_, i) => i % 2 === 0).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0 relative">
+                  <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
+                  <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
+                    {ingredientChanges.filter((_, i) => i % 2 === 1).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
+                  </div>
+                </div>
+              </div>
+            </>
           )}
-        </div>
-        {firstLoad ? (
-          <p className="text-xs text-gray-400 italic">Baseline saved — ingredient changes appear from tomorrow.</p>
-        ) : ingredientChanges.length === 0 ? (
-          <p className="text-xs text-gray-400 italic">No ingredient data yet — sync will populate this shortly.</p>
-        ) : (
-          <div className="flex gap-4">
-            <div className="flex-1 min-w-0 relative" style={{ height: '272px' }}>
-              <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
-              <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
-                {ingredientChanges.filter((_, i) => i % 2 === 0).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
-              </div>
-            </div>
-            <div className="flex-1 min-w-0 relative" style={{ height: '272px' }}>
-              <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
-              <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
-                {ingredientChanges.filter((_, i) => i % 2 === 1).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
-              </div>
-            </div>
-          </div>
-        )}
+        </Card>
       </div>
-    </Card>
+    </>
   );
 }
 
@@ -1290,10 +1288,8 @@ export default function Home() {
           )}
         </Card>
 
-        {/* PRODUCT COSTINGS — carousel + price changes */}
-        <div className="md:col-span-2">
-          <CostingsCard costings={costings} ingredientPrices={ingredientPrices} />
-        </div>
+        {/* COSTINGS — Coffee, Food, Ingredient Prices (fragment renders 3 cards) */}
+        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} />
 
       </div>
 
