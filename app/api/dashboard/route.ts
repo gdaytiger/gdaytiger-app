@@ -123,9 +123,18 @@ async function getCarryOverTasks(today: Date, checkedState: Record<string, strin
         currentHeader = (block[block.type]?.rich_text || []).map((r: any) => r.plain_text).join('').trim();
         continue;
       }
-      if (block.type !== 'bulleted_list_item') continue;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
+      // Accept both bulleted_list_item and to_do (checkbox) blocks. The to_do.checked
+      // flag is intentionally ignored — checked state lives in the JSON map keyed by date.
+      let raw: string;
+      if (block.type === 'bulleted_list_item') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
+      } else if (block.type === 'to_do') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        raw = (block.to_do?.rich_text || []).map((r: any) => r.plain_text).join('');
+      } else {
+        continue;
+      }
       if (!raw.startsWith('[CARRY]')) continue;
       if (seenIds.has(block.id)) continue; // deduplicate across pages
 
@@ -168,9 +177,14 @@ async function getDailyTasks(dayOfWeek: number, today: Date) {
       continue;
     }
 
-    if (block.type === 'bulleted_list_item') {
+    // Accept both bulleted_list_item and to_do (checkbox) blocks as tasks. The
+    // to_do.checked flag is ignored — checked state is tracked in the JSON map per date.
+    if (block.type === 'bulleted_list_item' || block.type === 'to_do') {
+      const richTextSource = block.type === 'bulleted_list_item'
+        ? block.bulleted_list_item?.rich_text
+        : block.to_do?.rich_text;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
+      const raw = (richTextSource || []).map((r: any) => r.plain_text).join('');
       if (!raw.trim()) continue;
 
       const dateMatch = raw.match(DATE_PREFIX_RE);

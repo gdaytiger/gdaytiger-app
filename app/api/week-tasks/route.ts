@@ -64,9 +64,13 @@ async function getTasksForDay(dateStr: string): Promise<{ id: string; text: stri
       if (text) rawItems.push({ type: 'header', id: block.id, text });
       continue;
     }
-    if (block.type !== 'bulleted_list_item') continue;
+    // Accept both bulleted_list_item and to_do (checkbox) blocks as tasks.
+    if (block.type !== 'bulleted_list_item' && block.type !== 'to_do') continue;
+    const richTextSource = block.type === 'bulleted_list_item'
+      ? block.bulleted_list_item?.rich_text
+      : block.to_do?.rich_text;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
+    const raw = (richTextSource || []).map((r: any) => r.plain_text).join('');
     if (!raw.trim()) continue;
 
     const dateMatch = raw.match(DATE_PREFIX_RE);
