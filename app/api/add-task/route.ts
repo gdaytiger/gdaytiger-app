@@ -3,7 +3,80 @@ import { NextRequest, NextResponse } from 'next/server';
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+// OS page that hosts the context (javascript) code block — same parent used by /api/task-context
+const STATE_PARENT_ID = '3403c99c0e858113a941c2118b3cdef9';
+
 const VALID_CATEGORIES = ['ORDER', 'ADMIN', 'STAFF', 'MAINTENANCE', 'MERCHANDISE', 'PERSONAL', 'COSTING'];
+
+// Write { [blockId]: text } into the JS context code block on the OS page.
+// Mirrors /api/task-context POST so add-task can set context in one shot.
+async function setContext(blockId: string, text: string): Promise<void> {
+  const listRes = await fetch(
+    `https://api.notion.com/v1/blocks/${STATE_PARENT_ID}/children?page_size=100`,
+    {
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+      },
+      cache: 'no-store',
+    }
+  );
+  const listData = await listRes.json();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let codeBlock = (listData.results || []).find(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (b: any) => b.type === 'code' && b.code?.language === 'javascript'
+  );
+
+  if (!codeBlock) {
+    // Create the block if it doesn't exist yet
+    const createRes = await fetch(
+      `https://api.notion.com/v1/blocks/${STATE_PARENT_ID}/children`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${NOTION_API_KEY}`,
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          children: [{
+            type: 'code',
+            code: {
+              rich_text: [{ type: 'text', text: { content: '{}' } }],
+              language: 'javascript',
+            },
+          }],
+        }),
+      }
+    );
+    const createData = await createRes.json();
+    codeBlock = createData.results?.[0];
+    if (!codeBlock) return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existingText = (codeBlock.code?.rich_text || []).map((r: any) => r.plain_text).join('');
+  let context: Record<string, string> = {};
+  try { context = JSON.parse(existingText || '{}'); } catch { context = {}; }
+  context[blockId] = text.trim();
+
+  await fetch(`https://api.notion.com/v1/blocks/${codeBlock.id}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${NOTION_API_KEY}`,
+      'Notion-Version': '2022-06-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      code: {
+        rich_text: [{ type: 'text', text: { content: JSON.stringify(context) } }],
+        language: 'javascript',
+      },
+    }),
+  });
+}
 
 async function classifyCategory(text: string): Promise<string> {
   try {
@@ -73,7 +146,7 @@ async function getPageChildren(pageId: string): Promise<any[]> {
 }
 
 export async function POST(req: NextRequest) {
-  const { date, text, category: rawCategory } = await req.json();
+  const { date, text, category: rawCategory, context } = await req.json();
   // Auto-classify if no category provided — uses Claude Haiku to pick the right section.
   const category: string = rawCategory || await classifyCategory(text?.trim() || '');
 
@@ -138,7 +211,11 @@ export async function POST(req: NextRequest) {
       if (data.object === 'error') {
         return NextResponse.json({ error: data.message }, { status: 400 });
       }
-      return NextResponse.json({ success: true, blockId: data.results?.[0]?.id });
+      const newBlockId = data.results?.[0]?.id;
+      if (newBlockId && typeof context === 'string' && context.trim()) {
+        await setContext(newBlockId, context);
+      }
+      return NextResponse.json({ success: true, blockId: newBlockId });
     }
     // Heading not found on target page — fall through to append at end
   }
@@ -158,5 +235,9 @@ export async function POST(req: NextRequest) {
   if (data.object === 'error') {
     return NextResponse.json({ error: data.message }, { status: 400 });
   }
-  return NextResponse.json({ success: true, blockId: data.results?.[0]?.id });
+  const newBlockId = data.results?.[0]?.id;
+  if (newBlockId && typeof context === 'string' && context.trim()) {
+    await setContext(newBlockId, context);
+  }
+  return NextResponse.json({ success: true, blockId: newBlockId });
 }
