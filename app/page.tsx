@@ -543,65 +543,58 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
   const [open, setOpen] = useState(false);
   const hasPriceDelta = ing.delta !== undefined;
   const isUp = hasPriceDelta && ing.delta! > 0;
-  const accentCol = isUp ? '#dc2626' : hasPriceDelta ? '#16a34a' : '#c8926a';
-  const bgCol = isUp ? 'rgba(254,242,242,0.7)' : hasPriceDelta ? 'rgba(240,253,244,0.7)' : 'rgba(255,248,240,0.7)';
-  const borderCol = isUp ? 'rgba(220,38,38,0.18)' : hasPriceDelta ? 'rgba(22,163,74,0.18)' : 'rgba(200,146,106,0.2)';
+  const deltaCol = isUp ? '#dc2626' : '#16a34a';
 
   return (
     <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0 cursor-pointer select-none"
       onClick={() => setOpen(o => !o)}
-      style={{ background: bgCol, backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: `1px solid ${borderCol}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
+      style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2 mb-0.5">
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-2 mb-1.5">
         <p className="text-sm font-semibold text-gray-800 leading-snug flex-1 min-w-0 truncate"
-          style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+          style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', textTransform: 'uppercase' }}>
           {ing.name}
         </p>
         {hasPriceDelta ? (
-          <span className="text-base font-black shrink-0 leading-none" style={{ color: accentCol, fontVariantNumeric: 'tabular-nums' }}>
+          <span className="text-base font-black shrink-0 leading-none" style={{ color: deltaCol, fontVariantNumeric: 'tabular-nums' }}>
             {isUp ? '+' : ''}{ing.pct!.toFixed(1)}%
           </span>
         ) : (
-          <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(200,146,106,0.15)', color: '#7c4a2d' }}>
-            {ing.affectedProducts.length} products
+          <span className="text-sm font-black shrink-0 leading-none" style={{ color: '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>
+            {ing.affectedProducts.length}
           </span>
         )}
       </div>
 
-      {/* Price + supplier row */}
-      <div className="flex items-center gap-1 mb-1.5">
-        <span className="text-xs" style={{ color: '#9ca3af' }}>{ing.supplier}</span>
-        <span className="text-xs text-gray-300">·</span>
-        {hasPriceDelta ? (
-          <span className="text-xs" style={{ fontVariantNumeric: 'tabular-nums', color: '#9ca3af' }}>
-            ${ing.oldPrice!.toFixed(2)} <span className="text-gray-300">→</span>{' '}
-            <span style={{ color: accentCol, fontWeight: 700 }}>${ing.currentPrice.toFixed(2)}</span>
-            {' '}/ {ing.unit}
-          </span>
-        ) : (
-          <span className="text-xs" style={{ fontVariantNumeric: 'tabular-nums', color: '#9ca3af' }}>
-            ${ing.currentPrice.toFixed(2)} / {ing.unit}
-          </span>
-        )}
+      {/* Supplier + price row */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums', textTransform: 'uppercase' }}>
+          {ing.supplier}
+        </span>
+        <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.07)' }}>
+          {hasPriceDelta ? (
+            <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.abs(ing.pct!))}%`, background: deltaCol, transition: 'width 0.6s ease' }} />
+          ) : (
+            <div className="h-full rounded-full" style={{ width: `${Math.min(100, ing.affectedProducts.length * 10)}%`, background: 'rgba(0,0,0,0.12)', transition: 'width 0.6s ease' }} />
+          )}
+        </div>
+        <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+          {hasPriceDelta
+            ? `$${ing.oldPrice!.toFixed(2)} → $${ing.currentPrice.toFixed(2)}`
+            : `$${ing.currentPrice.toFixed(2)} / ${ing.unit}`}
+        </span>
       </div>
-
-      {/* Tracking notice when no price delta yet */}
-      {!hasPriceDelta && (
-        <p className="text-xs italic mb-1.5" style={{ color: '#c8926a' }}>
-          Price tracking building — changes appear after 7 days
-        </p>
-      )}
 
       {/* Affected products — expanded */}
       {open && ing.affectedProducts.length > 0 && (
-        <div className="mt-1 pt-2 space-y-1.5" style={{ borderTop: `1px solid ${borderCol}` }}>
+        <div className="mt-2 pt-2 space-y-1.5" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
           {ing.affectedProducts.map((p, i) => {
             const hasShift = Math.abs(p.dp) >= 0.15;
             const col = hasShift ? (p.dp < 0 ? '#dc2626' : '#16a34a') : '#9ca3af';
             return (
               <div key={i} className="flex items-center gap-2 text-xs">
-                <span className="text-gray-600 flex-1 min-w-0 truncate">{p.name}</span>
+                <span className="text-gray-500 flex-1 min-w-0 truncate" style={{ textTransform: 'uppercase' }}>{p.name}</span>
                 <span style={{ color: col, fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>
                   {hasShift
                     ? `${p.oldPct.toFixed(1)}%→${p.newPct.toFixed(1)}% (${p.dp > 0 ? '+' : ''}${p.dp.toFixed(1)}pp)`
@@ -610,14 +603,12 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
               </div>
             );
           })}
+          <p className="text-xs text-right" style={{ color: '#9ca3af' }}>▲ collapse</p>
         </div>
       )}
 
-      {/* Expand / collapse hint */}
-      {ing.affectedProducts.length > 0 && (
-        <p className="text-xs text-right mt-1" style={{ color: '#c8926a', opacity: 0.7 }}>
-          {open ? '▲ collapse' : `▼ ${ing.affectedProducts.length} affected`}
-        </p>
+      {!open && ing.affectedProducts.length > 0 && (
+        <p className="text-xs text-right mt-0.5" style={{ color: '#9ca3af' }}>▼ {ing.affectedProducts.length} affected</p>
       )}
     </div>
   );
@@ -871,7 +862,7 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
       <div className="mt-1">
         <div className="flex items-center gap-2 mb-2">
           <span style={{ ...LABEL_STYLE, color: ingredientChanges.length > 0 ? '#7c4a2d' : '#aaa' }}>
-            📦 Ingredient Prices (7 days)
+            📦 INGREDIENT PRICES (7 DAYS)
           </span>
           {ingredientChanges.filter(i => i.delta !== undefined).length > 0 && (
             <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fbcdad', color: '#7c4a2d' }}>
@@ -885,11 +876,17 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
           <p className="text-xs text-gray-400 italic">No ingredient data yet — sync will populate this shortly.</p>
         ) : (
           <div className="flex gap-4">
-            <div className="flex-1 min-w-0">
-              {ingredientChanges.filter((_, i) => i % 2 === 0).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
+            <div className="flex-1 min-w-0 relative" style={{ height: '272px' }}>
+              <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
+              <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
+                {ingredientChanges.filter((_, i) => i % 2 === 0).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              {ingredientChanges.filter((_, i) => i % 2 === 1).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
+            <div className="flex-1 min-w-0 relative" style={{ height: '272px' }}>
+              <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
+              <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
+                {ingredientChanges.filter((_, i) => i % 2 === 1).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
+              </div>
             </div>
           </div>
         )}
