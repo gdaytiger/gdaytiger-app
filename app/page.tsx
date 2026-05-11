@@ -849,7 +849,7 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
       </Card>
 
       {/* ── Food Costings ── */}
-      <Card emoji="🥗" title="Food Costings">
+      <Card emoji="🥪" title="Food Costings">
         <MarginBadges items={foodItems} />
         <ProductColumn items={foodItems} height={450} />
       </Card>
