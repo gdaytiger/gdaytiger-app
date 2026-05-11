@@ -856,7 +856,7 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
 
       {/* ── Ingredient Prices ── (full width) */}
       <div className="md:col-span-2">
-        <Card emoji="📦" title="Ingredient Prices (7 Days)">
+        <Card emoji="📦" title="Supplier Prices">
           {firstLoad ? (
             <p className="text-xs text-gray-400 italic">Baseline saved — ingredient changes appear from tomorrow.</p>
           ) : ingredientChanges.length === 0 ? (
