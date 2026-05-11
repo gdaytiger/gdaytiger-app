@@ -548,12 +548,15 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
       {open && ing.affectedProducts.length > 0 && (
         <div className="mt-1 pt-2 space-y-1.5" style={{ borderTop: `1px solid ${borderCol}` }}>
           {ing.affectedProducts.map((p, i) => {
-            const col = p.dp < 0 ? '#dc2626' : '#16a34a';
+            const hasShift = Math.abs(p.dp) >= 0.15;
+            const col = hasShift ? (p.dp < 0 ? '#dc2626' : '#16a34a') : '#9ca3af';
             return (
               <div key={i} className="flex items-center gap-2 text-xs">
                 <span className="text-gray-600 flex-1 min-w-0 truncate">{p.name}</span>
                 <span style={{ color: col, fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  {p.oldPct.toFixed(1)}%→{p.newPct.toFixed(1)}% ({p.dp > 0 ? '+' : ''}{p.dp.toFixed(1)}pp)
+                  {hasShift
+                    ? `${p.oldPct.toFixed(1)}%→${p.newPct.toFixed(1)}% (${p.dp > 0 ? '+' : ''}${p.dp.toFixed(1)}pp)`
+                    : `${p.newPct.toFixed(1)}%`}
                 </span>
               </div>
             );
@@ -751,7 +754,12 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
       const ingPrev = ingHist.filter(e => e.date !== todayStr && new Date(e.date) >= cutoff).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
 
       const ingResults: IngredientChange[] = ings.map(ing => {
-        const affected = detectedChanges.filter(c => productMatchesIngredient(c.name, ing.key));
+        const affected = withMargin
+          .filter(c => productMatchesIngredient(c.name, ing.key))
+          .map(c => {
+            const detected = detectedChanges.find(d => d.name === c.name);
+            return detected ?? { name: c.name, category: c.category, oldPct: c.margin!, newPct: c.margin!, dp: 0, dc: 0, sellPrice: c.sellPrice, daysAgo: 0 };
+          });
         const result: IngredientChange = { key: ing.key, name: ing.name, unit: ing.unit, supplier: ing.supplier, currentPrice: ing.price, affectedProducts: affected };
         if (ingPrev?.d[ing.key] !== undefined) {
           const oldPrice = ingPrev.d[ing.key];
