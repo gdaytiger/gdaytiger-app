@@ -421,10 +421,23 @@ type IngSnap   = { date: string; d: Record<string, number> };
 type IngredientPrice = { key: string; name: string; price: number; unit: string; supplier: string };
 type IngredientPricesData = { type: string; updated: string | null; ingredients: IngredientPrice[] };
 
+type DriftSeverity = 'yellow' | 'amber' | 'red';
+type DriftWarning = {
+  cell: string;
+  label: string;
+  daysStale: number | null;
+  refreshDays: number;
+  severity: DriftSeverity;
+  ingredientKey: string | null;
+  neverSeen: boolean;
+};
+type PriceDriftData = { type: string; updated: string | null; warnings: DriftWarning[] };
+
 type IngredientChange = {
   key: string; name: string; unit: string; supplier: string; currentPrice: number;
   oldPrice?: number; delta?: number; pct?: number; daysAgo?: number;
   affectedProducts: MarginChange[];
+  drift?: DriftWarning;
 };
 
 type MarginChange = {
@@ -539,6 +552,32 @@ function productMatchesIngredient(productName: string, ingredientKey: string): b
   return !(rule.exc || []).some(p => n.includes(p));
 }
 
+// Visual styling per drift severity. Used by the chip on each ingredient card.
+const DRIFT_STYLES: Record<DriftSeverity, { bg: string; fg: string }> = {
+  yellow: { bg: '#fef3c7', fg: '#78350f' },
+  amber:  { bg: '#fed7aa', fg: '#7c2d12' },
+  red:    { bg: '#fecaca', fg: '#7f1d1d' },
+};
+
+function DriftChip({ drift }: { drift: DriftWarning }) {
+  const s = DRIFT_STYLES[drift.severity];
+  const label = drift.neverSeen
+    ? 'never seen'
+    : `stale ${drift.daysStale}d`;
+  const title = drift.neverSeen
+    ? `${drift.cell} [${drift.label}] — never updated by scanner. Likely manual-entry only or supplier renamed the SKU.`
+    : `${drift.cell} [${drift.label}] — ${drift.daysStale}d since last invoice (expected within ${drift.refreshDays}d). Supplier may have renamed the SKU.`;
+  return (
+    <span
+      title={title}
+      className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0 leading-none whitespace-nowrap"
+      style={{ background: s.bg, color: s.fg, fontVariantNumeric: 'tabular-nums' }}
+    >
+      ⚠ {label}
+    </span>
+  );
+}
+
 function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
   const [open, setOpen] = useState(false);
   const hasPriceDelta = ing.delta !== undefined;
@@ -556,6 +595,7 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
           style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', textTransform: 'uppercase' }}>
           {ing.name}
         </p>
+        {ing.drift && <DriftChip drift={ing.drift} />}
         {hasPriceDelta ? (
           <span className="text-base font-black shrink-0 leading-none" style={{ color: deltaCol, fontVariantNumeric: 'tabular-nums' }}>
             {isUp ? '+' : ''}{ing.pct!.toFixed(1)}%
@@ -761,7 +801,7 @@ function MarginBadges({ items }: { items: CostingProduct[] }) {
   );
 }
 
-function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null }) {
+function CostingsCard({ costings, ingredientPrices, priceDrift }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null }) {
   const withMargin  = costings.filter(p => p.margin !== null);
   const coffeeItems = [...withMargin].filter(p => p.category === 'Coffee').sort((a, b) => a.margin! - b.margin!);
   const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee').sort((a, b) => a.margin! - b.margin!);
@@ -828,6 +868,32 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
         return b.affectedProducts.length - a.affectedProducts.length;
       });
 
+      // ── Attach drift warnings ───────────────────────────────────────────────
+      // Multiple sheet cells can map to the same ingredient key (e.g. B5 + B8
+      // → coffee_beans). Pick the worst severity, or the largest daysStale if
+      // severities tie. Cells whose ingredientKey is null get no badge.
+      const driftWarnings = priceDrift?.warnings ?? [];
+      if (driftWarnings.length > 0) {
+        const severityRank: Record<DriftSeverity, number> = { red: 3, amber: 2, yellow: 1 };
+        const byKey = new Map<string, DriftWarning>();
+        for (const w of driftWarnings) {
+          if (!w.ingredientKey) continue;
+          const existing = byKey.get(w.ingredientKey);
+          if (
+            !existing ||
+            severityRank[w.severity] > severityRank[existing.severity] ||
+            (severityRank[w.severity] === severityRank[existing.severity] &&
+              (w.daysStale ?? Infinity) > (existing.daysStale ?? -Infinity))
+          ) {
+            byKey.set(w.ingredientKey, w);
+          }
+        }
+        ingResults.forEach(r => {
+          const d = byKey.get(r.key);
+          if (d) r.drift = d;
+        });
+      }
+
       setIngredientChanges(ingResults);
 
       const ingSnap: IngSnap = { date: todayStr, d: {} };
@@ -836,7 +902,7 @@ function CostingsCard({ costings, ingredientPrices }: { costings: CostingProduct
       try { localStorage.setItem(ING_HIST_KEY, JSON.stringify(updatedIng)); } catch { /* ignore */ }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [withMargin.length, ingredientPrices]);
+  }, [withMargin.length, ingredientPrices, priceDrift]);
 
   const changedCount = ingredientChanges.filter(i => i.delta !== undefined).length;
 
@@ -918,6 +984,7 @@ export default function Home() {
   const [claudeLoading, setClaudeLoading] = useState(false);
   const [costings, setCostings] = useState<CostingProduct[]>([]);
   const [ingredientPrices, setIngredientPrices] = useState<IngredientPricesData | null>(null);
+  const [priceDrift, setPriceDrift] = useState<PriceDriftData | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [taskContext, setTaskContext] = useState<Record<string, string>>({});
   const claudeMessagesEndRef = useRef<HTMLDivElement>(null);
@@ -971,6 +1038,7 @@ export default function Home() {
       await Promise.all([fetchDashboard(state).catch(() => {}), fetchWeekTasks(state).catch(() => {})]);
       fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
       fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
+      fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
       fetchTaskContext().catch(() => {});
       setLoading(false);
     };
@@ -1289,7 +1357,7 @@ export default function Home() {
         </Card>
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (fragment renders 3 cards) */}
-        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} />
+        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} />
 
       </div>
 
