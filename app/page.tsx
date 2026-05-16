@@ -433,6 +433,21 @@ type DriftWarning = {
 };
 type PriceDriftData = { type: string; updated: string | null; warnings: DriftWarning[] };
 
+type RecipeMapProduct = {
+  id?: string;
+  section: string;
+  source: 'food' | 'coffee';
+  direct: string[];
+  expanded: string[];
+};
+type RecipeMapData = {
+  type: string;
+  updated: string | null;
+  products: Record<string, RecipeMapProduct>;
+  ingredient_to_products: Record<string, string[]>;
+  sub_recipes: Record<string, string[]>;
+};
+
 type IngredientChange = {
   key: string; name: string; unit: string; supplier: string; currentPrice: number;
   oldPrice?: number; delta?: number; pct?: number; daysAgo?: number;
@@ -449,6 +464,7 @@ type MarginChange = {
   dc: number;
   sellPrice: number | null;
   daysAgo: number;
+  via?: string; // set when the ingredient reaches the product through a made-in-house mix
 };
 
 const LABEL_STYLE: React.CSSProperties = {
@@ -634,7 +650,14 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
             const col = hasShift ? (p.dp < 0 ? '#dc2626' : '#16a34a') : '#9ca3af';
             return (
               <div key={i} className="flex items-center gap-2 text-xs">
-                <span className="text-gray-500 flex-1 min-w-0 truncate" style={{ textTransform: 'uppercase' }}>{p.name}</span>
+                <span className="text-gray-500 flex-1 min-w-0 truncate" style={{ textTransform: 'uppercase' }}>
+                  {p.name}
+                  {p.via && (
+                    <span className="inline-block ml-1.5 px-1.5 py-0.5 rounded-md align-middle"
+                      style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.04em', background: 'rgba(217,119,6,0.12)', color: '#92400e', textTransform: 'uppercase' }}
+                    >via {p.via}</span>
+                  )}
+                </span>
                 <span style={{ color: col, fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>
                   {hasShift
                     ? `${p.oldPct.toFixed(1)}%→${p.newPct.toFixed(1)}% (${p.dp > 0 ? '+' : ''}${p.dp.toFixed(1)}pp)`
@@ -801,7 +824,7 @@ function MarginBadges({ items }: { items: CostingProduct[] }) {
   );
 }
 
-function CostingsCard({ costings, ingredientPrices, priceDrift }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null }) {
+function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; recipeMap: RecipeMapData | null }) {
   const withMargin  = costings.filter(p => p.margin !== null);
   const coffeeItems = [...withMargin].filter(p => p.category === 'Coffee').sort((a, b) => a.margin! - b.margin!);
   const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee').sort((a, b) => a.margin! - b.margin!);
@@ -843,13 +866,57 @@ function CostingsCard({ costings, ingredientPrices, priceDrift }: { costings: Co
       try { ingHist = JSON.parse(localStorage.getItem(ING_HIST_KEY) || '[]'); } catch { /* ignore */ }
       const ingPrev = ingHist.filter(e => e.date !== todayStr && new Date(e.date) >= cutoff).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
 
+      // Build a fast lookup of which product names contain which ingredient,
+      // using recipe_map if it's loaded (correct attribution via made-in-house
+      // mixes), falling back to the legacy hardcoded productMatchesIngredient
+      // rules for any ingredient key recipe_map doesn't cover.
+      const recipeIngToProducts: Record<string, Set<string>> = {};
+      const recipeProductDirect: Record<string, Set<string>> = {};
+      if (recipeMap) {
+        for (const [ingKey, names] of Object.entries(recipeMap.ingredient_to_products || {})) {
+          recipeIngToProducts[ingKey] = new Set((names || []).map(n => n.toUpperCase()));
+        }
+        for (const [pName, prod] of Object.entries(recipeMap.products || {})) {
+          recipeProductDirect[pName.toUpperCase()] = new Set((prod.direct || []));
+        }
+      }
+      const subRecipes = recipeMap?.sub_recipes || {};
+      const resolveVia = (ingKey: string, productNameUpper: string): string | undefined => {
+        const direct = recipeProductDirect[productNameUpper];
+        if (!direct) return undefined;
+        if (direct.has(ingKey)) return undefined; // direct ingredient — no via
+        for (const k of direct) {
+          if ((subRecipes[k] || []).indexOf(ingKey) !== -1) return k.replace(/_/g, ' ');
+        }
+        return undefined;
+      };
+      const productHasIngredient = (productName: string, ingKey: string): { match: boolean; via?: string } => {
+        const upper = productName.toUpperCase();
+        // Prefer recipe_map if we have an entry for this ingredient
+        if (recipeMap && recipeIngToProducts[ingKey]) {
+          if (recipeIngToProducts[ingKey].has(upper)) {
+            return { match: true, via: resolveVia(ingKey, upper) };
+          }
+          return { match: false };
+        }
+        // Fallback: legacy hardcoded rule map (for any ingredient recipe_map
+        // doesn't yet know about, e.g. drift-only keys without recipes)
+        return { match: productMatchesIngredient(productName, ingKey) };
+      };
+
       const ingResults: IngredientChange[] = ings.map(ing => {
         const affected = withMargin
-          .filter(c => productMatchesIngredient(c.name, ing.key))
           .map(c => {
+            const r = productHasIngredient(c.name, ing.key);
+            if (!r.match) return null;
             const detected = detectedChanges.find(d => d.name === c.name);
-            return detected ?? { name: c.name, category: c.category, oldPct: c.margin!, newPct: c.margin!, dp: 0, dc: 0, sellPrice: c.sellPrice, daysAgo: 0 };
-          });
+            const base: MarginChange = detected
+              ? { ...detected }
+              : { name: c.name, category: c.category, oldPct: c.margin!, newPct: c.margin!, dp: 0, dc: 0, sellPrice: c.sellPrice, daysAgo: 0 };
+            if (r.via) base.via = r.via;
+            return base;
+          })
+          .filter((x): x is MarginChange => x !== null);
         const result: IngredientChange = { key: ing.key, name: ing.name, unit: ing.unit, supplier: ing.supplier, currentPrice: ing.price, affectedProducts: affected };
         if (ingPrev?.d[ing.key] !== undefined) {
           const oldPrice = ingPrev.d[ing.key];
@@ -906,7 +973,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift }: { costings: Co
       try { localStorage.setItem(ING_HIST_KEY, JSON.stringify(updatedIng)); } catch { /* ignore */ }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [withMargin.length, ingredientPrices, priceDrift]);
+  }, [withMargin.length, ingredientPrices, priceDrift, recipeMap]);
 
   const changedCount = ingredientChanges.filter(i => i.delta !== undefined).length;
 
@@ -988,6 +1055,7 @@ export default function Home() {
   const [claudeLoading, setClaudeLoading] = useState(false);
   const [costings, setCostings] = useState<CostingProduct[]>([]);
   const [ingredientPrices, setIngredientPrices] = useState<IngredientPricesData | null>(null);
+  const [recipeMap, setRecipeMap] = useState<RecipeMapData | null>(null);
   const [priceDrift, setPriceDrift] = useState<PriceDriftData | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [taskContext, setTaskContext] = useState<Record<string, string>>({});
@@ -1043,6 +1111,7 @@ export default function Home() {
       fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
       fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
       fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
+      fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
       fetchTaskContext().catch(() => {});
       setLoading(false);
     };
@@ -1361,7 +1430,7 @@ export default function Home() {
         </Card>
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (fragment renders 3 cards) */}
-        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} />
+        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} recipeMap={recipeMap} />
 
       </div>
 
