@@ -862,7 +862,11 @@ function CostingsCard({ costings, ingredientPrices, priceDrift }: { costings: Co
         }
         return result;
       })
-      .filter(i => i.delta !== undefined || i.affectedProducts.length > 0)
+      // Show ALL ingredients (previously filtered to delta || affected > 0,
+      // which hid newly-added ingredient keys whose recipes haven't been wired
+      // yet — F.Bomb, Matcha, Sipper Lids, Pinenuts etc. get 0 affected by
+      // default until referenced). They still need to render so drift chips
+      // can attach and Jonathan can see them.
       .sort((a, b) => {
         if ((a.delta !== undefined) !== (b.delta !== undefined)) return a.delta !== undefined ? -1 : 1;
         return b.affectedProducts.length - a.affectedProducts.length;

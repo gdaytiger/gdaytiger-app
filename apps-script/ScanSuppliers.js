@@ -1019,27 +1019,27 @@ function markCellSeen_(cell) {
 // matching ingredient card. Cells with no obvious match are null — they still
 // appear in the drift JSON for future use, just without a visual badge.
 const CELL_TO_INGREDIENT_KEY = {
-  // COFFEE sheet
-  B5:  'coffee_beans',   // GG Espresso 1KG (Seven Seeds)
-  B6:  'chocolate',      // Mörk Dark Chocolate 1KG
-  B7:  'chai',           // Seven Seeds Chai
-  B8:  'coffee_beans',   // F.Bomb 1KG (Seven Seeds) — same coffee_beans ingredient
-  B9:  'decaf_beans',    // Decaf 1KG (Seven Seeds)
-  B10: null,             // Matsu Matcha 500G — no ingredient key yet
-  D5:  null,             // Sungold Jersey 2LT (coffee sheet, separate from R12)
-  D6:  null,             // Sungold Lowfat 2LT
-  D7:  'soy_milk_6l',    // Happy Soy 1L
-  D8:  'oat_milk_2l',    // Alt.Dairy.Co Oat (same oat_milk_2l ingredient)
-  D9:  'oat_milk_2l',    // Alt.Dairy.Co Almond
-  F5:  'brown_sugar',    // Bundaberg Raw Sugar 15KG (also used by coffee sheet)
-  H5:  'cup_medium',     // Cup 6oz /1000
-  H6:  'cup_large',      // Cup 12oz /1000
-  H7:  'lid_standard',   // Hot Lid /1000
-  H9:  null,             // Sipper Lid (cold drinks only, not in ingredient list)
-  H10: 'straw',          // Paper Straw 2500
+  // COFFEE sheet — keys must match SyncIngredientPrices.js coffeeIngredients
+  B5:  'coffee_beans',         // GG Espresso 1KG (Seven Seeds)
+  B6:  'chocolate',            // Mörk Dark Chocolate 1KG
+  B7:  'chai',                 // Fly High Chai (Seven Seeds)
+  B8:  'fbomb',                // F.Bomb Filter Blend 1KG (Seven Seeds)
+  B9:  'decaf_beans',          // La Serrania Decaf 1KG (Seven Seeds)
+  B10: 'matcha',               // Matsu Matcha 500G
+  D5:  'sungold_jersey_fc',    // Sungold Jersey FC 2LT
+  D6:  'sungold_lowfat',       // Sungold Lowfat 2LT
+  D7:  'happy_soy',            // Happy Happy Soy Boy 6L
+  D8:  'alt_dairy_oat',        // Alternative Dairy Oat 12LT
+  D9:  'alt_dairy_almond',     // Alternative Dairy Almond 12LT
+  F5:  'bundaberg_raw_sugar',  // Bundaberg Raw Sugar 15KG
+  H5:  'cup_small_6oz',        // Planetware 6oz Slim Cup /1000
+  H6:  'cup_large_12oz',       // Planetware 12oz Slim Cup /1000
+  H7:  'lid_hot',              // Planetware Hot Lid /1000
+  H9:  'lid_sipper',           // Trio Sipper Lid /1000
+  H10: 'straw',                // Trio Paper Straw 2500
   // FOOD sheet
-  R12: 'sungold_milk',   // Sungold FC 2LT (cross-write target)
-  R15: null,             // Pinenuts 1KG — no ingredient key yet
+  R12: 'sungold_jersey_fc',    // Sungold FC 2LT cross-write — same ingredient as D5
+  R15: 'pinenuts',             // Pinenuts Kernel 1KG (5Ways)
 };
 
 // Compute severity tier from days-stale vs expected refresh window.
