@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import AddProductModal from './components/AddProductModal';
 
 interface Todo {
   id: string;
@@ -976,20 +977,40 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { c
   }, [withMargin.length, ingredientPrices, priceDrift, recipeMap]);
 
   const changedCount = ingredientChanges.filter(i => i.delta !== undefined).length;
+  const [addProductOpen, setAddProductOpen] = useState<null | 'food' | 'coffee'>(null);
+
+  const addButton = (cat: 'food' | 'coffee') => (
+    <button
+      onClick={() => setAddProductOpen(cat)}
+      className="text-xs font-semibold px-2 py-1 rounded-lg transition-colors"
+      style={{
+        background: 'rgba(0,0,0,0.06)', color: '#374151',
+        fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em',
+      }}
+      title={`Add a new ${cat} product`}
+    >+ ADD</button>
+  );
 
   return (
     <>
       {/* ── Coffee Costings ── */}
-      <Card emoji="☕" title="Coffee Costings">
+      <Card emoji="☕" title="Coffee Costings" headerRight={addButton('coffee')}>
         <MarginBadges items={coffeeItems} />
         <ProductColumn items={coffeeItems} height={450} />
       </Card>
 
       {/* ── Food Costings ── */}
-      <Card emoji="🥪" title="Food Costings">
+      <Card emoji="🥪" title="Food Costings" headerRight={addButton('food')}>
         <MarginBadges items={foodItems} />
         <ProductColumn items={foodItems} height={450} />
       </Card>
+
+      <AddProductModal
+        open={addProductOpen !== null}
+        category={addProductOpen || 'food'}
+        onClose={() => setAddProductOpen(null)}
+        ingredients={ingredientPrices?.ingredients ?? []}
+      />
 
       {/* ── Ingredient Prices ── (full width) */}
       <div className="md:col-span-2">

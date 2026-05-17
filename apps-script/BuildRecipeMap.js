@@ -348,19 +348,22 @@ function brmBuildCoffeeProductsMap_() {
   const products = {};
 
   // 1. Find coffee section headers (col A non-empty, col B + col E empty,
-  // string is mostly uppercase). Skip the master grid area (rows 1–20).
+  // string is mostly uppercase). No row-number floor — the col-B-empty filter
+  // already excludes master-grid rows (which always have a price in col B).
+  // The first real product (TAKEAWAY FC MILK COFFEE) sits at ~row 13.
   const sections = [];
-  for (let r = 20; r < data.length; r++) {
+  for (let r = 0; r < data.length; r++) {
     const a = String(data[r][0] || '').trim();
     const b = String(data[r][1] || '').trim();
     const e = String((data[r][4] || '')).trim();
     if (!a || a.length < 4) continue;
-    if (b || e) continue;                                            // not a header row
+    if (b || e) continue;                                            // not a header row (master grid has B filled)
     if (!/[A-Z]/.test(a) || a !== a.toUpperCase()) continue;        // require uppercase letters
     if (!/^[A-Z0-9 ()+&'\.\-\/]+$/.test(a)) continue;
     if (/\([A-Z]+\d+\)\s*$/.test(a)) continue;                      // skip master grid labels
     const blacklist = ['TOTAL', 'PROFIT', 'PROFIT %', 'RETAIL PRICE', 'WASTAGE',
-                       'PRICES', 'COFFEE', 'MILK', 'SUGAR', 'PACKAGING'];
+                       'PRICES', 'COFFEE', 'MILK', 'SUGAR', 'PACKAGING',
+                       'MILKS', 'EXTRAS', 'PANTRY', 'MADE IN HOUSE'];
     if (blacklist.indexOf(a) !== -1) continue;
     sections.push({ row: r, header: a });
   }
