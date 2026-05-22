@@ -240,12 +240,12 @@ async function getShoppingTasks() {
   // Unchecked items from the 🛒 Shopping List page. Bought items (checked there
   // or via the widget) are skipped, so the list self-clears.
   const data = await notionFetch(`/blocks/${SHOPPING_PAGE_ID}/children?page_size=100`);
-  const items: { id: string; text: string; checked: boolean; isRecurring?: boolean }[] = [];
+  const items: { id: string; text: string; checked: boolean; isRecurring: boolean }[] = [];
   for (const block of (data.results || [])) {
     if (block.type === 'to_do' && !block.to_do?.checked) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const raw = (block.to_do?.rich_text || []).map((r: any) => r.plain_text).join('');
-      if (raw.trim()) items.push({ id: block.id, text: raw.trim(), checked: false });
+      if (raw.trim()) items.push({ id: block.id, text: raw.trim(), checked: false, isRecurring: false });
     }
   }
   return items;
