@@ -34,6 +34,8 @@ Live in ~30 seconds after push. To roll back, go to **vercel.com → your projec
 ### ⚡ Daily To Do
 Pulls today's tasks from Notion. Swipe right to defer to tomorrow, swipe left to delete. Recurring tasks (no date prefix) stay in Notion and reappear each cycle.
 
+**🛒 Shopping List section** — renders at the bottom of the card as its own labelled group, pulled from a dedicated Shopping List Notion page (`3683c99c0e8581c7b19cc2eec6b27b47`, lives under ⚙️ Daily Task Sources). Only *unchecked* items appear, so the list self-clears as things are bought. Add or tick items on that page (or via the standalone live widget) from any device. The same Shopping List page also feeds the `gdaytiger-os` daily updater (`api/update.js`, v8+), which renders the same section onto the TIGER OS Notion page each morning — so the shopping list shows consistently across the app, the Notion page, and the widget.
+
 ### 📅 The Week Ahead
 Roster pulled from Notion. Tap any day to view/add tasks for that date. Task count badge shows items per shift.
 
@@ -77,7 +79,7 @@ Live margin view pulled from the Notion Product Costings database.
 
 | Route | Method | Description |
 |---|---|---|
-| `/api/dashboard` | GET | Daily tasks, projects, personal todos, weather |
+| `/api/dashboard` | GET | Daily tasks (incl. 🛒 Shopping List group), projects, personal todos, weather |
 | `/api/costings` | GET | All products from Notion with margin calculated |
 | `/api/roster` | GET | Week's shifts |
 | `/api/week-tasks` | GET | Tasks per day this week |
@@ -172,7 +174,8 @@ Gmail → SaveInvoicesToDrive (hourly) → Drive folders
 |---|---|
 | `NOTION_API_KEY` | All `/api/` routes that talk to Notion |
 | `ANTHROPIC_API_KEY` | `/api/claude-assist` |
-| `DASHBOARD_PASSWORD` | `/api/login` |
+| `APP_PASSWORD` | The password entered at `/login` (verified by `/api/login`) |
+| `SESSION_TOKEN` | Value of the `gdt_session` cookie; `middleware.ts` gates the whole app against it |
 
 ---
 
