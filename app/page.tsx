@@ -1350,15 +1350,19 @@ export default function Home() {
                   currentGroup.tasks.push(task);
                 }
               }
+              // Pull the Shopping List out so it renders as its own section at the bottom
+              const SHOPPING_CAT = '🛒 SHOPPING LIST';
+              const shoppingGroup = groups.find(g => g.category === SHOPPING_CAT) || null;
+              const normalGroups = groups.filter(g => g.category !== SHOPPING_CAT);
               // Sort groups by priority, uncategorised last
-              groups.sort((a, b) => {
+              normalGroups.sort((a, b) => {
                 const ai = CATEGORY_ORDER.indexOf(a.category);
                 const bi = CATEGORY_ORDER.indexOf(b.category);
                 return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
               });
               // Checked tasks sink to the absolute bottom of the list (across all categories)
               const checkedBucket: { task: typeof displayedTasks[0]; category: string }[] = [];
-              const uncheckedGroups = groups.map(g => ({
+              const uncheckedGroups = normalGroups.map(g => ({
                 ...g,
                 tasks: g.tasks.filter(t => { if (t.checked) { checkedBucket.push({ task: t, category: g.category }); return false; } return true; }),
               })).filter(g => g.tasks.length > 0);
@@ -1369,10 +1373,25 @@ export default function Home() {
                   onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined)}
                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined })); e.dataTransfer.effectAllowed = 'move'; }} />
               );
-              return [
+              const elements = [
                 ...uncheckedGroups.flatMap(group => group.tasks.map(task => renderTask(task, group.category))),
                 ...checkedBucket.map(({ task, category }) => renderTask(task, category)),
               ];
+              if (shoppingGroup && shoppingGroup.tasks.length > 0) {
+                const shoppingSorted = [
+                  ...shoppingGroup.tasks.filter(t => !t.checked),
+                  ...shoppingGroup.tasks.filter(t => t.checked),
+                ];
+                elements.push(
+                  <div key="shopping-section" style={{ paddingTop: '14px', marginTop: '6px', borderTop: '1px solid rgba(0,0,0,0.07)' }}>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" style={{ fontFamily: '"stolzl", sans-serif' }}>🛒 Shopping List</p>
+                    <div className="space-y-2">
+                      {shoppingSorted.map(task => renderTask(task, ''))}
+                    </div>
+                  </div>
+                );
+              }
+              return elements;
             })()}
           </div>
         </Card>
