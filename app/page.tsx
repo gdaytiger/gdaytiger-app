@@ -1080,6 +1080,9 @@ export default function Home() {
   const [priceDrift, setPriceDrift] = useState<PriceDriftData | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [taskContext, setTaskContext] = useState<Record<string, string>>({});
+  const [shoppingOpen, setShoppingOpen] = useState(false);
+  const [addingShopping, setAddingShopping] = useState(false);
+  const [newShoppingText, setNewShoppingText] = useState('');
   const claudeMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const todayStr = data?.todayStr ?? '';
@@ -1103,6 +1106,35 @@ export default function Home() {
       setServerState(state);
       return state;
     } catch { return {}; }
+  };
+
+  // Shopping items live on the Shopping List Notion page (not date-based).
+  // Checking writes straight to the Notion checkbox so a bought item never returns.
+  const toggleShopping = (blockId: string, checked: boolean) => {
+    setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
+    fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) }).catch(() => {});
+  };
+
+  const addShopping = async (text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    setNewShoppingText('');
+    setAddingShopping(false);
+    try {
+      const res = await fetch('/api/add-shopping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }) });
+      const d = await res.json();
+      if (d.blockId) {
+        setData(prev => {
+          if (!prev) return prev;
+          const hasHeader = prev.dailyTasks.some(t2 => t2.isHeader && t2.text.toUpperCase().includes('SHOPPING'));
+          const newItem = { id: d.blockId, text: t, checked: false, isRecurring: false };
+          const additions = hasHeader
+            ? [newItem]
+            : [{ id: 'header-shopping', text: '🛒 SHOPPING LIST', checked: false, isHeader: true }, newItem];
+          return { ...prev, dailyTasks: [...prev.dailyTasks, ...additions] };
+        });
+      }
+    } catch { /* ignore */ }
   };
 
   const fetchDashboard = async (state: Record<string, string[]>) => {
@@ -1312,7 +1344,12 @@ export default function Home() {
   const displayedTasks = isViewingOtherDay ? (weekTasks[selectedDate!]?.tasks ?? []) : data.dailyTasks;
   const selectedShift = selectedDate ? shifts.find(s => s.date === selectedDate) : null;
   const displayDayLabel = isViewingOtherDay && selectedShift ? selectedShift.label : null;
-  const dailyTasks = displayedTasks.filter(t => !t.isHeader);
+  // Day tasks only (exclude the 🛒 Shopping List group — it has its own tile + count)
+  let _inShoppingCount = false;
+  const dailyTasks = displayedTasks.filter(t => {
+    if (t.isHeader) { _inShoppingCount = t.text.toUpperCase().includes('SHOPPING'); return false; }
+    return !_inShoppingCount;
+  });
   const dailyDone = dailyTasks.filter(t => t.checked).length;
   const projectsDone = data.projects.flatMap(p => p.todos).filter(t => t.checked).length;
   const projectsTotal = data.projects.flatMap(p => p.todos).length;
@@ -1387,20 +1424,49 @@ export default function Home() {
                 ...uncheckedGroups.flatMap(group => group.tasks.map(task => renderTask(task, group.category))),
                 ...checkedBucket.map(({ task, category }) => renderTask(task, category)),
               ];
-              if (shoppingGroup && shoppingGroup.tasks.length > 0) {
-                const shoppingSorted = [
-                  ...shoppingGroup.tasks.filter(t => !t.checked),
-                  ...shoppingGroup.tasks.filter(t => t.checked),
-                ];
-                elements.push(
-                  <div key="shopping-section" style={{ paddingTop: '14px', marginTop: '6px', borderTop: '1px solid rgba(0,0,0,0.07)' }}>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" style={{ fontFamily: '"stolzl", sans-serif' }}>🛒 Shopping List</p>
-                    <div className="space-y-2">
-                      {shoppingSorted.map(task => renderTask(task, ''))}
-                    </div>
+              // 🛒 Shopping List — one collapsible tile with a count badge (like the week-ahead rows).
+              // Tap to expand into one tile per item; tick = bought (writes to Notion, won't return).
+              const shoppingItems = shoppingGroup ? shoppingGroup.tasks : [];
+              const shoppingUnchecked = shoppingItems.filter(t => !t.checked);
+              const shoppingChecked = shoppingItems.filter(t => t.checked);
+              const shoppingCount = shoppingUnchecked.length;
+              const tileStyle = { minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
+              elements.push(
+                <div key="shopping" style={{ marginTop: '2px' }}>
+                  <div onClick={() => setShoppingOpen(o => !o)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3" style={tileStyle}>
+                    <span className="text-base">🛒</span>
+                    <span className="flex-1 text-sm font-semibold text-gray-800">Shopping List</span>
+                    <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: shoppingCount > 0 ? '#fbcdad' : 'rgba(0,0,0,0.06)', color: shoppingCount > 0 ? '#333' : '#aaa', fontSize: '11px', flexShrink: 0 }}>{shoppingCount}</span>
+                    <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{shoppingOpen ? '▼' : '▶'}</span>
                   </div>
-                );
-              }
+                  {shoppingOpen && (
+                    <div className="space-y-2 mt-2 pl-3" style={{ borderLeft: '2px solid rgba(251,205,173,0.4)' }}>
+                      {[...shoppingUnchecked, ...shoppingChecked].map(item => (
+                        <div key={item.id} className="rounded-2xl flex items-start gap-3 px-3 py-2.5" style={tileStyle}>
+                          <div onClick={() => toggleShopping(item.id, !item.checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: item.checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: item.checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
+                            {item.checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          <span onClick={() => toggleShopping(item.id, !item.checked)} className={`flex-1 text-sm leading-snug font-semibold cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{item.text}</span>
+                        </div>
+                      ))}
+                      {shoppingItems.length === 0 && !addingShopping && (
+                        <p className="text-sm text-gray-400 italic px-1">Nothing to buy 🎉</p>
+                      )}
+                      {addingShopping ? (
+                        <div className="flex gap-2 items-center">
+                          <input value={newShoppingText} onChange={e => setNewShoppingText(e.target.value)} autoFocus
+                            onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText); if (e.key === 'Escape') { setAddingShopping(false); setNewShoppingText(''); } }}
+                            placeholder="Add item…" className="flex-1 min-w-0 text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300 text-gray-800" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                          <button onClick={() => addShopping(newShoppingText)} disabled={!newShoppingText.trim()} className="text-xs px-3 py-2 rounded-xl font-semibold disabled:opacity-40 shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
+                          <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); }} className="text-gray-400 hover:text-gray-600 text-lg leading-none shrink-0">×</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setAddingShopping(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors pl-1">+ Add item</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
               return elements;
             })()}
           </div>
