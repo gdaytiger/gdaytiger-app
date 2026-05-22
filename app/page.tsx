@@ -1122,19 +1122,24 @@ export default function Home() {
   };
 
   useEffect(() => {
+    // Safety net: never let a slow or stalled request freeze the app on the loading screen.
+    const safety = setTimeout(() => setLoading(false), 12000);
     const init = async () => {
-      const [rosterData, state] = await Promise.all([
-        fetch('/api/roster').then(r => r.json()).catch(() => ({ shifts: [] })),
-        fetchServerState(),
-      ]);
-      setShifts(rosterData.shifts || []);
-      await Promise.all([fetchDashboard(state).catch(() => {}), fetchWeekTasks(state).catch(() => {})]);
-      fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
-      fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
-      fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
-      fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
-      fetchTaskContext().catch(() => {});
-      setLoading(false);
+      try {
+        const state = await fetchServerState();
+        // Only the core dashboard data blocks the loading screen; everything else fills in after.
+        await fetchDashboard(state).catch(() => {});
+        fetch('/api/roster').then(r => r.json()).then(d => setShifts(d.shifts || [])).catch(() => {});
+        fetchWeekTasks(state).catch(() => {});
+        fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
+        fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
+        fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
+        fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
+        fetchTaskContext().catch(() => {});
+      } finally {
+        clearTimeout(safety);
+        setLoading(false);
+      }
     };
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1296,7 +1301,12 @@ export default function Home() {
     </div>
   );
 
-  if (!data) return null;
+  if (!data) return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-8 text-center" style={{ background: 'linear-gradient(135deg, #f0f4ff 0%, #fef9f0 50%, #f0fff4 100%)' }}>
+      <p className="text-gray-500 text-sm">Couldn&apos;t load — check your connection.</p>
+      <button onClick={() => window.location.reload()} className="text-xs uppercase tracking-widest px-5 py-2 rounded-full font-semibold" style={{ background: '#fbcdad', color: '#333' }}>Reload</button>
+    </div>
+  );
 
   const isViewingOtherDay = selectedDate !== null && selectedDate !== todayStr;
   const displayedTasks = isViewingOtherDay ? (weekTasks[selectedDate!]?.tasks ?? []) : data.dailyTasks;
