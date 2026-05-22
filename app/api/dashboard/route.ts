@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const PROJECTS_DB_ID = 'f7712afe4c7247d7b1690f2e1ecc1a0d';
 const NOTION_PAGE_ID = '3403c99c0e858113a941c2118b3cdef9';
+const SHOPPING_PAGE_ID = '3683c99c0e8581c7b19cc2eec6b27b47';
 const WEATHER_LAT = -38.4552;
 const WEATHER_LNG = 145.2305;
 
@@ -235,6 +236,21 @@ async function getDailyTasks(dayOfWeek: number, today: Date) {
   return tasks;
 }
 
+async function getShoppingTasks() {
+  // Unchecked items from the 🛒 Shopping List page. Bought items (checked there
+  // or via the widget) are skipped, so the list self-clears.
+  const data = await notionFetch(`/blocks/${SHOPPING_PAGE_ID}/children?page_size=100`);
+  const items: { id: string; text: string; checked: boolean; isRecurring?: boolean }[] = [];
+  for (const block of (data.results || [])) {
+    if (block.type === 'to_do' && !block.to_do?.checked) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = (block.to_do?.rich_text || []).map((r: any) => r.plain_text).join('');
+      if (raw.trim()) items.push({ id: block.id, text: raw.trim(), checked: false });
+    }
+  }
+  return items;
+}
+
 async function getProjects() {
   const data = await notionFetch(
     `/databases/${PROJECTS_DB_ID}/query`,
@@ -294,12 +310,13 @@ export async function GET() {
   const today = new Date(new Date().getTime() + 10 * 60 * 60 * 1000);
   const dayOfWeek = today.getDay();
 
-  const [weather, dailyTasks, projects, personalTodos, checkedState] = await Promise.all([
+  const [weather, dailyTasks, projects, personalTodos, checkedState, shoppingItems] = await Promise.all([
     getWeather(),
     getDailyTasks(dayOfWeek, today),
     getProjects(),
     getPersonalTodos(),
     getCheckedState(),
+    getShoppingTasks(),
   ]);
 
   // Inject any [CARRY] tasks from past days that haven't been checked off yet
@@ -317,6 +334,12 @@ export async function GET() {
         carryTask,
       );
     }
+  }
+
+  // Append the 🛒 Shopping List as its own group at the end of the daily list
+  if (shoppingItems.length > 0) {
+    dailyTasks.push({ id: 'header-shopping', text: '🛒 SHOPPING LIST', checked: false, isHeader: true });
+    for (const item of shoppingItems) dailyTasks.push(item);
   }
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
