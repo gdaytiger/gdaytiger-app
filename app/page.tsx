@@ -1435,7 +1435,7 @@ export default function Home() {
                 <div key="shopping" style={{ marginTop: '2px' }}>
                   <div onClick={() => setShoppingOpen(o => !o)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3" style={tileStyle}>
                     <span className="text-base">🛒</span>
-                    <span className="flex-1 text-sm font-semibold text-gray-800">Shopping List</span>
+                    <span className="flex-1 text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>Shopping List</span>
                     <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: shoppingCount > 0 ? '#fbcdad' : 'rgba(0,0,0,0.06)', color: shoppingCount > 0 ? '#333' : '#aaa', fontSize: '11px', flexShrink: 0 }}>{shoppingCount}</span>
                     <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{shoppingOpen ? '▼' : '▶'}</span>
                   </div>
@@ -1449,19 +1449,16 @@ export default function Home() {
                           <span onClick={() => toggleShopping(item.id, !item.checked)} className={`flex-1 text-sm leading-snug font-semibold cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{item.text}</span>
                         </div>
                       ))}
-                      {shoppingItems.length === 0 && !addingShopping && (
-                        <p className="text-sm text-gray-400 italic px-1">Nothing to buy 🎉</p>
-                      )}
                       {addingShopping ? (
-                        <div className="flex gap-2 items-center">
+                        <div className="flex items-center gap-2">
                           <input value={newShoppingText} onChange={e => setNewShoppingText(e.target.value)} autoFocus
                             onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText); if (e.key === 'Escape') { setAddingShopping(false); setNewShoppingText(''); } }}
-                            placeholder="Add item…" className="flex-1 min-w-0 text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300 text-gray-800" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                          <button onClick={() => addShopping(newShoppingText)} disabled={!newShoppingText.trim()} className="text-xs px-3 py-2 rounded-xl font-semibold disabled:opacity-40 shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
-                          <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); }} className="text-gray-400 hover:text-gray-600 text-lg leading-none shrink-0">×</button>
+                            placeholder="ADD AN ITEM..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                          <button onClick={() => addShopping(newShoppingText)} disabled={!newShoppingText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>ADD</button>
+                          <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
                         </div>
                       ) : (
-                        <button onClick={() => setAddingShopping(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors pl-1">+ Add item</button>
+                        <button onClick={() => setAddingShopping(true)} className="transition-colors text-xl leading-none font-light text-gray-300 hover:text-gray-400 pl-1" aria-label="Add item">+</button>
                       )}
                     </div>
                   )}
