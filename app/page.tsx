@@ -1458,7 +1458,7 @@ export default function Home() {
                           <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
                         </div>
                       ) : (
-                        <button onClick={() => setAddingShopping(true)} className="transition-colors text-xl leading-none font-light text-gray-300 hover:text-gray-400 pl-1" aria-label="Add item">+</button>
+                        <button onClick={() => setAddingShopping(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 transition-colors" style={{ border: '1px dashed rgba(0,0,0,0.12)' }} aria-label="Add item"><span className="text-base leading-none font-light">+</span> Add item</button>
                       )}
                     </div>
                   )}
