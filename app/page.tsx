@@ -1384,7 +1384,7 @@ export default function Home() {
             </div>
           }>
           <div className="space-y-2">
-            {displayedTasks.length === 0 ? <p className="text-sm text-gray-400 italic">No tasks {isViewingOtherDay ? 'this day' : 'today'} 🎉</p> : (() => {
+            {(() => {
               // Group tasks by category
               const groups: { category: string; tasks: typeof displayedTasks }[] = [];
               let currentGroup: { category: string; tasks: typeof displayedTasks } | null = null;
@@ -1431,7 +1431,7 @@ export default function Home() {
               const shoppingChecked = shoppingItems.filter(t => t.checked);
               const shoppingCount = shoppingUnchecked.length;
               const tileStyle = { minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
-              elements.push(
+              if (!isViewingOtherDay) elements.push(
                 <div key="shopping" style={{ marginTop: '2px' }}>
                   <div onClick={() => setShoppingOpen(o => !o)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3" style={tileStyle}>
                     <span className="text-base">🛒</span>
