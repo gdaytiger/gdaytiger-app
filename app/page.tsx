@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
 import AddProductModal from './components/AddProductModal';
+import AddIngredientModal from './components/AddIngredientModal';
 
 interface Todo {
   id: string;
@@ -839,7 +840,7 @@ function MarginBadges({ items }: { items: CostingProduct[] }) {
   );
 }
 
-function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; recipeMap: RecipeMapData | null }) {
+function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIngredientsChanged }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void }) {
   const withMargin  = costings.filter(p => p.margin !== null);
   const coffeeItems = [...withMargin].filter(p => p.category === 'Coffee').sort((a, b) => a.margin! - b.margin!);
   const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee').sort((a, b) => a.margin! - b.margin!);
@@ -1017,6 +1018,17 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { c
   }, [ingredientChanges, priceQuery]);
   const filteredCount = supplierGroups.reduce((n, g) => n + g.items.length, 0);
 
+  const [addIngredientOpen, setAddIngredientOpen] = useState(false);
+
+  // Collapsible supplier tiles (Shopping List pattern). Searching auto-expands.
+  const isSearching = priceQuery.trim().length > 0;
+  const [openSuppliers, setOpenSuppliers] = useState<Set<string>>(new Set());
+  const toggleSupplier = (s: string) => setOpenSuppliers(prev => {
+    const next = new Set(prev);
+    if (next.has(s)) next.delete(s); else next.add(s);
+    return next;
+  });
+
   const addButton = (cat: 'food' | 'coffee') => (
     <button
       onClick={() => setAddProductOpen(cat)}
@@ -1050,9 +1062,24 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { c
         ingredients={ingredientPrices?.ingredients ?? []}
       />
 
+      {addIngredientOpen && (
+        <AddIngredientModal
+          open
+          onClose={() => setAddIngredientOpen(false)}
+          onSuccess={() => onIngredientsChanged?.()}
+        />
+      )}
+
       {/* ── Ingredient Prices ── (full width) */}
       <div className="md:col-span-2">
-        <Card emoji="📦" title="Supplier Prices">
+        <Card emoji="📦" title="Supplier Prices" headerRight={
+          <button
+            onClick={() => setAddIngredientOpen(true)}
+            className="text-xs font-semibold px-2 py-1 rounded-lg transition-colors"
+            style={{ background: 'rgba(0,0,0,0.06)', color: '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}
+            title="Add an ingredient from a recent invoice"
+          >+ ADD</button>
+        }>
           {firstLoad ? (
             <p className="text-xs text-gray-400 italic">Baseline saved — ingredient changes appear from tomorrow.</p>
           ) : ingredientChanges.length === 0 ? (
@@ -1068,7 +1095,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { c
                 <input
                   value={priceQuery}
                   onChange={e => setPriceQuery(e.target.value)}
-                  placeholder="Search ingredient or supplier..."
+                  placeholder="Search Ingredient or supplier..."
                   className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
                   style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }}
                 />
@@ -1082,18 +1109,31 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { c
                   {filteredCount === 0 ? (
                     <p className="text-xs text-gray-400 italic">No matches for &ldquo;{priceQuery.trim()}&rdquo;.</p>
                   ) : (
-                    supplierGroups.map(group => (
-                      <div key={group.supplier} className="mb-4">
-                        <div className="flex items-center gap-2 mb-1.5 px-1">
-                          <span className="text-xs font-bold text-gray-600" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>{group.supplier}</span>
-                          <span className="text-xs text-gray-400">{group.items.length}</span>
-                          <div className="flex-1 h-px" style={{ background: 'rgba(0,0,0,0.08)' }} />
+                    supplierGroups.map(group => {
+                      const changeCount = group.items.filter(i => i.delta !== undefined).length;
+                      const open = isSearching || openSuppliers.has(group.supplier);
+                      const tileStyle = { minHeight: '52px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
+                      return (
+                        <div key={group.supplier} style={{ marginBottom: '8px' }}>
+                          <div onClick={() => toggleSupplier(group.supplier)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3" style={tileStyle}>
+                            <span className="text-base">📦</span>
+                            <span className="flex-1 text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{group.supplier}</span>
+                            {changeCount > 0 && (
+                              <span className="flex items-center justify-center rounded-full font-bold" style={{ minWidth: '22px', height: '22px', padding: '0 6px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{changeCount}</span>
+                            )}
+                            <span className="text-xs text-gray-400" style={{ flexShrink: 0 }}>{group.items.length}</span>
+                            <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
+                          </div>
+                          {open && (
+                            <div className="mt-2 pl-3" style={{ borderLeft: '2px solid rgba(251,205,173,0.4)' }}>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                                {group.items.map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-                          {group.items.map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -1598,7 +1638,7 @@ export default function Home() {
         </Card>
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (fragment renders 3 cards) */}
-        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} recipeMap={recipeMap} />
+        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} recipeMap={recipeMap} onIngredientsChanged={() => fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {})} />
 
       </div>
 

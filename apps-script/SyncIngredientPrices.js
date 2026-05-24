@@ -173,6 +173,17 @@ function sipCollectPrices_() {
     }
   }
 
+  // ── Custom ingredients (added via the app's Supplier Prices "+") ──────────────
+  // Read from the dynamic CustomIngredients tab (see AddIngredient.js) and merge
+  // any not already present by key, so app-added items appear in Supplier Prices.
+  try {
+    const have = {};
+    ingredients.forEach(function (i) { have[i.key] = true; });
+    sipCustomIngredients_().forEach(function (ci) {
+      if (ci.price > 0 && !have[ci.key]) ingredients.push(ci);
+    });
+  } catch (e) { /* AddIngredient.js helpers unavailable — skip */ }
+
   return {
     type: 'ingredient_prices',
     updated: new Date().toISOString(),

@@ -425,6 +425,17 @@ function scanSimpleDriveSuppliers_(cutoff, log) {
   return updates;
 }
 
+// ─── MANUAL RE-SCAN HELPER ────────────────────────────────────────────────────
+// Forces the COFFEE scan to re-read recent invoices, even ones already processed,
+// by passing a backdated cutoff (14 days). Use after a parser fix to make the
+// scanner re-pull and re-write prices from invoices it has already seen.
+// Does NOT touch the normal last-scan timestamp, so scheduled runs are unaffected.
+// Run this from the editor's Run button, then check the COFFEE sheet (e.g. D8 oat).
+function rescanThisWeek() {
+  const backdated = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  return scanCoffeeSuppliers(backdated);
+}
+
 // ─── COFFEE SCANNER ───────────────────────────────────────────────────────────
 
 function scanCoffeeSuppliers(cutoffOverride) {
@@ -486,7 +497,7 @@ function scanCoffeeSuppliers(cutoffOverride) {
     log.push(`${files.length} Drive invoice(s)`);
     files.forEach(f => {
       const text   = extractPdfText(f.getId()); if (!text) return;
-      const prices = parseRediMilkText(text);
+      const prices = parseRediMilkText(text, log);
       Object.keys(prices).forEach(cell => {
         if (validateAndUpdate(coffeeSheet, cell, prices[cell], 'Redi Milk', log, COFFEE_CELL_META)) updates++;
       });
@@ -943,44 +954,86 @@ function parsePlanetwareText(text) {
   return results;
 }
 
-function parseRediMilkText(text) {
+function parseRediMilkText(text, log) {
   // Redi Milk invoice rows look like:
   //   <supplier_id> <unit> <PRODUCT> [(pack)] <qty> <qty> [<sc%>] <unit_price> <line_total>
   // After PDF OCR all rows are concatenated onto one line. Approach:
   //   1. Locate the keyword (product name)
-  //   2. Bound the row at the NEXT "<int> <int>(LT|KG|ML)" marker (= start of next row)
-  //   3. Within the bounded segment, the SECOND-TO-LAST decimal is the unit price
-  //      (last is the line total). This handles all 3 layouts cleanly:
-  //         Alt.Dairy:  [unit, total]                   → second-to-last = unit  ✓
-  //         Sungold:    [sc%, unit, total]              → second-to-last = unit  ✓
-  //         Happy Soy:  [unit, total]                   → second-to-last = unit  ✓
+  //   2. Within the text after it, take the FIRST money value (exactly 2 dp) as
+  //      the unit price. Day/qty columns are whole numbers, and the SC% column
+  //      (e.g. "10.3500", 4 dp) is excluded by a negative lookahead — so the
+  //      first 2-dp value is always the unit price. Works for every layout:
+  //         Alt.Dairy:  [unit, total]              → first 2dp = unit  ✓
+  //         Sungold:    [sc%, unit, total]         → first 2dp = unit  ✓ (sc% skipped)
+  //         Happy Soy:  [unit, total]              → first 2dp = unit  ✓
+  //      ...and for qty 1 (unit == total) as well as qty > 1.
+  //
+  //   The previous version bounded the row at the next "<int> <int>LT/KG/ML"
+  //   marker and took the second-to-last decimal. But the Simple Juicery Orange
+  //   row has NO unit token, so the boundary skipped past it — Oat's segment
+  //   swallowed Orange's decimals and the second-to-last landed on Orange's
+  //   $33.60. Taking the first 2-dp value removes the dependence on detecting
+  //   the next row at all, so a unit-less neighbour can't bleed in. Fixed.
   const results = {};
   const blob    = text.replace(/\r/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ');
 
   function findUnitPrice(keyword) {
     const idx = blob.toUpperCase().indexOf(keyword.toUpperCase());
     if (idx === -1) return null;
-    const after = blob.substring(idx + keyword.length);
-    // Stop at start of next product row OR at end-of-products markers
-    // (Fuel Levy / Total / GST Value lines). Without this, the last product
-    // (e.g. Happy Soy) would bleed into Fuel Levy decimals.
-    const stop = after.match(/\s\d+\s+\d+(LT|KG|ML|GM)\b|FUEL\s*LEVY|TOTAL\s*FOR|GST\s*VALUE/i);
-    const endIdx = stop ? stop.index : Math.min(after.length, 100);
-    const segment = after.substring(0, endIdx);
-    const nums = segment.match(/\d+\.\d{2}/g);
+    // Cap the window so a missing keyword can't scan half the invoice; the
+    // unit price always sits within ~120 chars of the product name.
+    const after = blob.substring(idx + keyword.length, idx + keyword.length + 120);
+    const nums = after.match(/\d+\.\d{2}(?!\d)/g);   // 2-dp money only; excludes 4-dp SC%
     if (!nums || nums.length === 0) return null;
-    return nums.length >= 2
-      ? parseFloat(nums[nums.length - 2])
-      : parseFloat(nums[0]);
+    const price = parseFloat(nums[0]);               // first money value = unit price
+    return (price > 0.5 && price < 500) ? price : null;
   }
 
-  let p;
-  p = findUnitPrice('SUNGOLD JERSEY');     if (p) results['D5'] = p;
-  p = findUnitPrice('SUNGOLD LOWFAT');     if (p) results['D6'] = p;
-  p = findUnitPrice('HAPPY HAPPY SOY');    if (p) results['D7'] = p;
-  p = findUnitPrice('ALT.DAIRY.CO OAT');   if (p) results['D8'] = p;
-  p = findUnitPrice('ALT.DAIRY.CO ALMOND');if (p) results['D9'] = p;
+  // Single source of truth: cell ↔ product keyword.
+  const RM_KEYWORDS = {
+    D5: 'SUNGOLD JERSEY',
+    D6: 'SUNGOLD LOWFAT',
+    D7: 'HAPPY HAPPY SOY',
+    D8: 'ALT.DAIRY.CO OAT',
+    D9: 'ALT.DAIRY.CO ALMOND'
+  };
+  Object.keys(RM_KEYWORDS).forEach(cell => {
+    const price = findUnitPrice(RM_KEYWORDS[cell]);
+    if (price) results[cell] = price;
+  });
+
+  // Cross-line bleed alarm: the classic parser failure reads a price off a
+  // NEIGHBOURING product's row (that's how Oat once picked up Orange's $33.60).
+  // Fingerprint: a captured price exactly matches the unit price on a DIFFERENT
+  // product line. This only LOGS a ⚠ warning — it never blocks the write (the
+  // parser change is the real fix; this is an early-warning net for future
+  // invoice-format surprises). A rare false positive is possible if two SKUs
+  // genuinely share a price, hence "verify" rather than "rejected".
+  flagRediMilkBleed_(text, results, RM_KEYWORDS, log);
+
   return results;
+}
+
+// Soft detector — see note in parseRediMilkText. Logs only, never throws.
+function flagRediMilkBleed_(text, results, keywords, log) {
+  if (!log || !text) return;
+  // Each invoice line that carries a money value → its first 2-dp price + text.
+  const lineOwners = [];
+  text.split(/[\r\n]+/).forEach(line => {
+    const m = line.match(/\d+\.\d{2}(?!\d)/);   // exclude 4-dp SC%
+    if (m) lineOwners.push({ price: parseFloat(m[0]), desc: line.trim() });
+  });
+  Object.keys(results).forEach(cell => {
+    const price = results[cell];
+    const kw    = (keywords[cell] || '').toUpperCase();
+    const foreign = lineOwners.find(o =>
+      Math.abs(o.price - price) < 0.005 && o.desc.toUpperCase().indexOf(kw) === -1);
+    if (foreign) {
+      log.push(`  ⚠ BLEED CHECK ${cell} [${kw}]: $${price} also appears on a ` +
+               `different line ("${foreign.desc.substring(0, 45)}") — possible ` +
+               `cross-line misread, verify.`);
+    }
+  });
 }
 
 // ─── CELL UPDATERS ────────────────────────────────────────────────────────────

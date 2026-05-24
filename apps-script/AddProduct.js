@@ -121,7 +121,17 @@ function doPost(e) {
       return _json({ ok: false, error: 'unauthorized' }, 401);
     }
     const payload = JSON.parse(e.postData.contents);
-    const result = addProduct_(payload);
+    // Route on action so this single web app serves multiple features.
+    // No action = legacy add-product calls (back-compatible).
+    const action = payload && payload.action;
+    let result;
+    if (action === 'searchInvoices') {
+      result = searchInvoicesForItem_(payload.query);
+    } else if (action === 'addCustomIngredient') {
+      result = addCustomIngredient_(payload);
+    } else {
+      result = addProduct_(payload);
+    }
     return _json(result);
   } catch (err) {
     return _json({ ok: false, error: String(err && err.message || err) }, 500);
