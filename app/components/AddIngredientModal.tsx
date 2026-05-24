@@ -9,6 +9,7 @@ type Match = {
   line: string;
   prices: number[];
   suggestedPrice: number;
+  suggestedUnit?: string;
 };
 
 type SearchResponse = { ok: boolean; error?: string; matches?: Match[]; count?: number; note?: string };
@@ -84,6 +85,7 @@ export default function AddIngredientModal({
     setSelectedIdx(idx);
     setSupplier(m.supplier);
     setPrice(String(chosenPrice ?? m.suggestedPrice));
+    if (m.suggestedUnit) setUnit(m.suggestedUnit);
     if (!name) setName(titleCase(query));
   };
 

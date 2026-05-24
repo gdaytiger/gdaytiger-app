@@ -136,13 +136,19 @@ function searchInvoicesForItem_(query) {
       // instead of the first item's price on the line. Fall back to the closest
       // value before the keyword, then to the first value.
       var after = all.filter(function (a) { return a.pos > kwPos; });
-      var suggested;
+      var chosen;
       if (after.length) {
-        suggested = after[0].val;
+        chosen = after[0];
       } else {
         var before = all.filter(function (a) { return a.pos < kwPos; });
-        suggested = before.length ? before[before.length - 1].val : all[0].val;
+        chosen = before.length ? before[before.length - 1] : all[0];
       }
+
+      // Pack size / weight sits between the item name and its price, e.g.
+      // "Streaky Bacon 500g 16.25". Pull the first size token in that gap.
+      var unitSeg = line.substring(kwPos, chosen.pos > kwPos ? chosen.pos : line.length);
+      var um = unitSeg.match(/(\d+(?:\.\d+)?)\s?(kg|g|ml|l|oz|lb|pk|pack|doz|dozen|tin|jar|drum|box|loaf|bunch|slices|sl|each|ea)\b/i);
+      var suggestedUnit = um ? (um[1] + um[2]).toLowerCase() : '';
 
       matches.push({
         supplier: supplier,
@@ -150,7 +156,8 @@ function searchInvoicesForItem_(query) {
         date: date,
         line: line.trim().slice(0, 160),
         prices: all.map(function (a) { return a.val; }),
-        suggestedPrice: suggested
+        suggestedPrice: chosen.val,
+        suggestedUnit: suggestedUnit
       });
     });
   }
