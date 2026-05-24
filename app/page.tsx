@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
 import AddProductModal from './components/AddProductModal';
 
 interface Todo {
@@ -125,14 +125,28 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   const [localContext, setLocalContext] = useState(context ?? '');
   const THRESHOLD = 90;
 
-  useEffect(() => { setLocalContext(context ?? ''); }, [context]);
+  // Reset the local draft when the incoming context prop changes. Done during
+  // render (React's "adjust state when a prop changes" pattern) instead of in an
+  // effect, which avoids an extra cascading render.
+  const [ctxSnapshot, setCtxSnapshot] = useState(context);
+  if (context !== ctxSnapshot) {
+    setCtxSnapshot(context);
+    setLocalContext(context ?? '');
+  }
 
   const mouseDownRef = useRef(false);
-  // Detect touch/mobile vs mouse/desktop once on mount
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    setIsMobile(window.matchMedia('(hover: none) and (pointer: coarse)').matches);
-  }, []);
+  // Detect touch/mobile vs mouse/desktop. useSyncExternalStore is the SSR-safe
+  // way to read a media query: server snapshot is false, the client reads the
+  // real value on hydration, and it re-renders if the device capability changes.
+  const isMobile = useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia('(hover: none) and (pointer: coarse)');
+      mq.addEventListener('change', cb);
+      return () => mq.removeEventListener('change', cb);
+    },
+    () => window.matchMedia('(hover: none) and (pointer: coarse)').matches,
+    () => false,
+  );
   // Right swipe (→ tomorrow) and drag-and-drop are split by device:
   //   mobile  → right swipe ✓, drag ✗
   //   desktop → right swipe ✗, drag ✓
@@ -842,8 +856,12 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { c
     let hist: SnapEntry[] = [];
     try { hist = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { /* ignore */ }
     const prev = hist.filter(e => e.date !== todayStr && new Date(e.date) >= cutoff).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+    // This derivation reads localStorage (client-only), so it must run in an
+    // effect rather than during SSR render — storing the result in state here
+    // is intentional and not a cascading-render bug.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFirstLoad(!prev && hist.length === 0);
-    let detectedChanges: MarginChange[] = [];
+    const detectedChanges: MarginChange[] = [];
     if (prev) {
       const daysAgo = Math.round((new Date(todayStr).getTime() - new Date(prev.date).getTime()) / 86400000);
       withMargin.forEach(item => {
@@ -1175,7 +1193,7 @@ export default function Home() {
 
   const fetchDashboard = async (state: Record<string, string[]>) => {
     const res = await fetch('/api/dashboard');
-    if (res.status === 401) { window.location.href = '/login'; return; }
+    if (res.status === 401) { window.location.assign('/login'); return; }
     const d = await res.json();
     setData({ ...d, dailyTasks: applyServerChecked(d.dailyTasks, d.todayStr, state) });
   };
@@ -1381,11 +1399,12 @@ export default function Home() {
   const selectedShift = selectedDate ? shifts.find(s => s.date === selectedDate) : null;
   const displayDayLabel = isViewingOtherDay && selectedShift ? selectedShift.label : null;
   // Day tasks only (exclude the 🛒 Shopping List group — it has its own tile + count)
-  let _inShoppingCount = false;
-  const dailyTasks = displayedTasks.filter(t => {
-    if (t.isHeader) { _inShoppingCount = t.text.toUpperCase().includes('SHOPPING'); return false; }
-    return !_inShoppingCount;
-  });
+  const dailyTasks: typeof displayedTasks = [];
+  let inShoppingSection = false;
+  for (const t of displayedTasks) {
+    if (t.isHeader) { inShoppingSection = t.text.toUpperCase().includes('SHOPPING'); continue; }
+    if (!inShoppingSection) dailyTasks.push(t);
+  }
   const dailyDone = dailyTasks.filter(t => t.checked).length;
   const projectsDone = data.projects.flatMap(p => p.todos).filter(t => t.checked).length;
   const projectsTotal = data.projects.flatMap(p => p.todos).length;
