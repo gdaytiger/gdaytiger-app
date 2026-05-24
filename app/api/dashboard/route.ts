@@ -260,24 +260,26 @@ async function getProjects() {
       sorts: [{ property: 'Status', direction: 'ascending' }],
     }
   );
-  const projects = [];
-  for (const p of (data.results || [])) {
-    const name = p.properties.Name?.title?.[0]?.plain_text || 'Untitled';
-    const status = p.properties.Status?.select?.name || 'No Status';
-    const childData = await notionFetch(`/blocks/${p.id}/children?page_size=50`);
+  // Fetch every project's checklist concurrently instead of one-by-one (much faster load).
+  const projects = await Promise.all((data.results || []).map(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const todos = (childData.results || [])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter((b: any) => b.type === 'to_do')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((b: any) => ({
-        id: b.id,
+    async (p: any) => {
+      const name = p.properties.Name?.title?.[0]?.plain_text || 'Untitled';
+      const status = p.properties.Status?.select?.name || 'No Status';
+      const childData = await notionFetch(`/blocks/${p.id}/children?page_size=50`);
+      const todos = (childData.results || [])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        text: (b.to_do?.rich_text || []).map((r: any) => r.plain_text).join(''),
-        checked: b.to_do?.checked || false,
-      }));
-    projects.push({ id: p.id, name, status, todos });
-  }
+        .filter((b: any) => b.type === 'to_do')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((b: any) => ({
+          id: b.id,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          text: (b.to_do?.rich_text || []).map((r: any) => r.plain_text).join(''),
+          checked: b.to_do?.checked || false,
+        }));
+      return { id: p.id, name, status, todos };
+    }
+  ));
   return projects;
 }
 
