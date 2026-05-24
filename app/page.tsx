@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import AddProductModal from './components/AddProductModal';
 
 interface Todo {
@@ -979,6 +979,26 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { c
   const changedCount = ingredientChanges.filter(i => i.delta !== undefined).length;
   const [addProductOpen, setAddProductOpen] = useState<null | 'food' | 'coffee'>(null);
 
+  // Supplier Prices: search + group-by-supplier
+  const [priceQuery, setPriceQuery] = useState('');
+  const supplierGroups = useMemo(() => {
+    const q = priceQuery.trim().toLowerCase();
+    const filtered = q
+      ? ingredientChanges.filter(i =>
+          i.name.toLowerCase().includes(q) || (i.supplier || '').toLowerCase().includes(q))
+      : ingredientChanges;
+    const map = new Map<string, IngredientChange[]>();
+    filtered.forEach(i => {
+      const s = (i.supplier || 'Other').trim() || 'Other';
+      if (!map.has(s)) map.set(s, []);
+      map.get(s)!.push(i);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([supplier, items]) => ({ supplier, items }));
+  }, [ingredientChanges, priceQuery]);
+  const filteredCount = supplierGroups.reduce((n, g) => n + g.items.length, 0);
+
   const addButton = (cat: 'food' | 'coffee') => (
     <button
       onClick={() => setAddProductOpen(cat)}
@@ -1023,24 +1043,40 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap }: { c
             <>
               <div className="flex items-center gap-2 mb-2 shrink-0">
                 {changedCount > 0 && (
-                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fbcdad', color: '#7c4a2d' }}>
+                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: '#fbcdad', color: '#7c4a2d' }}>
                     {changedCount} price {changedCount === 1 ? 'change' : 'changes'}
                   </span>
                 )}
-                <span className="text-xs text-gray-400 ml-auto">{ingredientChanges.length} ingredients tracked</span>
+                <input
+                  value={priceQuery}
+                  onChange={e => setPriceQuery(e.target.value)}
+                  placeholder="Search ingredient or supplier..."
+                  className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
+                  style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }}
+                />
+                <span className="text-xs text-gray-400 whitespace-nowrap shrink-0">
+                  {priceQuery.trim() ? `${filteredCount} of ${ingredientChanges.length}` : `${ingredientChanges.length} tracked`}
+                </span>
               </div>
-              <div className="flex gap-4 flex-1 min-h-0">
-                <div className="flex-1 min-w-0 relative">
-                  <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
-                  <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
-                    {ingredientChanges.filter((_, i) => i % 2 === 0).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0 relative">
-                  <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
-                  <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
-                    {ingredientChanges.filter((_, i) => i % 2 === 1).map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
-                  </div>
+              <div className="flex-1 min-h-0 relative">
+                <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
+                <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
+                  {filteredCount === 0 ? (
+                    <p className="text-xs text-gray-400 italic">No matches for &ldquo;{priceQuery.trim()}&rdquo;.</p>
+                  ) : (
+                    supplierGroups.map(group => (
+                      <div key={group.supplier} className="mb-4">
+                        <div className="flex items-center gap-2 mb-1.5 px-1">
+                          <span className="text-xs font-bold text-gray-600" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>{group.supplier}</span>
+                          <span className="text-xs text-gray-400">{group.items.length}</span>
+                          <div className="flex-1 h-px" style={{ background: 'rgba(0,0,0,0.08)' }} />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                          {group.items.map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </>
