@@ -16,16 +16,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 var CUSTOM_INGREDIENTS_TAB = 'CustomIngredients';
+var INVOICE_CACHE_TAB      = 'InvoiceTextCache';   // in the FOOD spreadsheet
 
-// ── INVOICE SEARCH ───────────────────────────────────────────────────────────
-// Scans recent (last 30 days) invoice PDFs across every supplier folder for the
-// keyword. Returns up to 15 candidate matches, newest first:
-//   { supplier, file, date, line, prices:[..], suggestedPrice }
-function searchInvoicesForItem_(query) {
-  var q = (query || '').toString().trim().toLowerCase();
-  if (q.length < 2) return { ok: false, error: 'enter at least 2 characters' };
-
-  var folders = [
+// Supplier folders to index/search. Built at call time (not top level) so the
+// FOLDER_* globals from ScanSuppliers.js are guaranteed initialised.
+function igSupplierFolders_() {
+  return [
     { id: FOLDER_5WAYS,       supplier: '5Ways' },
     { id: FOLDER_SCICLUNAS,   supplier: 'Sciclunas' },
     { id: FOLDER_UNCLES,      supplier: "Uncle's" },
@@ -37,39 +33,128 @@ function searchInvoicesForItem_(query) {
     { id: FOLDER_REDI_MILK,   supplier: 'Redi Milk' },
     { id: FOLDER_PLANETWARE,  supplier: 'Planetware' }
   ];
+}
 
-  var cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  var matches = [];
+function igGetCacheSheet_() {
+  var ss = SpreadsheetApp.openById(SS_FOOD);
+  var sheet = ss.getSheetByName(INVOICE_CACHE_TAB);
+  if (!sheet) {
+    sheet = ss.insertSheet(INVOICE_CACHE_TAB);
+    sheet.appendRow(['fileId', 'supplier', 'fileName', 'date', 'text']);
+  }
+  return sheet;
+}
 
-  folders.forEach(function (f) {
+// ── INVOICE CACHE BUILDER ────────────────────────────────────────────────────
+// OCR is slow (~3-6s/file), far too slow to run live on a web request. So we
+// pre-extract invoice text into the InvoiceTextCache tab and let search grep it.
+// Incremental: only OCRs PDFs not already cached, so the daily run is cheap and
+// the one-off backfill can be re-run if it hits the 6-minute editor limit.
+// Set up the daily refresh with createInvoiceCacheTrigger().
+function rebuildInvoiceTextCache() {
+  var sheet = igGetCacheSheet_();
+  var data = sheet.getDataRange().getValues();
+  var existing = {};
+  for (var r = 1; r < data.length; r++) existing[String(data[r][0])] = true;
+
+  var cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000);
+  var added = 0, skipped = 0;
+
+  igSupplierFolders_().forEach(function (f) {
     if (!f.id) return;
     var pdfs;
     try { pdfs = getSortedPdfs(f.id, '', cutoff); } catch (e) { return; }
-    // Newest first, cap at 6 PDFs per supplier to bound runtime.
-    pdfs.reverse();
-    pdfs.slice(0, 6).forEach(function (file) {
+    pdfs.forEach(function (file) {
+      var id = file.getId();
+      if (existing[id]) { skipped++; return; }
       var text;
-      try { text = extractPdfText(file.getId()); } catch (e) { return; }
+      try { text = extractPdfText(id); } catch (e) { text = ''; }
       if (!text) return;
-      text.split(/[\r\n]+/).forEach(function (line) {
-        if (line.toLowerCase().indexOf(q) === -1) return;
-        var nums = (line.match(/\d+(?:,\d{3})*\.\d{2}(?!\d)/g) || [])
-          .map(function (n) { return parseFloat(n.replace(/,/g, '')); })
-          .filter(function (n) { return n > 0.1 && n < 100000; });
-        if (nums.length === 0) return;
-        matches.push({
-          supplier: f.supplier,
-          file: file.getName(),
-          date: file.getLastUpdated().toISOString().slice(0, 10),
-          line: line.trim().slice(0, 160),
-          prices: nums,
-          suggestedPrice: nums[0]   // first money value on the line; user can change
-        });
-      });
+      sheet.appendRow([
+        id, f.supplier, file.getName(),
+        file.getLastUpdated().toISOString().slice(0, 10),
+        text.slice(0, 48000)  // stay under the 50k cell limit
+      ]);
+      existing[id] = true;
+      added++;
     });
   });
+  Logger.log('Invoice cache: +' + added + ' new, ' + skipped + ' already cached');
+  return { ok: true, added: added, skipped: skipped };
+}
 
-  // Newest first, then cap.
+// Run once to schedule the daily cache refresh (4am).
+function createInvoiceCacheTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'rebuildInvoiceTextCache') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('rebuildInvoiceTextCache').timeBased().everyDays(1).atHour(4).create();
+  return { ok: true };
+}
+
+// ── INVOICE SEARCH ───────────────────────────────────────────────────────────
+// Greps the cached invoice text for the keyword. Fast (no OCR), so it fits well
+// inside the web request timeout. Returns up to 15 candidate matches, newest
+// first: { supplier, file, date, line, prices:[..], suggestedPrice }
+function searchInvoicesForItem_(query) {
+  var q = (query || '').toString().trim().toLowerCase();
+  if (q.length < 2) return { ok: false, error: 'enter at least 2 characters' };
+
+  var sheet;
+  try { sheet = igGetCacheSheet_(); } catch (e) { return { ok: false, error: 'invoice cache unavailable: ' + e.message }; }
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    return { ok: true, query: q, count: 0, matches: [], note: 'invoice cache is empty — run rebuildInvoiceTextCache() once' };
+  }
+
+  var matches = [];
+  for (var r = 1; r < data.length; r++) {
+    var supplier = String(data[r][1] || 'Other');
+    var fileName = String(data[r][2] || '');
+    var rawDate  = data[r][3];
+    var date     = (rawDate instanceof Date)
+      ? Utilities.formatDate(rawDate, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+      : String(rawDate || '');
+    var text     = String(data[r][4] || '');
+    if (text.toLowerCase().indexOf(q) === -1) continue;
+    text.split(/[\r\n]+/).forEach(function (line) {
+      var lower = line.toLowerCase();
+      var kwPos = lower.indexOf(q);
+      if (kwPos === -1) return;
+
+      // Collect money values with their positions in the line.
+      var re = /\d+(?:,\d{3})*\.\d{2}(?!\d)/g, m, all = [];
+      while ((m = re.exec(line)) !== null) {
+        var val = parseFloat(m[0].replace(/,/g, ''));
+        if (val > 0.1 && val < 100000) all.push({ val: val, pos: m.index });
+      }
+      if (all.length === 0) return;
+
+      // Suggest the price nearest the keyword: the first money value AFTER it
+      // (receipt lines read "<item> <price>"). This is what makes merged-line
+      // receipts (e.g. Woolworths, many items per line) pick the right price
+      // instead of the first item's price on the line. Fall back to the closest
+      // value before the keyword, then to the first value.
+      var after = all.filter(function (a) { return a.pos > kwPos; });
+      var suggested;
+      if (after.length) {
+        suggested = after[0].val;
+      } else {
+        var before = all.filter(function (a) { return a.pos < kwPos; });
+        suggested = before.length ? before[before.length - 1].val : all[0].val;
+      }
+
+      matches.push({
+        supplier: supplier,
+        file: fileName,
+        date: date,
+        line: line.trim().slice(0, 160),
+        prices: all.map(function (a) { return a.val; }),
+        suggestedPrice: suggested
+      });
+    });
+  }
+
   matches.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
   return { ok: true, query: q, count: matches.length, matches: matches.slice(0, 15) };
 }

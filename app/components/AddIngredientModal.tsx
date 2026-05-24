@@ -11,7 +11,7 @@ type Match = {
   suggestedPrice: number;
 };
 
-type SearchResponse = { ok: boolean; error?: string; matches?: Match[]; count?: number };
+type SearchResponse = { ok: boolean; error?: string; matches?: Match[]; count?: number; note?: string };
 type AddResponse = { ok: boolean; error?: string; name?: string; supplier?: string; synced?: boolean };
 
 // Title-case a raw query for the default ingredient name.
@@ -33,6 +33,7 @@ export default function AddIngredientModal({
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [note, setNote] = useState<string | null>(null);
 
   // Confirm-form fields
   const [name, setName] = useState('');
@@ -52,15 +53,25 @@ export default function AddIngredientModal({
   const runSearch = async () => {
     const q = query.trim();
     if (q.length < 2) return;
-    setSearching(true); setSearched(false); setSearchError(null); setMatches([]); setSelectedIdx(null);
+    setSearching(true); setSearched(false); setSearchError(null); setMatches([]); setNote(null); setSelectedIdx(null);
     if (!name) setName(titleCase(q));
     try {
       const res = await fetch('/api/find-ingredient-price', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: q }),
       });
-      const data: SearchResponse = await res.json();
+      const raw = await res.text();
+      let data: SearchResponse;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        // Non-JSON (e.g. a gateway timeout page) — show a readable message.
+        setSearchError(res.status === 504 || /timeout/i.test(raw)
+          ? 'The search timed out. If this is the first run, build the invoice cache (see notes), then try again.'
+          : `Unexpected response (HTTP ${res.status}).`);
+        return;
+      }
       if (!res.ok || !data.ok) { setSearchError(data.error || `HTTP ${res.status}`); }
-      else { setMatches(data.matches || []); }
+      else { setMatches(data.matches || []); setNote(data.note || null); }
     } catch (e) {
       setSearchError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -163,7 +174,11 @@ export default function AddIngredientModal({
             {/* Step 2 — matches */}
             {searched && !searchError && (
               matches.length === 0 ? (
-                <p className="text-xs text-gray-500 italic">No invoice match for &ldquo;{query.trim()}&rdquo; in the last 30 days. You can still add it manually below.</p>
+                <p className="text-xs text-gray-500 italic">
+                  {note
+                    ? 'Invoice cache is still being built — try again shortly, or add it manually below.'
+                    : <>No invoice match for &ldquo;{query.trim()}&rdquo; in recent invoices. You can still add it manually below.</>}
+                </p>
               ) : (
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Invoice matches — pick one</label>
