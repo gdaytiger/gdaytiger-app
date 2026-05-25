@@ -11,7 +11,8 @@ type Body = {
   price?: number;
   unit?: string;
   supplier?: string;
-  category?: 'food' | 'coffee';
+  type?: 'food' | 'coffee';   // which costing sheet
+  category?: string;          // which category column within that sheet
 };
 
 export async function POST(req: NextRequest) {
@@ -38,7 +39,11 @@ export async function POST(req: NextRequest) {
   if (typeof body.price !== 'number' || body.price <= 0) {
     return NextResponse.json({ ok: false, error: 'price must be a positive number' }, { status: 400 });
   }
-  const category = body.category === 'coffee' ? 'coffee' : 'food';
+  const type = body.type === 'coffee' ? 'coffee' : 'food';
+  const category = (body.category || '').toString().trim();
+  if (!category) {
+    return NextResponse.json({ ok: false, error: 'category required' }, { status: 400 });
+  }
 
   try {
     const targetUrl = `${url}?secret=${encodeURIComponent(secret)}`;
@@ -51,6 +56,7 @@ export async function POST(req: NextRequest) {
         price: body.price,
         unit: (body.unit || 'unit').toString().trim() || 'unit',
         supplier: (body.supplier || 'Other').toString().trim() || 'Other',
+        type,
         category,
       }),
       cache: 'no-store',

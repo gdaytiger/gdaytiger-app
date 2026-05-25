@@ -20,6 +20,12 @@ function titleCase(s: string) {
   return s.trim().replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Category columns per costing sheet (must match the sheet headers).
+const CATEGORIES: Record<'food' | 'coffee', string[]> = {
+  food: ['Bread', 'Meats', 'Cheese', 'Vegetables', 'Sauces', 'Made in House', 'Extras', 'Packaging', 'Pantry'],
+  coffee: ['Coffee', 'Milk', 'Extras', 'Packaging', 'Made in House'],
+};
+
 export default function AddIngredientModal({
   open,
   onClose,
@@ -41,7 +47,8 @@ export default function AddIngredientModal({
   const [price, setPrice] = useState('');
   const [unit, setUnit] = useState('');
   const [supplier, setSupplier] = useState('');
-  const [category, setCategory] = useState<'food' | 'coffee'>('food');
+  const [type, setType] = useState<'food' | 'coffee'>('food');
+  const [category, setCategory] = useState('');
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
@@ -102,7 +109,7 @@ export default function AddIngredientModal({
     if (!name) setName(titleCase(query));
   };
 
-  const canSubmit = name.trim().length >= 2 && Number(price) > 0 && !submitting;
+  const canSubmit = name.trim().length >= 2 && Number(price) > 0 && !!category && !submitting;
 
   const submit = async () => {
     setSubmitting(true); setError(null);
@@ -114,6 +121,7 @@ export default function AddIngredientModal({
           price: Number(price),
           unit: unit.trim() || 'unit',
           supplier: supplier.trim() || 'Other',
+          type,
           category,
         }),
       });
@@ -252,17 +260,31 @@ export default function AddIngredientModal({
                     <input value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="e.g. 5Ways" className={`${inputCls} mt-1`} style={inputStyle} />
                   </div>
                 </div>
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Costings sheet</label>
-                  <div className="flex gap-2 mt-1">
-                    {(['food', 'coffee'] as const).map(c => (
-                      <button
-                        key={c}
-                        onClick={() => setCategory(c)}
-                        className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold capitalize transition-colors"
-                        style={{ background: category === c ? '#fbcdad' : 'rgba(0,0,0,0.05)', color: category === c ? '#333' : '#6b7280' }}
-                      >{c}</button>
-                    ))}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Costings sheet</label>
+                    <div className="flex gap-2 mt-1">
+                      {(['food', 'coffee'] as const).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => { setType(t); setCategory(''); }}
+                          className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold capitalize transition-colors"
+                          style={{ background: type === t ? '#fbcdad' : 'rgba(0,0,0,0.05)', color: type === t ? '#333' : '#6b7280' }}
+                        >{t}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Category</label>
+                    <select
+                      value={category}
+                      onChange={e => setCategory(e.target.value)}
+                      className={`${inputCls} mt-1`}
+                      style={inputStyle}
+                    >
+                      <option value="">Choose…</option>
+                      {CATEGORIES[type].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                   </div>
                 </div>
 

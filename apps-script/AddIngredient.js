@@ -18,6 +18,35 @@
 var CUSTOM_INGREDIENTS_TAB = 'CustomIngredients';
 var INVOICE_CACHE_TAB      = 'InvoiceTextCache';   // in the FOOD spreadsheet
 
+// ── READ-ONLY DIAGNOSTIC ─────────────────────────────────────────────────────
+// Dumps the top of the FOOD and COFFEE sheets so we can see exactly which column
+// each category lives in before writing custom ingredients into them. Run from
+// the editor, then paste the execution log. Changes nothing.
+function dumpCostingsLayout() {
+  function colLetter(n) { var s = ''; while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+  var out = [];
+  [['FOOD', SS_FOOD, SHEET_FOOD], ['COFFEE', SS_COFFEE, SHEET_COFFEE]].forEach(function (s) {
+    out.push('=== ' + s[0] + ' SHEET ===');
+    var sheet;
+    try { sheet = SpreadsheetApp.openById(s[1]).getSheetByName(s[2]); } catch (e) { out.push('  open error: ' + e.message); return; }
+    if (!sheet) { out.push('  (sheet "' + s[2] + '" not found)'); return; }
+    var rows = Math.min(7, sheet.getLastRow());
+    var cols = Math.min(22, sheet.getLastColumn());
+    var vals = sheet.getRange(1, 1, rows, cols).getValues();
+    for (var r = 0; r < vals.length; r++) {
+      var cells = [];
+      for (var c = 0; c < vals[r].length; c++) {
+        var v = vals[r][c];
+        if (v !== '' && v !== null) cells.push(colLetter(c + 1) + (r + 1) + '="' + String(v).slice(0, 28) + '"');
+      }
+      if (cells.length) out.push('  ' + cells.join('  '));
+    }
+  });
+  var text = out.join('\n');
+  Logger.log(text);
+  return text;
+}
+
 // Supplier folders to index/search. Built at call time (not top level) so the
 // FOLDER_* globals from ScanSuppliers.js are guaranteed initialised.
 function igSupplierFolders_() {
@@ -167,14 +196,57 @@ function searchInvoicesForItem_(query) {
 }
 
 // ── CUSTOM INGREDIENT STORE ──────────────────────────────────────────────────
-// CustomIngredients tab lives in the FOOD spreadsheet. Columns:
-//   key | name | price | unit | supplier | category | dateAdded
-function sipGetCustomIngredientsSheet_() {
+// Custom ingredients are written straight into the FOOD/COFFEE costing sheet's
+// category columns (label col + its PRICE col), so they sit alongside the
+// existing ingredients and look identical. A small registry tab records WHERE
+// each one was written so the price sync can read its live value from the cell.
+//
+// Sheet layout (confirmed via dumpCostingsLayout):
+//   Header row 3 holds the category names; each category = a label column
+//   immediately followed by its "PRICE" column. Data starts at row 5.
+//   FOOD:   Bread, Meats, Cheese, Vegetables, Sauces, Made in House, Extras,
+//           Packaging, Pantry
+//   COFFEE: Coffee, Milks, Extras, Packaging, Made in House
+var COSTINGS_HEADER_ROW     = 3;
+var COSTINGS_DATA_START_ROW = 5;
+
+function igCategorySheet_(type) {
+  if (type === 'coffee') return SpreadsheetApp.openById(SS_COFFEE).getSheetByName(SHEET_COFFEE);
+  return SpreadsheetApp.openById(SS_FOOD).getSheetByName(SHEET_FOOD);
+}
+
+// Resolve a category to its {labelCol, priceCol} by scanning the header row, so
+// it self-adjusts if columns ever move. Handles MILK ↔ MILKS.
+function igFindCategoryCols_(sheet, category) {
+  var want = String(category || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  if (want === 'MILK') want = 'MILKS';
+  var lastCol = sheet.getLastColumn();
+  var headers = sheet.getRange(COSTINGS_HEADER_ROW, 1, 1, lastCol).getValues()[0];
+  for (var c = 0; c < headers.length; c++) {
+    var h = String(headers[c] || '').toUpperCase().replace(/\s+/g, ' ').trim();
+    if (h === want) return { labelCol: c + 1, priceCol: c + 2 };
+  }
+  return null;
+}
+
+function igNextEmptyRow_(sheet, labelCol) {
+  var last = Math.max(sheet.getLastRow(), COSTINGS_DATA_START_ROW);
+  var vals = sheet.getRange(COSTINGS_DATA_START_ROW, labelCol, last - COSTINGS_DATA_START_ROW + 1, 1).getValues();
+  for (var i = 0; i < vals.length; i++) {
+    if (String(vals[i][0]).trim() === '') return COSTINGS_DATA_START_ROW + i;
+  }
+  return last + 1;
+}
+
+// Registry tab in the FOOD spreadsheet. Records each app-added ingredient and
+// where it lives, so the sync reads its live price from the sheet cell.
+//   key | name | unit | supplier | type | category | priceCol | row | dateAdded
+function igGetRegistry_() {
   var ss = SpreadsheetApp.openById(SS_FOOD);
   var sheet = ss.getSheetByName(CUSTOM_INGREDIENTS_TAB);
   if (!sheet) {
     sheet = ss.insertSheet(CUSTOM_INGREDIENTS_TAB);
-    sheet.appendRow(['key', 'name', 'price', 'unit', 'supplier', 'category', 'dateAdded']);
+    sheet.appendRow(['key', 'name', 'unit', 'supplier', 'type', 'category', 'priceCol', 'row', 'dateAdded']);
   }
   return sheet;
 }
@@ -186,52 +258,78 @@ function addCustomIngredient_(payload) {
   var price = Number(payload.price);
   if (!isFinite(price) || price <= 0) return { ok: false, error: 'a valid positive price is required' };
 
-  var unit     = (payload.unit || 'unit').toString().trim() || 'unit';
+  var unit     = (payload.unit || '').toString().trim();
   var supplier = (payload.supplier || 'Other').toString().trim() || 'Other';
-  var category = (payload.category || 'food').toString().toLowerCase();
-  if (category !== 'food' && category !== 'coffee') category = 'food';
+  var type     = (payload.type || 'food').toString().toLowerCase();
+  if (type !== 'food' && type !== 'coffee') type = 'food';
+  var category = (payload.category || '').toString().trim();
+  if (!category) return { ok: false, error: 'category required' };
+
+  var sheet = igCategorySheet_(type);
+  if (!sheet) return { ok: false, error: type + ' sheet not found' };
+  var cols = igFindCategoryCols_(sheet, category);
+  if (!cols) return { ok: false, error: 'category "' + category + '" not found in the ' + type + ' sheet' };
 
   var key = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   if (key === 'custom_') return { ok: false, error: 'name must contain letters or numbers' };
 
-  var sheet = sipGetCustomIngredientsSheet_();
-  var data = sheet.getDataRange().getValues();
-  for (var r = 1; r < data.length; r++) {
-    if (String(data[r][0]).trim() === key) {
-      return { ok: false, error: 'an ingredient like "' + name + '" already exists' };
-    }
+  var reg = igGetRegistry_();
+  var regData = reg.getDataRange().getValues();
+  for (var r = 1; r < regData.length; r++) {
+    if (String(regData[r][0]).trim() === key) return { ok: false, error: 'an ingredient like "' + name + '" already exists' };
   }
-  sheet.appendRow([key, name, price, unit, supplier, category, new Date()]);
+
+  var row = igNextEmptyRow_(sheet, cols.labelCol);
+
+  // Match the sheet convention: UPPERCASE "NAME (UNIT)".
+  var label = (unit ? name + ' (' + unit + ')' : name).toUpperCase();
+
+  // Copy formatting from the row above so it looks like the existing rows.
+  if (row > COSTINGS_DATA_START_ROW) {
+    sheet.getRange(row - 1, cols.labelCol).copyTo(sheet.getRange(row, cols.labelCol), { formatOnly: true });
+    sheet.getRange(row - 1, cols.priceCol).copyTo(sheet.getRange(row, cols.priceCol), { formatOnly: true });
+  }
+  sheet.getRange(row, cols.labelCol).setValue(label);
+  sheet.getRange(row, cols.priceCol).setValue(price);
+
+  reg.appendRow([key, name, unit || 'unit', supplier, type, category, cols.priceCol, row, new Date()]);
 
   // Push to Notion immediately so the app shows it without waiting for the
   // 30-minute scheduled sync. Best-effort: a sync failure shouldn't fail the add.
   var synced = false;
   try { syncIngredientPrices(); synced = true; } catch (e) { synced = false; }
 
-  return { ok: true, key: key, name: name, price: price, unit: unit, supplier: supplier, category: category, synced: synced };
+  return { ok: true, key: key, name: name, price: price, unit: unit || 'unit', supplier: supplier, type: type, category: category, synced: synced };
 }
 
 // Reader used by SyncIngredientPrices.sipCollectPrices_ to merge custom items.
+// Reads the LIVE price from the sheet cell each ingredient was written to, so
+// later edits (by you or the scanner) flow through. Old/incomplete rows skipped.
 function sipCustomIngredients_() {
   var out = [];
   try {
-    var ss = SpreadsheetApp.openById(SS_FOOD);
-    var sheet = ss.getSheetByName(CUSTOM_INGREDIENTS_TAB);
+    var sheet = SpreadsheetApp.openById(SS_FOOD).getSheetByName(CUSTOM_INGREDIENTS_TAB);
     if (!sheet) return out;
     var data = sheet.getDataRange().getValues();
+    var foodSheet = null, coffeeSheet = null;
     for (var r = 1; r < data.length; r++) {
       var key = String(data[r][0] || '').trim();
       if (!key) continue;
-      var price = Number(data[r][2]);
-      out.push({
-        key: key,
-        name: String(data[r][1] || key),
-        price: (isFinite(price) ? price : 0),
-        unit: String(data[r][3] || 'unit'),
-        supplier: String(data[r][4] || 'Other')
-      });
+      var name     = String(data[r][1] || key);
+      var unit     = String(data[r][2] || 'unit');
+      var supplier = String(data[r][3] || 'Other');
+      var type     = String(data[r][4] || 'food').toLowerCase();
+      var priceCol = Number(data[r][6]);
+      var row      = Number(data[r][7]);
+      if (!isFinite(priceCol) || !isFinite(row) || priceCol < 1 || row < 1) continue; // old/incomplete
+      var src;
+      if (type === 'coffee') { coffeeSheet = coffeeSheet || SpreadsheetApp.openById(SS_COFFEE).getSheetByName(SHEET_COFFEE); src = coffeeSheet; }
+      else { foodSheet = foodSheet || SpreadsheetApp.openById(SS_FOOD).getSheetByName(SHEET_FOOD); src = foodSheet; }
+      if (!src) continue;
+      var price = Number(src.getRange(row, priceCol).getValue());
+      out.push({ key: key, name: name, price: (isFinite(price) ? price : 0), unit: unit, supplier: supplier });
     }
-  } catch (e) { /* tab missing or unreadable — ignore */ }
+  } catch (e) { /* ignore */ }
   return out;
 }
 
