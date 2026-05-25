@@ -131,7 +131,7 @@ function sipCollectPrices_() {
     { key: 'lemon',              name: 'Lemon (kg)',                        col: 8,  row: 17, unit: 'kg',        supplier: 'Sciclunas' },
     { key: 'carrot',             name: 'Carrot (kg)',                       col: 8,  row: 18, unit: 'kg',        supplier: 'Sciclunas' },
     { key: 'cucumber',           name: 'Cucumber (each)',                   col: 8,  row: 19, unit: 'each',      supplier: 'Sciclunas' },
-    { key: 'leni_peppers',       name: 'Leni Peppers (tin)',                col: 8,  row: 20, unit: 'tin',       supplier: 'Sciclunas' },
+    { key: 'leni_peppers',       name: 'Leni Peppers (tin)',                col: 8,  row: 20, unit: 'tin',       supplier: '5Ways' },
     // ── SAUCES ───────────────────────────────────────────────────────────────
     { key: 'dijon_mustard',      name: 'Dijon Mustard (2.5kg jar)',         col: 10, row: 5,  unit: '2.5kg jar', supplier: '5Ways' },
     { key: 'mayo',               name: 'Hellmans Mayo (20kg)',              col: 10, row: 6,  unit: '20kg',      supplier: '5Ways' },

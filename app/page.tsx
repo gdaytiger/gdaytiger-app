@@ -623,8 +623,8 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
 
       {/* Header row */}
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <p className="text-sm font-semibold text-gray-800 leading-snug flex-1 min-w-0 truncate"
-          style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', textTransform: 'uppercase' }}>
+        <p className="text-sm font-normal text-gray-800 leading-snug flex-1 min-w-0 truncate"
+          style={{ fontFamily: '"stolzl", sans-serif', textTransform: 'uppercase' }}>
           {ing.name}
         </p>
         {ing.drift && <DriftChip drift={ing.drift} />}
