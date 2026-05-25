@@ -72,7 +72,20 @@ export default function AddIngredientModal({
         return;
       }
       if (!res.ok || !data.ok) { setSearchError(data.error || `HTTP ${res.status}`); }
-      else { setMatches(data.matches || []); setNote(data.note || null); }
+      else {
+        const ms = data.matches || [];
+        setMatches(ms);
+        setNote(data.note || null);
+        // Auto-fill from the best (newest) match so cost + weight + supplier
+        // populate without a click. User can still pick a different match/price.
+        if (ms.length > 0) {
+          const m0 = ms[0];
+          setSelectedIdx(0);
+          setSupplier(m0.supplier);
+          setPrice(String(m0.suggestedPrice));
+          if (m0.suggestedUnit) setUnit(m0.suggestedUnit);
+        }
+      }
     } catch (e) {
       setSearchError(e instanceof Error ? e.message : String(e));
     } finally {
