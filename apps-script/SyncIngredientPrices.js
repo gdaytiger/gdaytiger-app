@@ -118,7 +118,7 @@ function sipCollectPrices_() {
     // ── VEGETABLES ───────────────────────────────────────────────────────────
     { key: 'tomato',             name: 'Tomato (kg)',                       col: 8,  row: 5,  unit: 'kg',        supplier: 'Sciclunas' },
     { key: 'sauerkraut',         name: 'Sauerkraut (770g tin)',             col: 8,  row: 6,  unit: '770g tin',  supplier: 'PFD Foods' },
-    { key: 'pickles',            name: "McClure's Pickles (19L drum)",      col: 8,  row: 7,  unit: '19L drum',  supplier: '5Ways' },
+    { key: 'pickles',            name: "McClure's Pickles (19L drum)",      col: 8,  row: 7,  unit: '19L drum',  supplier: 'Product Distribution' },
     { key: 'mushrooms_raw',      name: 'Mushrooms (box)',                   col: 8,  row: 8,  unit: 'box',       supplier: 'Sciclunas' },
     { key: 'red_onion',          name: 'Red Onion (kg)',                    col: 8,  row: 9,  unit: 'kg',        supplier: 'Sciclunas' },
     { key: 'fennel',             name: 'Fennel (each)',                     col: 8,  row: 10, unit: 'each',      supplier: 'Sciclunas' },

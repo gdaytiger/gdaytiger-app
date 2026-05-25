@@ -781,6 +781,7 @@ const SUPPLIER_ICONS: { match: string; icon: string }[] = [
   { match: 'noisette', icon: '🥐' },
   { match: 'pfd', icon: '🍗' },
   { match: 'planetware', icon: '🥤' },
+  { match: 'product distribution', icon: '🥒' },
   { match: 'redi milk', icon: '🥛' },
   { match: 'redimilk', icon: '🥛' },
   { match: 'sciclunas', icon: '🥬' },
@@ -807,7 +808,7 @@ function ProductItem({ p }: { p: CostingProduct }) {
       boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
     }}>
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <p className="text-sm font-semibold text-gray-800 leading-snug flex-1 min-w-0 truncate uppercase"
+        <p className="text-sm font-normal text-gray-800 leading-snug flex-1 min-w-0 truncate uppercase"
           style={{ fontFamily: '"stolzl", sans-serif' }}>
           {p.name}
         </p>
