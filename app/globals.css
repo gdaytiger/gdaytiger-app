@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* App-wide default typeface: stolzl (loaded via Typekit in layout.tsx), so all
+   widgets read consistently. Elements that need a different face (e.g. the
+   Bodoni page title) set fontFamily explicitly and still win. */
+body {
+  font-family: "stolzl", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 @keyframes slowspin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

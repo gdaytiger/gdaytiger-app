@@ -715,8 +715,8 @@ function ChangeCard({ c }: { c: MarginChange }) {
     >
       {/* Header row */}
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <p className="text-sm font-semibold text-gray-800 leading-snug flex-1 min-w-0 truncate"
-          style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+        <p className="text-sm font-normal text-gray-800 leading-snug flex-1 min-w-0 truncate uppercase"
+          style={{ fontFamily: '"stolzl", sans-serif' }}>
           {c.name}
         </p>
         <span className="text-base font-black shrink-0 leading-none" style={{ color: arrowCol, fontVariantNumeric: 'tabular-nums' }}>
