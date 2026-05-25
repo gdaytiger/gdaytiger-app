@@ -1147,7 +1147,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
                           <div key={group.supplier} className={open ? 'md:col-span-2' : ''}>
                             <div onClick={() => toggleSupplier(group.supplier)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3 py-2.5" style={tileStyle}>
                               <span className="text-base">{supplierIcon(group.supplier)}</span>
-                              <span className="flex-1 min-w-0 text-xs font-bold tracking-widest uppercase truncate" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{group.supplier}</span>
+                              <span className="flex-1 min-w-0 text-sm font-normal uppercase truncate text-gray-800" style={{ fontFamily: '"stolzl", sans-serif' }}>{group.supplier}</span>
                               {changeCount > 0 && (
                                 <span className="flex items-center justify-center rounded-full font-bold" style={{ minWidth: '22px', height: '22px', padding: '0 6px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{changeCount}</span>
                               )}
