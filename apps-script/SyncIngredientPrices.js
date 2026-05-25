@@ -61,7 +61,7 @@ function sipCollectPrices_() {
     { key: 'cup_small_6oz',    name: 'Compostable Cup 6oz (1000)',       col: 8, row: 5,  unit: '1000pk', supplier: 'Planetware' },
     { key: 'cup_large_12oz',   name: 'Compostable Cup 12oz Slim (1000)', col: 8, row: 6,  unit: '1000pk', supplier: 'Planetware' },
     { key: 'lid_hot',          name: 'CPLA Natural Lid 8oz (1000)',      col: 8, row: 7,  unit: '1000pk', supplier: 'Planetware' },
-    { key: 'cup_detpak_16oz',  name: "G'Day Tiger 16oz Detpak Cups (1000)", col: 8, row: 8, unit: '1000pk', supplier: 'Detpak' },
+    { key: 'cup_detpak_16oz',  name: "G'Day Tiger 16oz Detpak Cups (1000)", col: 8, row: 8, unit: '1000pk', supplier: '5Ways' },
     { key: 'lid_sipper',       name: 'Plastic Sipper Lids (1000)',       col: 8, row: 9,  unit: '1000pk', supplier: 'Trio Supplies' },
     { key: 'straw',            name: 'Paper Straws (2500)',              col: 8, row: 10, unit: '2500pk', supplier: 'Trio Supplies' },
   ];

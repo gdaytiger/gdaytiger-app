@@ -767,6 +767,34 @@ function ChangeCard({ c }: { c: MarginChange }) {
   );
 }
 
+// Per-supplier emoji. Matched case-insensitively by substring so name variants
+// (e.g. "Redi Milk" / "RediMilk") resolve. Falls back to a box.
+const SUPPLIER_ICONS: { match: string; icon: string }[] = [
+  { match: '5ways', icon: '🍖' },
+  { match: 'candied', icon: '🍪' },
+  { match: 'dench', icon: '🍞' },
+  { match: "g'day tiger", icon: '🐯' },
+  { match: 'gday tiger', icon: '🐯' },
+  { match: 'matsu', icon: '🍵' },
+  { match: 'mörk', icon: '🍫' },
+  { match: 'mork', icon: '🍫' },
+  { match: 'noisette', icon: '🥐' },
+  { match: 'pfd', icon: '🍗' },
+  { match: 'planetware', icon: '🥤' },
+  { match: 'redi milk', icon: '🥛' },
+  { match: 'redimilk', icon: '🥛' },
+  { match: 'sciclunas', icon: '🥬' },
+  { match: 'seven seeds', icon: '☕' },
+  { match: 'trio', icon: '📦' },
+  { match: 'uncle', icon: '🥩' },
+  { match: 'woolworths', icon: '🛍️' },
+];
+function supplierIcon(name: string): string {
+  const n = (name || '').toLowerCase();
+  const hit = SUPPLIER_ICONS.find(s => n.includes(s.match));
+  return hit ? hit.icon : '📦';
+}
+
 function ProductItem({ p }: { p: CostingProduct }) {
   const mc = p.margin! >= 70 ? '#16a34a' : p.margin! >= 60 ? '#d97706' : '#dc2626';
   const bar = Math.min(100, Math.max(0, p.margin!));
@@ -779,8 +807,8 @@ function ProductItem({ p }: { p: CostingProduct }) {
       boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
     }}>
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <p className="text-sm font-semibold text-gray-800 leading-snug flex-1 min-w-0 truncate"
-          style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+        <p className="text-sm font-semibold text-gray-800 leading-snug flex-1 min-w-0 truncate uppercase"
+          style={{ fontFamily: '"stolzl", sans-serif' }}>
           {p.name}
         </p>
         <span className="text-base font-black shrink-0 leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
@@ -1109,31 +1137,33 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
                   {filteredCount === 0 ? (
                     <p className="text-xs text-gray-400 italic">No matches for &ldquo;{priceQuery.trim()}&rdquo;.</p>
                   ) : (
-                    supplierGroups.map(group => {
-                      const changeCount = group.items.filter(i => i.delta !== undefined).length;
-                      const open = isSearching || openSuppliers.has(group.supplier);
-                      const tileStyle = { minHeight: '52px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
-                      return (
-                        <div key={group.supplier} style={{ marginBottom: '8px' }}>
-                          <div onClick={() => toggleSupplier(group.supplier)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3" style={tileStyle}>
-                            <span className="text-base">📦</span>
-                            <span className="flex-1 text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{group.supplier}</span>
-                            {changeCount > 0 && (
-                              <span className="flex items-center justify-center rounded-full font-bold" style={{ minWidth: '22px', height: '22px', padding: '0 6px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{changeCount}</span>
-                            )}
-                            <span className="text-xs text-gray-400" style={{ flexShrink: 0 }}>{group.items.length}</span>
-                            <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
-                          </div>
-                          {open && (
-                            <div className="mt-2 pl-3" style={{ borderLeft: '2px solid rgba(251,205,173,0.4)' }}>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-                                {group.items.map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
-                              </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 content-start">
+                      {supplierGroups.map(group => {
+                        const changeCount = group.items.filter(i => i.delta !== undefined).length;
+                        const open = isSearching || openSuppliers.has(group.supplier);
+                        const tileStyle = { minHeight: '60px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
+                        return (
+                          <div key={group.supplier} className={open ? 'md:col-span-2' : ''}>
+                            <div onClick={() => toggleSupplier(group.supplier)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3 py-2.5" style={tileStyle}>
+                              <span className="text-base">{supplierIcon(group.supplier)}</span>
+                              <span className="flex-1 min-w-0 text-xs font-bold tracking-widest uppercase truncate" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{group.supplier}</span>
+                              {changeCount > 0 && (
+                                <span className="flex items-center justify-center rounded-full font-bold" style={{ minWidth: '22px', height: '22px', padding: '0 6px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{changeCount}</span>
+                              )}
+                              <span className="text-xs text-gray-400" style={{ flexShrink: 0 }}>{group.items.length}</span>
+                              <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })
+                            {open && (
+                              <div className="mt-2 pl-3" style={{ borderLeft: '2px solid rgba(251,205,173,0.4)' }}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                                  {group.items.map(ing => <IngredientChangeCard key={ing.key} ing={ing} />)}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               </div>
