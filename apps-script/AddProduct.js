@@ -80,7 +80,7 @@ const AP_INGREDIENT_LABELS = {
   // coffee
   coffee_beans:'Coffee (g)', chocolate:'Chocolate (g)', chai:'Chai (g)', fbomb:'F.Bomb (g)',
   decaf_beans:'Decaf (g)', matcha:'Matcha (g)',
-  sungold_lowfat:'Skim Milk (ml)', happy_soy:'Soy (ml)', alt_dairy_oat:'Oat Milk (ml)', alt_dairy_almond:'Almond Milk (ml)',
+  sungold_jersey_fc:'FC Milk (ml)', sungold_lowfat:'Skim Milk (ml)', happy_soy:'Soy (ml)', alt_dairy_oat:'Oat Milk (ml)', alt_dairy_almond:'Almond Milk (ml)',
   bundaberg_raw_sugar:'Sugar (g)',
   cup_small_6oz:'Cup Small (unit)', cup_large_12oz:'Cup Large (unit)', lid_hot:'Lid (unit)',
   cup_detpak_16oz:'Cup 16oz (unit)', lid_sipper:'Sipper Lid (unit)', straw:'Straw (unit)',
@@ -256,7 +256,9 @@ function apWriteSection_(sheet, startRow, section, type) {
     const row = recipeStartRow + i;
     const cellRef = keyToCell[ings[i].key];
     const packSize = AP_INGREDIENT_PACK_SIZE[ings[i].key] || 1;
-    const label = AP_INGREDIENT_LABELS[ings[i].key] || ings[i].key;
+    // Friendly label; fall back to title-cased key if not in the map.
+    const label = AP_INGREDIENT_LABELS[ings[i].key]
+      || ings[i].key.replace(/_/g, ' ').replace(/\b\w/g, function (m) { return m.toUpperCase(); });
     const qty = Number(ings[i].qty);
     sheet.getRange(row, 1).setValue(label);                            // A: label
     sheet.getRange(row, 2).setValue(packSize);                         // B: size
@@ -295,14 +297,22 @@ function apFindNextEmptyRow_(sheet) {
 // ─────────────────────────────────────────────────────────────────────────────
 // COFFEE VARIANTS — generate sections from one base recipe
 // ─────────────────────────────────────────────────────────────────────────────
+// Smart variant rules:
+//   - If user selects milks in variants and the base recipe has no milk,
+//     auto-inject the picked milk per variant. Hot small=150ml, hot large=300ml,
+//     iced=300ml (regardless of size).
+//   - Iced products (name contains "ICED") get a straw on every variant, and
+//     takeaway variants use the 16oz Detpak cup + sipper lid instead of the
+//     standard hot cup/lid combo.
+//   - Hot takeaway uses cup_small_6oz (small) or cup_large_12oz (large) + lid_hot.
+//   - Coffee beans / chai / chocolate / matcha / fbomb scale 2× for large size.
+// ─────────────────────────────────────────────────────────────────────────────
 function apBuildCoffeeVariants_(baseName, baseIngredients, retailPrice, variants) {
   const milks = (variants.milks && variants.milks.length) ? variants.milks : [null]; // null = no milk
   const sizes = (variants.sizes && variants.sizes.length) ? variants.sizes : ['small'];
   const channels = (variants.channels && variants.channels.length) ? variants.channels : ['dine_in'];
 
-  // Base ingredient classification — assume the form's ingredient list is the
-  // "small dine-in" base. Other variants scale by size and add cup/lid for
-  // takeaway. Identify the milk in the base (if any) so we can swap it.
+  const isIced = /\bICED\b/i.test(baseName);
   const baseHasMilkKey = baseIngredients.find(i => /^(sungold_jersey_fc|sungold_lowfat|happy_soy|alt_dairy_oat|alt_dairy_almond)$/.test(i.key));
 
   const sections = [];
@@ -314,17 +324,29 @@ function apBuildCoffeeVariants_(baseName, baseIngredients, retailPrice, variants
         for (const ing of baseIngredients) {
           let key = ing.key;
           let qty = ing.qty;
-          // Swap milk
           if (baseHasMilkKey && key === baseHasMilkKey.key && milk) key = milk;
-          // Scale by size: large = 2x for coffee_beans and milks
           if (size === 'large' && /^(coffee_beans|decaf_beans|chai|chocolate|matcha|fbomb)$/.test(key)) qty *= 2;
-          if (size === 'large' && /milk|happy_soy|alt_dairy/.test(key)) qty *= 2;
+          if (size === 'large' && /^(sungold_jersey_fc|sungold_lowfat|happy_soy|alt_dairy_oat|alt_dairy_almond)$/.test(key)) qty *= 2;
           variantIngs.push({ key: key, qty: qty });
+        }
+        // Auto-inject milk if user picked one but base lacked it
+        if (!baseHasMilkKey && milk) {
+          const milkQty = isIced ? 300 : (size === 'large' ? 300 : 150);
+          variantIngs.push({ key: milk, qty: milkQty });
+        }
+        // Iced products get a straw on every variant
+        if (isIced) {
+          variantIngs.push({ key: 'straw', qty: 1 });
         }
         // Add cup + lid for takeaway
         if (channel === 'takeaway') {
-          variantIngs.push({ key: size === 'large' ? 'cup_large_12oz' : 'cup_small_6oz', qty: 1 });
-          variantIngs.push({ key: 'lid_hot', qty: 1 });
+          if (isIced) {
+            variantIngs.push({ key: 'cup_detpak_16oz', qty: 1 });
+            variantIngs.push({ key: 'lid_sipper', qty: 1 });
+          } else {
+            variantIngs.push({ key: size === 'large' ? 'cup_large_12oz' : 'cup_small_6oz', qty: 1 });
+            variantIngs.push({ key: 'lid_hot', qty: 1 });
+          }
         }
         // Construct the variant name
         const milkLabel = milk ? apMilkLabel_(milk) : '';

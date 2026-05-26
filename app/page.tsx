@@ -382,9 +382,17 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   );
 }
 
+const RECURRENCE_OPTIONS = [
+  { value: 'once', label: 'Once' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'fortnightly', label: 'Fortnightly' },
+  { value: 'monthly', label: 'Monthly' },
+] as const;
+
 function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDay, onDrop, onDragOver, onDragLeave, isDragOver }: {
   shift: Shift; isToday: boolean; isHighlighted: boolean; taskCount: number;
-  onAdd: (date: string, text: string) => Promise<void>;
+  onAdd: (date: string, text: string, recurrence: string) => Promise<void>;
   onSelectDay: (date: string) => void;
   onDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -393,15 +401,36 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
 }) {
   const [isAdding, setIsAdding] = useState(false);
   const [taskText, setTaskText] = useState('');
+  const [recurrence, setRecurrence] = useState<string>('once');
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const openInput = (e: React.MouseEvent) => { e.stopPropagation(); setIsAdding(true); setTimeout(() => inputRef.current?.focus(), 320); };
-  const close = () => { setIsAdding(false); setTaskText(''); };
-  const submit = async () => { if (!taskText.trim()) return; setSaving(true); await onAdd(shift.date, taskText); setSaving(false); close(); };
+  const close = () => { setIsAdding(false); setTaskText(''); setRecurrence('once'); };
+  const submit = async () => { if (!taskText.trim()) return; setSaving(true); await onAdd(shift.date, taskText, recurrence); setSaving(false); close(); };
+
+  // Live description of what the chosen recurrence will do, anchored to this day.
+  const [yy, mm, dd] = shift.date.split('-').map(Number);
+  const dateObj = new Date(yy, mm - 1, dd);
+  const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dateObj.getDay()];
+  const ordinal = (n: number) => `${n}${(['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : (n % 10 < 4 ? n % 10 : 0)] || 'th')}`;
+  const recurrenceHint: Record<string, string> = {
+    once: 'This date only',
+    daily: 'Repeats every day',
+    weekly: `Repeats every ${weekday}`,
+    fortnightly: `Repeats every 2nd ${weekday}`,
+    monthly: `Repeats the ${ordinal(dd)} of each month`,
+  };
+
+  const baseStyle = isDragOver
+    ? { background: 'rgba(22,163,74,0.10)', borderColor: 'rgba(22,163,74,0.25)', boxShadow: '0 0 0 2px rgba(22,163,74,0.15)' }
+    : isHighlighted
+      ? { background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }
+      : { background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
+
   return (
     <div
       className={`relative overflow-hidden rounded-2xl transition-all ${isDragOver ? 'border' : isHighlighted ? 'border' : ''}`}
-      style={isDragOver ? { minHeight: '62px', background: 'rgba(22,163,74,0.10)', borderColor: 'rgba(22,163,74,0.25)', boxShadow: '0 0 0 2px rgba(22,163,74,0.15)' } : isHighlighted ? { minHeight: '62px', background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' } : { minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}
+      style={{ minHeight: isAdding ? '104px' : '62px', ...baseStyle }}
       onDrop={onDrop}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -418,11 +447,26 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
           <button onClick={openInput} className="transition-colors text-xl leading-none font-light text-gray-300 hover:text-gray-400" aria-label="Add task">+</button>
         </div>
       </div>
-      <div className="absolute inset-0 flex items-center gap-2 py-2 px-3 transition-transform duration-300 ease-in-out" style={{ transform: isAdding ? 'translateX(0)' : 'translateX(100%)' }}>
-        <span className="text-xs font-semibold shrink-0 text-gray-500">{shift.label.split(' ')[0]}</span>
-        <input ref={inputRef} value={taskText} onChange={e => setTaskText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') close(); }} placeholder="ADD TASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-        <button onClick={submit} disabled={saving || !taskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>{saving ? '...' : 'ADD'}</button>
-        <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
+      <div className="absolute inset-0 flex flex-col justify-center gap-2 py-2 px-3 transition-transform duration-300 ease-in-out" style={{ transform: isAdding ? 'translateX(0)' : 'translateX(100%)' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold shrink-0 text-gray-500">{shift.label.split(' ')[0]}</span>
+          <input ref={inputRef} value={taskText} onChange={e => setTaskText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') close(); }} placeholder="ADD TASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+          <button onClick={submit} disabled={saving || !taskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>{saving ? '...' : 'ADD'}</button>
+          <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto pl-7" style={{ scrollbarWidth: 'none' }}>
+          {RECURRENCE_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setRecurrence(opt.value)}
+              className="text-[10px] uppercase font-semibold px-2 py-1 rounded-full transition-colors shrink-0 tracking-wide"
+              style={{ background: recurrence === opt.value ? '#fbcdad' : 'rgba(0,0,0,0.05)', color: recurrence === opt.value ? '#333' : '#999' }}
+            >
+              {opt.label}
+            </button>
+          ))}
+          <span className="text-[10px] text-gray-400 italic shrink-0 ml-1 whitespace-nowrap">{recurrenceHint[recurrence]}</span>
+        </div>
       </div>
     </div>
   );
@@ -1339,11 +1383,12 @@ export default function Home() {
     await fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) });
   };
 
-  const handleAddTask = async (date: string, text: string) => {
-    await fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, text }) });
+  const handleAddTask = async (date: string, text: string, recurrence: string = 'once') => {
+    await fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, text, recurrence }) });
     const state = await fetchServerState();
     await fetchWeekTasks(state);
-    if (date === todayStr) await fetchDashboard(state);
+    // Daily / monthly land on every weekday, so refresh today's view regardless of the picked day.
+    if (date === todayStr || recurrence === 'daily' || recurrence === 'monthly') await fetchDashboard(state);
   };
 
   const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean, fromDate?: string, category?: string) => {

@@ -8,6 +8,19 @@ const STATE_PARENT_ID = '3403c99c0e858113a941c2118b3cdef9';
 
 const VALID_CATEGORIES = ['ORDER', 'ADMIN', 'STAFF', 'MAINTENANCE', 'MERCHANDISE', 'PERSONAL', 'COSTING'];
 
+const VALID_RECURRENCE = ['once', 'daily', 'weekly', 'fortnightly', 'monthly'] as const;
+type Recurrence = (typeof VALID_RECURRENCE)[number];
+
+// ISO week number — used to pick the fortnightly slot ([F] = odd weeks, [F2] = even)
+// so a fortnightly task lands on the same fortnight cadence as the day it was added.
+function getISOWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
 // Write { [blockId]: text } into the JS context code block on the OS page.
 // Mirrors /api/task-context POST so add-task can set context in one shot.
 async function setContext(blockId: string, text: string): Promise<void> {
@@ -145,27 +158,10 @@ async function getPageChildren(pageId: string): Promise<any[]> {
   return blocks;
 }
 
-export async function POST(req: NextRequest) {
-  const { date, text, category: rawCategory, context } = await req.json();
-  // Auto-classify if no category provided — uses Claude Haiku to pick the right section.
-  const category: string = rawCategory || await classifyCategory(text?.trim() || '');
-
-  if (!date || !text?.trim()) {
-    return NextResponse.json({ error: 'Missing date or text' }, { status: 400 });
-  }
-
-  const [year, month, day] = date.split('-').map(Number);
-  const d = new Date(year, month - 1, day);
-  const dayOfWeek = d.getDay();
-  const pageId = DAY_PAGES[dayOfWeek];
-
-  if (!pageId) {
-    return NextResponse.json({ error: 'No page for that day' }, { status: 400 });
-  }
-
-  // Prefix with date so the cleanup logic can auto-delete after the day passes
-  const content = `[${date}] ${text.trim()}`;
-
+// Insert a single bulleted task block onto a page. If a category is supplied and a
+// matching heading exists, insert after the last task in that section; otherwise
+// append to the end of the page. Returns the new block id, or null on failure.
+async function insertTaskBlock(pageId: string, content: string, category: string): Promise<{ blockId: string | null; error?: string }> {
   const newBlock = {
     type: 'bulleted_list_item',
     bulleted_list_item: {
@@ -173,22 +169,19 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  // If a category is provided, find the matching heading and insert after
-  // the last task in that section rather than appending to the page end
   if (category) {
     const children = await getPageChildren(pageId);
 
-    // Find the index of the matching heading
     const headingIndex = children.findIndex(block => {
       const isHeading = block.type === 'heading_1' || block.type === 'heading_2' || block.type === 'heading_3';
       if (!isHeading) return false;
       const richText = block[block.type]?.rich_text ?? [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const headingText = richText.map((t: any) => t.plain_text).join('').trim();
       return headingText.toUpperCase() === category.toUpperCase();
     });
 
     if (headingIndex !== -1) {
-      // Find the last non-heading block in this section (before next heading or end)
       let insertAfterId = children[headingIndex].id;
       for (let i = headingIndex + 1; i < children.length; i++) {
         const block = children[i];
@@ -206,21 +199,13 @@ export async function POST(req: NextRequest) {
         },
         body: JSON.stringify({ after: insertAfterId, children: [newBlock] }),
       });
-
       const data = await res.json();
-      if (data.object === 'error') {
-        return NextResponse.json({ error: data.message }, { status: 400 });
-      }
-      const newBlockId = data.results?.[0]?.id;
-      if (newBlockId && typeof context === 'string' && context.trim()) {
-        await setContext(newBlockId, context);
-      }
-      return NextResponse.json({ success: true, blockId: newBlockId });
+      if (data.object === 'error') return { blockId: null, error: data.message };
+      return { blockId: data.results?.[0]?.id ?? null };
     }
-    // Heading not found on target page — fall through to append at end
+    // Heading not found on this page — fall through to append at end
   }
 
-  // Default: append to end of page
   const res = await fetch(`https://api.notion.com/v1/blocks/${pageId}/children`, {
     method: 'PATCH',
     headers: {
@@ -230,14 +215,75 @@ export async function POST(req: NextRequest) {
     },
     body: JSON.stringify({ children: [newBlock] }),
   });
-
   const data = await res.json();
-  if (data.object === 'error') {
-    return NextResponse.json({ error: data.message }, { status: 400 });
+  if (data.object === 'error') return { blockId: null, error: data.message };
+  return { blockId: data.results?.[0]?.id ?? null };
+}
+
+// Build the stored text for a task given its recurrence mode.
+//   once        → [YYYY-MM-DD] text   (date-stamped, auto-deletes after the day passes)
+//   weekly      → text                (no prefix — shows every occurrence of its weekday)
+//   fortnightly → [F]/[F2] text       (odd/even ISO week, matching the picked date's week)
+//   daily       → [D] text            (written to all 7 day pages; always shows)
+//   monthly     → [MD:n] text         (written to all 7 day pages; shows only when date-of-month = n)
+function buildContent(recurrence: Recurrence, date: string, d: Date, text: string): string {
+  const t = text.trim();
+  switch (recurrence) {
+    case 'weekly':
+      return t;
+    case 'fortnightly':
+      return `${getISOWeek(d) % 2 === 1 ? '[F]' : '[F2]'} ${t}`;
+    case 'daily':
+      return `[D] ${t}`;
+    case 'monthly':
+      return `[MD:${d.getDate()}] ${t}`;
+    case 'once':
+    default:
+      return `[${date}] ${t}`;
   }
-  const newBlockId = data.results?.[0]?.id;
-  if (newBlockId && typeof context === 'string' && context.trim()) {
-    await setContext(newBlockId, context);
+}
+
+export async function POST(req: NextRequest) {
+  const { date, text, category: rawCategory, context, recurrence: rawRecurrence } = await req.json();
+
+  if (!date || !text?.trim()) {
+    return NextResponse.json({ error: 'Missing date or text' }, { status: 400 });
   }
-  return NextResponse.json({ success: true, blockId: newBlockId });
+
+  const recurrence: Recurrence = VALID_RECURRENCE.includes(rawRecurrence) ? rawRecurrence : 'once';
+
+  // Auto-classify if no category provided — uses Claude Haiku to pick the right section.
+  const category: string = rawCategory || await classifyCategory(text.trim());
+
+  const [year, month, day] = date.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+
+  const content = buildContent(recurrence, date, d, text);
+
+  // Daily and monthly-by-date can land on any weekday, so they're written to all 7 day
+  // pages. Every other mode lives on the single page for the picked weekday.
+  const targetPages: string[] = (recurrence === 'daily' || recurrence === 'monthly')
+    ? Object.values(DAY_PAGES)
+    : [DAY_PAGES[d.getDay()]];
+
+  if (targetPages.some(p => !p)) {
+    return NextResponse.json({ error: 'No page for that day' }, { status: 400 });
+  }
+
+  const results = await Promise.all(targetPages.map(pageId => insertTaskBlock(pageId, content, category)));
+
+  const firstError = results.find(r => r.error);
+  if (firstError) {
+    return NextResponse.json({ error: firstError.error }, { status: 400 });
+  }
+
+  const blockIds = results.map(r => r.blockId).filter((id): id is string => Boolean(id));
+
+  // Attach the optional context note to every created block so it shows regardless
+  // of which day-page instance the user is looking at.
+  if (typeof context === 'string' && context.trim()) {
+    await Promise.all(blockIds.map(id => setContext(id, context)));
+  }
+
+  return NextResponse.json({ success: true, blockId: blockIds[0] ?? null, blockIds });
 }

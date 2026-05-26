@@ -206,6 +206,18 @@ async function getDailyTasks(dayOfWeek: number, today: Date) {
         rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F2]', '').trim(), isRecurring: true });
         continue;
       }
+      // [D] = daily — written to every day page, always shows.
+      if (raw.startsWith('[D]')) {
+        rawItems.push({ type: 'task', id: block.id, text: raw.replace('[D]', '').trim(), isRecurring: true });
+        continue;
+      }
+      // [MD:n] = monthly on calendar day n. Checked before [M] since "[MD:" also starts with "[M".
+      const mdMatch = raw.match(/^\[MD:(\d{1,2})\]\s*/);
+      if (mdMatch) {
+        if (today.getDate() !== Number(mdMatch[1])) continue;
+        rawItems.push({ type: 'task', id: block.id, text: raw.replace(/^\[MD:\d{1,2}\]\s*/, '').trim(), isRecurring: true });
+        continue;
+      }
       if (raw.startsWith('[M]')) {
         if (today.getDate() > 7) continue;
         rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim(), isRecurring: true });

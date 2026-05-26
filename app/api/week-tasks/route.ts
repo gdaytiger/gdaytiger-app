@@ -90,6 +90,20 @@ async function getTasksForDay(dateStr: string): Promise<{ id: string; text: stri
       rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F2]', '').trim(), isRecurring: true });
       continue;
     }
+    // [D] = daily — written to every day page, always shows.
+    if (raw.startsWith('[D]')) {
+      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[D]', '').trim(), isRecurring: true });
+      continue;
+    }
+    // [MD:n] = monthly on calendar day n — written to every day page, shows only when
+    // the rendered date's day-of-month matches. Checked before [M] since "[MD:" also
+    // starts with "[M".
+    const mdMatch = raw.match(/^\[MD:(\d{1,2})\]\s*/);
+    if (mdMatch) {
+      if (d.getDate() !== Number(mdMatch[1])) continue;
+      rawItems.push({ type: 'task', id: block.id, text: raw.replace(/^\[MD:\d{1,2}\]\s*/, '').trim(), isRecurring: true });
+      continue;
+    }
     if (raw.startsWith('[M]')) {
       if (d.getDate() > 7) continue;
       rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim(), isRecurring: true });
