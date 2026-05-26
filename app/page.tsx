@@ -408,19 +408,6 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   const close = () => { setIsAdding(false); setTaskText(''); setRecurrence('once'); };
   const submit = async () => { if (!taskText.trim()) return; setSaving(true); await onAdd(shift.date, taskText, recurrence); setSaving(false); close(); };
 
-  // Live description of what the chosen recurrence will do, anchored to this day.
-  const [yy, mm, dd] = shift.date.split('-').map(Number);
-  const dateObj = new Date(yy, mm - 1, dd);
-  const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dateObj.getDay()];
-  const ordinal = (n: number) => `${n}${(['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : (n % 10 < 4 ? n % 10 : 0)] || 'th')}`;
-  const recurrenceHint: Record<string, string> = {
-    once: 'This date only',
-    daily: 'Repeats every day',
-    weekly: `Repeats every ${weekday}`,
-    fortnightly: `Repeats every 2nd ${weekday}`,
-    monthly: `Repeats the ${ordinal(dd)} of each month`,
-  };
-
   const baseStyle = isDragOver
     ? { background: 'rgba(22,163,74,0.10)', borderColor: 'rgba(22,163,74,0.25)', boxShadow: '0 0 0 2px rgba(22,163,74,0.15)' }
     : isHighlighted
@@ -465,7 +452,6 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
               {opt.label}
             </button>
           ))}
-          <span className="text-[10px] text-gray-400 italic shrink-0 ml-1 whitespace-nowrap">{recurrenceHint[recurrence]}</span>
         </div>
       </div>
     </div>
