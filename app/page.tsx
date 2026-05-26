@@ -382,6 +382,21 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   );
 }
 
+// Shopping quantities are encoded in the item text as a trailing "×N" (or "xN"),
+// e.g. "basil ×2". Quantity of 1 is stored as just the name with no suffix.
+function parseShoppingQty(raw: string): { name: string; qty: number } {
+  const m = raw.match(/\s*[×x]\s*(\d+)\s*$/i);
+  if (m && m.index !== undefined) {
+    const qty = parseInt(m[1], 10);
+    return { name: raw.slice(0, m.index).trim(), qty: qty > 0 ? qty : 1 };
+  }
+  return { name: raw.trim(), qty: 1 };
+}
+function buildShoppingText(name: string, qty: number): string {
+  const n = name.trim();
+  return qty > 1 ? `${n} ×${qty}` : n;
+}
+
 const RECURRENCE_OPTIONS = [
   { value: 'once', label: 'Once' },
   { value: 'daily', label: 'Daily' },
@@ -1238,6 +1253,9 @@ export default function Home() {
   const [shoppingOpen, setShoppingOpen] = useState(false);
   const [addingShopping, setAddingShopping] = useState(false);
   const [newShoppingText, setNewShoppingText] = useState('');
+  const [newShoppingQty, setNewShoppingQty] = useState(1);
+  const [editingQtyId, setEditingQtyId] = useState<string | null>(null);
+  const [editingQtyVal, setEditingQtyVal] = useState('1');
   const claudeMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const todayStr = data?.todayStr ?? '';
@@ -1270,19 +1288,21 @@ export default function Home() {
     fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) }).catch(() => {});
   };
 
-  const addShopping = async (text: string) => {
-    const t = text.trim();
-    if (!t) return;
+  const addShopping = async (name: string, qty: number = 1) => {
+    const n = name.trim();
+    if (!n) return;
+    const text = buildShoppingText(n, qty);
     setNewShoppingText('');
+    setNewShoppingQty(1);
     setAddingShopping(false);
     try {
-      const res = await fetch('/api/add-shopping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }) });
+      const res = await fetch('/api/add-shopping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
       const d = await res.json();
       if (d.blockId) {
         setData(prev => {
           if (!prev) return prev;
           const hasHeader = prev.dailyTasks.some(t2 => t2.isHeader && t2.text.toUpperCase().includes('SHOPPING'));
-          const newItem = { id: d.blockId, text: t, checked: false, isRecurring: false };
+          const newItem = { id: d.blockId, text, checked: false, isRecurring: false };
           const additions = hasHeader
             ? [newItem]
             : [{ id: 'header-shopping', text: '🛒 SHOPPING LIST', checked: false, isHeader: true }, newItem];
@@ -1290,6 +1310,15 @@ export default function Home() {
         });
       }
     } catch { /* ignore */ }
+  };
+
+  // Adjust the quantity of an existing shopping item (writes "name ×N" back to Notion).
+  const saveShoppingQty = (blockId: string, name: string) => {
+    const qty = Math.max(1, parseInt(editingQtyVal, 10) || 1);
+    setEditingQtyId(null);
+    const newText = buildShoppingText(name, qty);
+    setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, text: newText } : t) } : prev);
+    fetch('/api/update-shopping', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, text: newText }) }).catch(() => {});
   };
 
   const fetchDashboard = async (state: Record<string, string[]>) => {
@@ -1609,16 +1638,37 @@ export default function Home() {
                           <div onClick={() => toggleShopping(item.id, !item.checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: item.checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: item.checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
                             {item.checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                           </div>
-                          <span onClick={() => toggleShopping(item.id, !item.checked)} className={`flex-1 text-sm leading-snug font-semibold cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{item.text}</span>
+                          {(() => {
+                            const { name, qty } = parseShoppingQty(item.text);
+                            const editing = editingQtyId === item.id;
+                            return (
+                              <>
+                                <span onClick={() => toggleShopping(item.id, !item.checked)} className={`flex-1 text-sm leading-snug font-semibold cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{name}</span>
+                                {editing ? (
+                                  <input type="number" min={1} value={editingQtyVal} autoFocus
+                                    onChange={e => setEditingQtyVal(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveShoppingQty(item.id, name); if (e.key === 'Escape') setEditingQtyId(null); }}
+                                    onBlur={() => saveShoppingQty(item.id, name)}
+                                    aria-label="Quantity"
+                                    className="w-12 text-sm text-center px-1 py-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.12)' }} />
+                                ) : (
+                                  <button onClick={() => { setEditingQtyId(item.id); setEditingQtyVal(String(qty)); }} className={`shrink-0 text-sm font-semibold tabular-nums px-1.5 transition-colors ${item.checked ? 'text-gray-300' : 'text-gray-400 hover:text-gray-600'}`} title="Change quantity">×{qty}</button>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       ))}
                       {addingShopping ? (
                         <div className="flex items-center gap-2">
                           <input value={newShoppingText} onChange={e => setNewShoppingText(e.target.value)} autoFocus
-                            onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText); if (e.key === 'Escape') { setAddingShopping(false); setNewShoppingText(''); } }}
+                            onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); if (e.key === 'Escape') { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); } }}
                             placeholder="ADD ITEM..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                          <button onClick={() => addShopping(newShoppingText)} disabled={!newShoppingText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>ADD</button>
-                          <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
+                          <input type="number" min={1} value={newShoppingQty} onChange={e => setNewShoppingQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); }}
+                            aria-label="Quantity" title="Quantity" className="w-12 text-sm text-center px-1 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                          <button onClick={() => addShopping(newShoppingText, newShoppingQty)} disabled={!newShoppingText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>ADD</button>
+                          <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
                         </div>
                       ) : (
                         <button onClick={() => setAddingShopping(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 transition-colors" style={{ border: '1px dashed rgba(0,0,0,0.12)' }} aria-label="Add item"><span className="text-base leading-none font-light">+</span> Add item</button>
