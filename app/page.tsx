@@ -1363,10 +1363,16 @@ export default function Home() {
 
   const handleSelectDay = (date: string) => setSelectedDate(prev => prev === date ? null : date);
 
-  const handleDeleteTask = async (blockId: string, section: 'daily' | 'week', date?: string) => {
+  const handleDeleteTask = async (blockId: string, section: 'daily' | 'week', date?: string, isRecurring?: boolean) => {
     if (section === 'daily') setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(t => t.id !== blockId) } : prev);
     else if (section === 'week' && date) setWeekTasks(prev => ({ ...prev, [date]: { ...prev[date], count: prev[date].count - 1, tasks: prev[date].tasks.filter(t => t.id !== blockId) } }));
     await fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) });
+    // Recurring tasks — especially daily/monthly, which are mirrored across all 7 day
+    // pages — need a full refresh so every copy clears from the UI, not just this view.
+    if (isRecurring) {
+      const state = await fetchServerState();
+      await Promise.all([fetchWeekTasks(state), fetchDashboard(state)]);
+    }
   };
 
   const handleAddTask = async (date: string, text: string, recurrence: string = 'once') => {
@@ -1573,7 +1579,7 @@ export default function Home() {
               const renderTask = (task: typeof displayedTasks[0], category: string) => (
                 <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave}
                   onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
-                  onDelete={!task.isRecurring ? (id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined) : undefined}
+                  onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring)}
                   onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined)}
                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined })); e.dataTransfer.effectAllowed = 'move'; }} />
               );
