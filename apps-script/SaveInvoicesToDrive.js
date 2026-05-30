@@ -61,7 +61,7 @@ const SUPPLIERS = [
   },
   {
     name: "PFD Foods",
-    query: "from:ar@pfdfoods.com.au has:attachment filename:pdf"
+    query: "from:PFDPortal@pfdfoods.com.au has:attachment filename:pdf"
   },
   {
     name: "5Ways Foodservice",
