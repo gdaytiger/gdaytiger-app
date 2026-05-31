@@ -245,8 +245,86 @@ function syncCoffeeToNotion() {
 function syncAllCostingsToNotion() {
   var foodSummary   = syncCostingsToNotion();
   var coffeeSummary = syncCoffeeToNotion();
+
+  // Write costings_sync heartbeat block on OS page so TIGER OS healthcheck
+  // can verify the trigger is alive. Wrapped so heartbeat failures never
+  // break the actual sync.
+  try {
+    writeCostingsSyncHeartbeat_();
+    Logger.log('✓ costings_sync heartbeat written.');
+  } catch (e) {
+    Logger.log('⚠ costings_sync heartbeat failed: ' + e.message);
+  }
+
   Logger.log('\n--- COMBINED RUN COMPLETE ---\n' + foodSummary + '\n\n' + coffeeSummary);
   return foodSummary + '\n\n' + coffeeSummary;
+}
+
+// ─── HEARTBEAT (writes {"type":"costings_sync","updated":...} to OS page) ────
+
+var SCN_OS_PAGE_ID = '3403c99c0e858113a941c2118b3cdef9';
+
+function writeCostingsSyncHeartbeat_() {
+  var notionKey = PropertiesService.getScriptProperties().getProperty('NOTION_API_KEY');
+  if (!notionKey) throw new Error('NOTION_API_KEY not set.');
+
+  var headers = {
+    'Authorization': 'Bearer ' + notionKey,
+    'Notion-Version': '2022-06-28',
+    'Content-Type': 'application/json',
+  };
+
+  var payload = JSON.stringify({
+    type: 'costings_sync',
+    updated: new Date().toISOString(),
+  });
+
+  // List children of OS page, find existing costings_sync code block
+  var allBlocks = [];
+  var cursor = null;
+  do {
+    var url = 'https://api.notion.com/v1/blocks/' + SCN_OS_PAGE_ID + '/children?page_size=100';
+    if (cursor) url += '&start_cursor=' + cursor;
+    var res  = UrlFetchApp.fetch(url, { headers: headers, muteHttpExceptions: true });
+    var data = JSON.parse(res.getContentText());
+    if (data.object === 'error') throw new Error('Notion blocks list: ' + data.message);
+    allBlocks = allBlocks.concat(data.results || []);
+    cursor    = data.has_more ? data.next_cursor : null;
+  } while (cursor);
+
+  var existing = allBlocks.find(function (b) {
+    if (b.type !== 'code') return false;
+    var text = ((b.code && b.code.rich_text) || []).map(function (r) { return r.plain_text || ''; }).join('');
+    return text.indexOf('"costings_sync"') !== -1;
+  });
+
+  var blockBody = JSON.stringify({
+    type: 'code',
+    code: {
+      language: 'json',
+      rich_text: [{ type: 'text', text: { content: payload } }],
+    },
+  });
+
+  if (existing) {
+    var patchRes = UrlFetchApp.fetch('https://api.notion.com/v1/blocks/' + existing.id, {
+      method: 'PATCH',
+      headers: headers,
+      payload: blockBody,
+      muteHttpExceptions: true,
+    });
+    var patched = JSON.parse(patchRes.getContentText());
+    if (patched.object === 'error') throw new Error('Notion heartbeat patch: ' + patched.message);
+  } else {
+    var appendRes = UrlFetchApp.fetch('https://api.notion.com/v1/blocks/' + SCN_OS_PAGE_ID + '/children', {
+      method: 'PATCH',
+      headers: headers,
+      payload: JSON.stringify({ children: [JSON.parse(blockBody)] }),
+      muteHttpExceptions: true,
+    });
+    var appended = JSON.parse(appendRes.getContentText());
+    if (appended.object === 'error') throw new Error('Notion heartbeat append: ' + appended.message);
+  }
 }
 
 // ─── COFFEE HELPERS ──────────────────────────────────────────────────────────
