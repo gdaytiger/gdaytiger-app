@@ -45,7 +45,14 @@ export async function GET() {
 
     const rosterText = await rosterRes.text();
     if (!rosterText) return NextResponse.json({ shifts: [], error: 'Deputy returned empty response' });
-    const rosters = JSON.parse(rosterText);
+    let rosters;
+    try {
+      rosters = JSON.parse(rosterText);
+    } catch {
+      // Deputy occasionally returns malformed bodies — fail soft so the roster
+      // card shows empty instead of taking the whole dashboard down with a 500.
+      return NextResponse.json({ shifts: [], error: 'Deputy returned malformed JSON' });
+    }
 
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',

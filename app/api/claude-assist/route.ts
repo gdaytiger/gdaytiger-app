@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+// Opus calls can run a few seconds on the longer-context project chat. Vercel's
+// default ceiling is 10s, which has been borderline — raise to 30s.
+export const maxDuration = 30;
+
 export async function POST(req: NextRequest) {
   const { messages, projectName, actionText } = await req.json();
 
@@ -21,7 +25,7 @@ Respond helpfully to whatever Jonathan asks about this task. If it's a research 
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-8',
       max_tokens: 1024,
       system: systemPrompt,
       messages,

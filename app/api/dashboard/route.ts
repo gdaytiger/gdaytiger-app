@@ -19,17 +19,25 @@ const DAY_PAGES: Record<number, string> = {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function notionFetch(path: string, method = 'GET', body?: object): Promise<any> {
-  const res = await fetch(`https://api.notion.com/v1${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${NOTION_API_KEY}`,
-      'Notion-Version': '2022-06-28',
-      'Content-Type': 'application/json',
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-    cache: 'no-store',
-  });
-  return res.json();
+  // One retry on 5xx/429 — Notion occasionally 502s during Sunday volume and
+  // a single retry is enough to get past the blip without making the card
+  // appear empty to the user.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(`https://api.notion.com/v1${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      cache: 'no-store',
+    });
+    if (res.ok || (res.status < 500 && res.status !== 429) || attempt === 1) {
+      return res.json();
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
 }
 
 async function getWeather() {
@@ -41,9 +49,11 @@ async function getWeather() {
     const code = data.daily.weathercode[0];
     const weatherMap: Record<number, [string, string]> = {
       0: ['Clear sky', '☀️'], 1: ['Mainly clear', '🌤️'], 2: ['Partly cloudy', '⛅'],
-      3: ['Overcast', '☁️'], 45: ['Foggy', '🌫️'], 51: ['Light drizzle', '🌦️'],
+      3: ['Overcast', '☁️'], 45: ['Foggy', '🌫️'], 48: ['Icy fog', '🌫️'],
+      51: ['Light drizzle', '🌦️'], 53: ['Drizzle', '🌦️'], 55: ['Heavy drizzle', '🌧️'],
       61: ['Light rain', '🌧️'], 63: ['Rain', '🌧️'], 65: ['Heavy rain', '🌧️'],
-      80: ['Showers', '🌦️'], 81: ['Showers', '🌧️'], 95: ['Thunderstorm', '⛈️'],
+      80: ['Light showers', '🌦️'], 81: ['Showers', '🌧️'], 82: ['Heavy showers', '⛈️'],
+      95: ['Thunderstorm', '⛈️'], 99: ['Thunderstorm', '⛈️'],
     };
     const [desc, emoji] = weatherMap[code] || ['Unknown', '🌡️'];
     return `${emoji} ${temp}° — ${desc}`;
