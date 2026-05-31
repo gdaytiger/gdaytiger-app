@@ -583,7 +583,7 @@ function productMatchesIngredient(productName: string, ingredientKey: string): b
     red_chilli:          { inc: ['TUNA'] },
     jalapeno:            { inc: ['CHICKEN SCHNITTA'] },
     parsley:             { inc: ['TUNA', 'MUSHROOM'] },
-    dill:                { inc: ['TUNA'] },
+    dill:                { inc: ['CHICKEN SCHNITTA'] },
     bananas:             { inc: ['BANANA BREAD'] },
     eggplant:            { inc: ['CAPONATA'] },
     lemon:               { inc: ['CAPONATA', 'MUSHROOM'] },
