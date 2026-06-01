@@ -1249,6 +1249,7 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [addingActionFor, setAddingActionFor] = useState<string | null>(null);
   const [newActionText, setNewActionText] = useState('');
+  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
   const [serverState, setServerState] = useState<Record<string, string[]>>({});
   const [claudePanel, setClaudePanel] = useState<ClaudePanelState | null>(null);
   const [claudeInput, setClaudeInput] = useState('');
@@ -1490,6 +1491,19 @@ export default function Home() {
     setData(prev => prev ? { ...prev, projects: prev.projects.map(p => p.id === projectId ? { ...p, status: next } : p) } : prev);
     if (next === 'Done') setTimeout(() => setData(prev => prev ? { ...prev, projects: prev.projects.filter(p => p.id !== projectId) } : prev), 600);
     await fetch('/api/project-status', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, status: next }) });
+  };
+
+  // Archive (move to Notion trash). Two-tap confirm via confirmArchiveId guards
+  // against accidental taps during service. Optimistically removes from the list.
+  const handleArchiveProject = async (projectId: string) => {
+    if (confirmArchiveId !== projectId) {
+      setConfirmArchiveId(projectId);
+      setTimeout(() => setConfirmArchiveId(prev => prev === projectId ? null : prev), 3000);
+      return;
+    }
+    setConfirmArchiveId(null);
+    setData(prev => prev ? { ...prev, projects: prev.projects.filter(p => p.id !== projectId) } : prev);
+    await fetch('/api/archive-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId }) });
   };
 
   const handleAddProjectAction = async (projectId: string, text: string) => {
@@ -1811,6 +1825,11 @@ export default function Home() {
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-sm font-semibold text-gray-900 flex-1">{project.name}</span>
                     <button onClick={() => handleStatusChange(project.id, project.status)} title="Click to cycle status" className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${project.status === 'In Progress' ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : project.status === 'Blocked' ? 'bg-red-100 text-red-600 hover:bg-red-200' : project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' : 'bg-green-100 text-green-600 hover:bg-green-200'}`}>{project.status}</button>
+                    {confirmArchiveId === project.id ? (
+                      <button onClick={() => handleArchiveProject(project.id)} title="Tap again to archive to Notion trash" className="text-xs px-2 py-0.5 rounded-full font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors shrink-0">Archive?</button>
+                    ) : (
+                      <button onClick={() => handleArchiveProject(project.id)} title="Archive project" className="text-gray-300 hover:text-red-500 transition-colors shrink-0 text-sm leading-none">🗑</button>
+                    )}
                   </div>
                   {project.todos.length === 0 ? <p className="text-xs text-gray-400 italic ml-1">No actions set</p> : (
                     <div className="space-y-2">
