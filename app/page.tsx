@@ -71,6 +71,16 @@ interface CostingProduct {
 
 const CATEGORY_ORDER = ['ORDER', 'ADMIN', 'MAINTENANCE', 'STAFF', 'COSTING', 'MERCHANDISE', 'PERSONAL'];
 
+// Shared "tile" look used by action items, the brain-dump capture box, and the
+// collapsible project headers so they all read as the same component.
+const TILE_STYLE: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.45)',
+  backdropFilter: 'blur(16px) saturate(180%)',
+  WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+  border: '1px solid rgba(255,255,255,0.7)',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
+};
+
 const SUPPLIER_LINKS: Record<string, string> = {
   'dench': 'https://denchbakers.cybakeshop.com.au/home',
   'seven seeds': 'https://sevenseedswholesale.com.au/account/',
@@ -97,6 +107,20 @@ function Card({ emoji, title, children, onEmojiClick, headerRight }: {
       </div>
       <div className="no-scrollbar flex-1 overflow-y-auto min-h-0">{children}</div>
     </div>
+  );
+}
+
+// Claude logomark — radial burst in Claude orange. Hand-built approximation;
+// drop in the official SVG asset here if a brand file is available.
+function ClaudeLogo({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block' }}>
+      <g transform="translate(12,12)" fill="#D97757">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <rect key={i} x={-1} y={-11} width={2} height={7.5} rx={1} transform={`rotate(${i * 30})`} />
+        ))}
+      </g>
+    </svg>
   );
 }
 
@@ -360,7 +384,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
         </div>
         {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: '#fbcdad' }} title="Has context" />}
-        {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-40 hover:opacity-100" style={{ fontSize: '13px', lineHeight: 1 }} aria-label="Ask Claude" title="Ask Claude">🤖</button>}
+        {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
       </div>
       {expanded && (
         <div className="px-4 pb-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
@@ -1239,6 +1263,7 @@ export default function Home() {
   const [addingActionFor, setAddingActionFor] = useState<string | null>(null);
   const [newActionText, setNewActionText] = useState('');
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [serverState, setServerState] = useState<Record<string, string[]>>({});
   const [delegateToast, setDelegateToast] = useState<string | null>(null);
   const [costings, setCostings] = useState<CostingProduct[]>([]);
@@ -1751,10 +1776,11 @@ export default function Home() {
 
         {/* PROJECTS (brain-dump capture + ongoing projects, merged) */}
         <Card emoji="🎯" title="Projects">
+         <div className="uppercase">
           {/* ── Capture zone ── */}
           {!draft ? (
             <div className="space-y-2 mb-3">
-              <textarea value={braindump} onChange={e => setBraindump(e.target.value)} placeholder="Drop an idea — TIGER drafts the project…" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)' }} className="w-full rounded-xl px-3 py-2 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" rows={3} />
+              <textarea value={braindump} onChange={e => setBraindump(e.target.value)} placeholder="Drop an idea" style={{ ...TILE_STYLE, minHeight: '62px' }} className="w-full rounded-2xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" rows={2} />
               {braindump.trim() && (
                 <div className="flex gap-2 items-center">
                   <button onClick={handleAnalyze} disabled={analyzing} className="text-xs disabled:opacity-50 px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: '#fbcdad', color: '#333' }}>{analyzing ? 'Drafting…' : '✨ Draft with AI'}</button>
@@ -1797,37 +1823,49 @@ export default function Home() {
           </div>
           <div className="space-y-2">
             {data.projects.length === 0 ? <p className="text-sm text-gray-400 italic">No active projects</p> : (
-              data.projects.map(project => (
-                <div key={project.id}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-semibold text-gray-900 flex-1">{project.name}</span>
-                    <button onClick={() => handleStatusChange(project.id, project.status)} title="Click to cycle status" className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${project.status === 'In Progress' ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : project.status === 'Blocked' ? 'bg-red-100 text-red-600 hover:bg-red-200' : project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' : 'bg-green-100 text-green-600 hover:bg-green-200'}`}>{project.status}</button>
+              data.projects.map(project => {
+                const isOpen = expandedProjects.has(project.id);
+                const toggleOpen = () => setExpandedProjects(prev => { const n = new Set(prev); if (n.has(project.id)) n.delete(project.id); else n.add(project.id); return n; });
+                const pDone = project.todos.filter(t => t.checked).length;
+                return (
+                <div key={project.id} className="space-y-2">
+                  {/* PROJECT TILE — click to drop down its actions */}
+                  <div onClick={toggleOpen} className="rounded-2xl px-4 py-3 flex items-center gap-2 cursor-pointer" style={TILE_STYLE}>
+                    <span className="text-gray-400 text-xs shrink-0 transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}>▸</span>
+                    <span className="text-sm font-semibold text-gray-900 flex-1 min-w-0">{project.name}</span>
+                    <span className="text-xs text-gray-400 shrink-0">{pDone}/{project.todos.length}</span>
+                    <button onClick={e => { e.stopPropagation(); handleStatusChange(project.id, project.status); }} title="Click to cycle status" className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer shrink-0 ${project.status === 'In Progress' ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : project.status === 'Blocked' ? 'bg-red-100 text-red-600 hover:bg-red-200' : project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' : 'bg-green-100 text-green-600 hover:bg-green-200'}`}>{project.status}</button>
                     {confirmArchiveId === project.id ? (
-                      <button onClick={() => handleArchiveProject(project.id)} title="Tap again to archive to Notion trash" className="text-xs px-2 py-0.5 rounded-full font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors shrink-0">Archive?</button>
+                      <button onClick={e => { e.stopPropagation(); handleArchiveProject(project.id); }} title="Tap again to archive to Notion trash" className="text-xs px-2 py-0.5 rounded-full font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors shrink-0">Archive?</button>
                     ) : (
-                      <button onClick={() => handleArchiveProject(project.id)} title="Archive project" className="text-gray-300 hover:text-red-500 transition-colors shrink-0 text-sm leading-none">🗑</button>
+                      <button onClick={e => { e.stopPropagation(); handleArchiveProject(project.id); }} title="Archive project" className="text-gray-300 hover:text-red-500 transition-colors shrink-0 text-sm leading-none">🗑</button>
                     )}
                   </div>
-                  {project.todos.length === 0 ? <p className="text-xs text-gray-400 italic ml-1">No actions set</p> : (
-                    <div className="space-y-2">
-                      {project.todos.map(todo => (
-                        <CheckItem key={todo.id} id={todo.id} text={todo.text} checked={todo.checked} onChange={(id, checked) => toggleTodo(id, checked, 'project', project.id)} onDelegate={() => delegateToClaude(project, todo)} />
-                      ))}
+                  {/* DROPDOWN — action tiles */}
+                  {isOpen && (
+                    <div className="space-y-2 pl-3">
+                      {project.todos.length === 0 ? <p className="text-xs text-gray-400 italic ml-1">No actions set</p> : (
+                        project.todos.map(todo => (
+                          <CheckItem key={todo.id} id={todo.id} text={todo.text} checked={todo.checked} onChange={(id, checked) => toggleTodo(id, checked, 'project', project.id)} onDelegate={() => delegateToClaude(project, todo)} />
+                        ))
+                      )}
+                      {addingActionFor === project.id ? (
+                        <div className="flex gap-2 mt-1">
+                          <input value={newActionText} onChange={e => setNewActionText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddProjectAction(project.id, newActionText); if (e.key === 'Escape') { setAddingActionFor(null); setNewActionText(''); } }} placeholder="New action..." autoFocus className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                          <button onClick={() => handleAddProjectAction(project.id, newActionText)} disabled={!newActionText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
+                          <button onClick={() => { setAddingActionFor(null); setNewActionText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setAddingActionFor(project.id); setNewActionText(''); }} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">+ Add action</button>
+                      )}
                     </div>
-                  )}
-                  {addingActionFor === project.id ? (
-                    <div className="flex gap-2 mt-2">
-                      <input value={newActionText} onChange={e => setNewActionText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddProjectAction(project.id, newActionText); if (e.key === 'Escape') { setAddingActionFor(null); setNewActionText(''); } }} placeholder="New action..." autoFocus className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                      <button onClick={() => handleAddProjectAction(project.id, newActionText)} disabled={!newActionText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
-                      <button onClick={() => { setAddingActionFor(null); setNewActionText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => { setAddingActionFor(project.id); setNewActionText(''); }} className="mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors">+ Add action</button>
                   )}
                 </div>
-              ))
+                );
+              })
             )}
           </div>
+         </div>
         </Card>
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (fragment renders 3 cards) */}
