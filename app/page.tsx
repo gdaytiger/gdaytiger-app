@@ -124,6 +124,68 @@ function ClaudeLogo({ size = 14 }: { size?: number }) {
   );
 }
 
+// Left-swipe-to-delete wrapper (mobile), matching the task tile gesture. Used
+// for project tiles so projects are removed the same way tasks are — no button.
+// On non-touch devices it just renders children (tasks have no desktop delete).
+function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactNode; onDelete: () => void; onClick?: () => void; }) {
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const isHorizontal = useRef(false);
+  const didSwipeRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const [committed, setCommitted] = useState(false);
+  const THRESHOLD = 90;
+  const isMobile = useSyncExternalStore(
+    (cb) => { const mq = window.matchMedia('(hover: none) and (pointer: coarse)'); mq.addEventListener('change', cb); return () => mq.removeEventListener('change', cb); },
+    () => window.matchMedia('(hover: none) and (pointer: coarse)').matches,
+    () => false,
+  );
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !isMobile) return;
+    const preventScroll = (e: TouchEvent) => { if (isHorizontal.current) e.preventDefault(); };
+    el.addEventListener('touchmove', preventScroll, { passive: false });
+    return () => el.removeEventListener('touchmove', preventScroll);
+  }, [isMobile]);
+
+  const onTouchStart = (e: React.TouchEvent) => { if (!isMobile) return; touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY; isHorizontal.current = false; setSwiping(true); };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!isMobile || !swiping) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    if (!isHorizontal.current && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) isHorizontal.current = true;
+    if (isHorizontal.current) { didSwipeRef.current = true; setOffset(Math.min(0, dx)); }
+  };
+  const onTouchEnd = () => {
+    if (!isMobile) return;
+    setSwiping(false);
+    if (offset <= -THRESHOLD) { setCommitted(true); setOffset(-window.innerWidth); setTimeout(onDelete, 200); }
+    else setOffset(0);
+  };
+
+  const absOffset = Math.abs(Math.min(0, offset));
+  const eased = Math.min(absOffset / THRESHOLD, 1);
+
+  return (
+    <div ref={containerRef} className="relative overflow-hidden rounded-2xl" style={{ ...TILE_STYLE, minHeight: '62px' }}
+      onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+      <div className="absolute inset-0 flex items-center justify-end pr-4 rounded-2xl pointer-events-none"
+        style={{ background: committed ? 'linear-gradient(270deg, #ef4444 0%, #fca5a5 100%)' : `linear-gradient(270deg, rgba(239,68,68,${eased * 0.9}) 0%, rgba(252,165,165,${eased * 0.7}) 100%)`, opacity: offset < 0 ? 1 : 0, transition: swiping ? 'none' : 'background 0.2s ease' }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: '#7f1d1d', opacity: eased }}>DELETE ←</span>
+      </div>
+      <div
+        style={{ transform: `translateX(${offset}px)`, transition: swiping ? 'none' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)', willChange: 'transform' }}
+        onClick={() => { if (!didSwipeRef.current) onClick?.(); didSwipeRef.current = false; }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, label, context, onContextSave }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
@@ -1262,7 +1324,6 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [addingActionFor, setAddingActionFor] = useState<string | null>(null);
   const [newActionText, setNewActionText] = useState('');
-  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [serverState, setServerState] = useState<Record<string, string[]>>({});
   const [delegateToast, setDelegateToast] = useState<string | null>(null);
@@ -1495,15 +1556,9 @@ export default function Home() {
     await fetch('/api/project-status', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, status: next }) });
   };
 
-  // Archive (move to Notion trash). Two-tap confirm via confirmArchiveId guards
-  // against accidental taps during service. Optimistically removes from the list.
+  // Archive (move to Notion trash). Triggered by swiping the project tile left —
+  // the swipe past threshold is the confirm, same as deleting a task.
   const handleArchiveProject = async (projectId: string) => {
-    if (confirmArchiveId !== projectId) {
-      setConfirmArchiveId(projectId);
-      setTimeout(() => setConfirmArchiveId(prev => prev === projectId ? null : prev), 3000);
-      return;
-    }
-    setConfirmArchiveId(null);
     setData(prev => prev ? { ...prev, projects: prev.projects.filter(p => p.id !== projectId) } : prev);
     await fetch('/api/archive-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId }) });
   };
@@ -1780,11 +1835,11 @@ export default function Home() {
           {/* ── Capture zone ── */}
           {!draft ? (
             <div className="space-y-2 mb-3">
-              <textarea value={braindump} onChange={e => setBraindump(e.target.value)} placeholder="Drop an idea" style={{ ...TILE_STYLE, minHeight: '62px' }} className="w-full rounded-2xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" rows={2} />
+              <textarea value={braindump} onChange={e => setBraindump(e.target.value)} placeholder="Drop an idea" style={{ ...TILE_STYLE, minHeight: '62px' }} className="w-full rounded-2xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 uppercase resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" rows={1} />
               {braindump.trim() && (
                 <div className="flex gap-2 items-center">
                   <button onClick={handleAnalyze} disabled={analyzing} className="text-xs disabled:opacity-50 px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: '#fbcdad', color: '#333' }}>{analyzing ? 'Drafting…' : '✨ Draft with AI'}</button>
-                  <button onClick={handleManualDraft} disabled={analyzing} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2 transition-colors">Skip → manual</button>
+                  <button onClick={handleManualDraft} disabled={analyzing} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2 uppercase transition-colors">Skip → manual</button>
                 </div>
               )}
             </div>
@@ -1793,11 +1848,11 @@ export default function Home() {
               <p className="text-xs text-gray-400 italic">&ldquo;{braindump}&rdquo;</p>
               {/* new vs existing toggle */}
               <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(0,0,0,0.04)' }}>
-                <button onClick={() => updateDraft({ mode: 'new' })} className={`flex-1 text-xs py-1.5 rounded-md font-semibold transition-colors ${draft.mode === 'new' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}>New project</button>
-                <button onClick={() => updateDraft({ mode: 'existing', matchProjectId: draft.matchProjectId || data.projects[0]?.id || '' })} disabled={data.projects.length === 0} className={`flex-1 text-xs py-1.5 rounded-md font-semibold transition-colors disabled:opacity-40 ${draft.mode === 'existing' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}>Add to existing</button>
+                <button onClick={() => updateDraft({ mode: 'new' })} className={`flex-1 text-xs py-1.5 rounded-md font-semibold uppercase transition-colors ${draft.mode === 'new' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}>New project</button>
+                <button onClick={() => updateDraft({ mode: 'existing', matchProjectId: draft.matchProjectId || data.projects[0]?.id || '' })} disabled={data.projects.length === 0} className={`flex-1 text-xs py-1.5 rounded-md font-semibold uppercase transition-colors disabled:opacity-40 ${draft.mode === 'existing' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}>Add to existing</button>
               </div>
               {draft.mode === 'new' ? (
-                <input value={draft.projectName} onChange={e => updateDraft({ projectName: e.target.value })} placeholder="Project name" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }} className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
+                <input value={draft.projectName} onChange={e => updateDraft({ projectName: e.target.value })} placeholder="Project name" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }} className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
               ) : (
                 <select value={draft.matchProjectId} onChange={e => updateDraft({ matchProjectId: e.target.value })} style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }} className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all">
                   {data.projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1805,7 +1860,7 @@ export default function Home() {
               )}
               {draft.actions.map((action, i) => (
                 <div key={i} className="flex gap-2 items-center">
-                  <input value={action} onChange={e => setDraftAction(i, e.target.value)} placeholder={`Next action ${i + 1}`} style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }} className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
+                  <input value={action} onChange={e => setDraftAction(i, e.target.value)} placeholder={`Next action ${i + 1}`} style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }} className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
                   <button onClick={() => removeDraftAction(i)} className="text-gray-300 hover:text-gray-500 transition-colors text-lg leading-none shrink-0">&times;</button>
                 </div>
               ))}
@@ -1829,21 +1884,18 @@ export default function Home() {
                 const pDone = project.todos.filter(t => t.checked).length;
                 return (
                 <div key={project.id} className="space-y-2">
-                  {/* PROJECT TILE — click to drop down its actions */}
-                  <div onClick={toggleOpen} className="rounded-2xl px-4 py-3 flex items-center gap-2 cursor-pointer" style={TILE_STYLE}>
-                    <span className="text-gray-400 text-xs shrink-0 transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}>▸</span>
-                    <span className="text-sm font-semibold text-gray-900 flex-1 min-w-0">{project.name}</span>
-                    <span className="text-xs text-gray-400 shrink-0">{pDone}/{project.todos.length}</span>
-                    <button onClick={e => { e.stopPropagation(); handleStatusChange(project.id, project.status); }} title="Click to cycle status" className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer shrink-0 ${project.status === 'In Progress' ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : project.status === 'Blocked' ? 'bg-red-100 text-red-600 hover:bg-red-200' : project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' : 'bg-green-100 text-green-600 hover:bg-green-200'}`}>{project.status}</button>
-                    {confirmArchiveId === project.id ? (
-                      <button onClick={e => { e.stopPropagation(); handleArchiveProject(project.id); }} title="Tap again to archive to Notion trash" className="text-xs px-2 py-0.5 rounded-full font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors shrink-0">Archive?</button>
-                    ) : (
-                      <button onClick={e => { e.stopPropagation(); handleArchiveProject(project.id); }} title="Archive project" className="text-gray-300 hover:text-red-500 transition-colors shrink-0 text-sm leading-none">🗑</button>
-                    )}
-                  </div>
-                  {/* DROPDOWN — action tiles */}
+                  {/* PROJECT TILE — swipe left to archive, tap to drop down its actions */}
+                  <SwipeToDelete onDelete={() => handleArchiveProject(project.id)} onClick={toggleOpen}>
+                    <div className="px-4 flex items-center gap-2 cursor-pointer" style={{ minHeight: '62px' }}>
+                      <span className="text-sm font-semibold text-gray-900 flex-1 min-w-0">{project.name}</span>
+                      <span className="text-xs text-gray-400 shrink-0">{pDone}/{project.todos.length}</span>
+                      <button onClick={e => { e.stopPropagation(); handleStatusChange(project.id, project.status); }} title="Click to cycle status" className={`text-xs px-2 py-0.5 rounded-full font-medium uppercase transition-colors cursor-pointer shrink-0 ${project.status === 'In Progress' ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : project.status === 'Blocked' ? 'bg-red-100 text-red-600 hover:bg-red-200' : project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' : 'bg-green-100 text-green-600 hover:bg-green-200'}`}>{project.status}</button>
+                      <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{isOpen ? '▼' : '▶'}</span>
+                    </div>
+                  </SwipeToDelete>
+                  {/* DROPDOWN — action tiles (full width, same size as task tiles) */}
                   {isOpen && (
-                    <div className="space-y-2 pl-3">
+                    <div className="space-y-2">
                       {project.todos.length === 0 ? <p className="text-xs text-gray-400 italic ml-1">No actions set</p> : (
                         project.todos.map(todo => (
                           <CheckItem key={todo.id} id={todo.id} text={todo.text} checked={todo.checked} onChange={(id, checked) => toggleTodo(id, checked, 'project', project.id)} onDelegate={() => delegateToClaude(project, todo)} />
@@ -1851,12 +1903,12 @@ export default function Home() {
                       )}
                       {addingActionFor === project.id ? (
                         <div className="flex gap-2 mt-1">
-                          <input value={newActionText} onChange={e => setNewActionText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddProjectAction(project.id, newActionText); if (e.key === 'Escape') { setAddingActionFor(null); setNewActionText(''); } }} placeholder="New action..." autoFocus className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                          <button onClick={() => handleAddProjectAction(project.id, newActionText)} disabled={!newActionText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
+                          <input value={newActionText} onChange={e => setNewActionText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddProjectAction(project.id, newActionText); if (e.key === 'Escape') { setAddingActionFor(null); setNewActionText(''); } }} placeholder="New action..." autoFocus className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                          <button onClick={() => handleAddProjectAction(project.id, newActionText)} disabled={!newActionText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
                           <button onClick={() => { setAddingActionFor(null); setNewActionText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
                         </div>
                       ) : (
-                        <button onClick={() => { setAddingActionFor(project.id); setNewActionText(''); }} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">+ Add action</button>
+                        <button onClick={() => { setAddingActionFor(project.id); setNewActionText(''); }} className="text-xs text-gray-400 hover:text-gray-600 transition-colors uppercase">+ Add action</button>
                       )}
                     </div>
                   )}
