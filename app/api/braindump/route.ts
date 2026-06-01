@@ -20,7 +20,9 @@ export async function POST(req: NextRequest) {
       properties: {
         Name: { title: [{ text: { content: projectName } }] },
         Status: { select: { name: 'In Progress' } },
-        'Next Action': { rich_text: [{ text: { content: nextActions.filter(Boolean).join(' → ') } }] },
+        // Actions live as to_do blocks (below) — the old `Next Action` text
+        // property was a redundant duplicate that went stale on every tick, so
+        // it's no longer written.
         Notes: { rich_text: [{ text: { content: `From Brain Dump: "${ideaText}"` } }] },
       },
     }),
