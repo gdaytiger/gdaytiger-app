@@ -17,6 +17,15 @@ body {
   filter: drop-shadow(0px 6px 16px rgba(0, 0, 0, 0.45));
 }
 
+/* Unbold everything inside the dashboard. Catches Tailwind weight utilities
+   (font-bold/semibold/black/medium) AND inline fontWeight styles — the latter
+   need !important to beat the element's style attribute. One rule keeps every
+   widget, including child components, at a normal weight. Delete to restore. */
+.dashboard-unbold,
+.dashboard-unbold * {
+  font-weight: 400 !important;
+}
+
 /* Hide scrollbar on all browsers, keep scroll behaviour */
 .no-scrollbar {
   -ms-overflow-style: none;
