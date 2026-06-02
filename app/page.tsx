@@ -1397,6 +1397,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
   const [addingSubFor, setAddingSubFor] = useState<string | null>(null);
   const [newSubText, setNewSubText] = useState('');
   const [showAllLog, setShowAllLog] = useState(false);
+  const [showVer, setShowVer] = useState(false); // version details hidden until the version badge is tapped
 
   const toggleExpand = (id: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const submitTask = () => { if (newTaskText.trim()) { onAddTask(newTaskText.trim()); setNewTaskText(''); setAddingTask(false); } };
@@ -1408,28 +1409,35 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
 
   return (
     <div>
-      {/* ── Version + What's New ── */}
+      {/* ── Version + What's New (details revealed by tapping the version) ── */}
       <div className="rounded-2xl p-3 mb-4" style={{ ...TILE_STYLE }}>
         <div className="flex items-center gap-2">
           <span className="text-base" style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>🐯</span>
           <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: '#6b7280' }}>TIGER OS</span>
-          <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full tabular-nums" style={{ background: '#fbcdad', color: '#333' }}>{VERSION}</span>
+          <button onClick={() => setShowVer(v => !v)} className="ml-auto flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full tabular-nums transition-colors cursor-pointer" style={{ background: '#fbcdad', color: '#333' }} title="Tap for what's new">
+            {VERSION}
+            <span style={{ fontSize: '8px', opacity: 0.7 }}>{showVer ? '▲' : '▼'}</span>
+          </button>
         </div>
-        {builtDate && <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1.5">Updated {builtDate}</p>}
-        <div className="mt-2.5 pt-2.5 space-y-1.5" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-          <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">What&rsquo;s New</p>
-          {visibleLog.map(c => (
-            <div key={c.hash} className="flex gap-2 text-xs leading-snug">
-              <span className="tabular-nums text-gray-300 shrink-0" style={{ width: '38px' }}>{c.date.slice(5)}</span>
-              <span className="text-gray-600 flex-1 min-w-0">{c.subject}</span>
+        {showVer && (
+          <>
+            {builtDate && <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1.5">Updated {builtDate}</p>}
+            <div className="mt-2.5 pt-2.5 space-y-1.5" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+              <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">What&rsquo;s New</p>
+              {visibleLog.map(c => (
+                <div key={c.hash} className="flex gap-2 text-xs leading-snug">
+                  <span className="tabular-nums text-gray-300 shrink-0" style={{ width: '38px' }}>{c.date.slice(5)}</span>
+                  <span className="text-gray-600 flex-1 min-w-0">{c.subject}</span>
+                </div>
+              ))}
+              {COMMITS.length > 5 && (
+                <button onClick={() => setShowAllLog(v => !v)} className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors pt-0.5">
+                  {showAllLog ? '▲ Less' : `▼ ${COMMITS.length - 5} more`}
+                </button>
+              )}
             </div>
-          ))}
-          {COMMITS.length > 5 && (
-            <button onClick={() => setShowAllLog(v => !v)} className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors pt-0.5">
-              {showAllLog ? '▲ Less' : `▼ ${COMMITS.length - 5} more`}
-            </button>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* ── Manual to-do list ── */}
