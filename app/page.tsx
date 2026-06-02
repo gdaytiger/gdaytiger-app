@@ -95,15 +95,47 @@ const applyServerChecked = (todos: Todo[], date: string, state: Record<string, s
   return todos.map(t => t.isHeader ? t : { ...t, checked: checkedIds.has(t.id) });
 };
 
-function Card({ emoji, title, children, onEmojiClick, headerRight }: {
+function Card({ emoji, title, children, onEmojiClick, headerRight, collapsible, defaultCollapsed, badgeText, alert }: {
   emoji: string; title: string; children: React.ReactNode; onEmojiClick?: () => void; headerRight?: React.ReactNode;
+  collapsible?: boolean; defaultCollapsed?: boolean; badgeText?: string | number; alert?: boolean;
 }) {
+  const [collapsed, setCollapsed] = useState(collapsible ? (defaultCollapsed ?? false) : false);
+
+  // ── Collapsed tile (Shopping List pattern) — tap to expand to full card ──
+  if (collapsible && collapsed) {
+    return (
+      <div
+        onClick={() => setCollapsed(false)}
+        role="button"
+        className="rounded-2xl cursor-pointer flex items-center gap-3 px-4"
+        style={{ ...TILE_STYLE, minHeight: '62px' }}
+      >
+        <span className="text-base" style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>{emoji}</span>
+        <span className="flex-1 text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
+        {alert && (
+          <span title="Needs attention" style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626', flexShrink: 0, boxShadow: '0 0 0 3px rgba(220,38,38,0.15)' }} />
+        )}
+        {badgeText !== undefined && badgeText !== '' && (
+          <span className="flex items-center justify-center rounded-full font-bold tabular-nums" style={{ minWidth: '22px', height: '22px', padding: '0 7px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{badgeText}</span>
+        )}
+        <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>▶</span>
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', height: '575px', overflow: 'hidden' }} className="rounded-3xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2 shrink-0">
         <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
-        {headerRight && <div className="ml-auto">{headerRight}</div>}
+        {(headerRight || collapsible) && (
+          <div className="ml-auto flex items-center gap-2">
+            {headerRight}
+            {collapsible && (
+              <button onClick={() => setCollapsed(true)} aria-label="Collapse" title="Collapse" className="text-gray-300 hover:text-gray-500 transition-colors leading-none" style={{ fontSize: '11px' }}>▲</button>
+            )}
+          </div>
+        )}
       </div>
       <div className="no-scrollbar flex-1 overflow-y-auto min-h-0">{children}</div>
     </div>
@@ -1203,13 +1235,19 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
   return (
     <>
       {/* ── Coffee Costings ── */}
-      <Card emoji="☕" title="Coffee Costings" headerRight={addButton('coffee')}>
+      <Card emoji="☕" title="Coffee Costings" headerRight={addButton('coffee')}
+        collapsible defaultCollapsed
+        badgeText={coffeeItems.length}
+        alert={coffeeItems.some(p => p.margin !== null && p.margin < 60)}>
         <MarginBadges items={coffeeItems} />
         <ProductColumn items={coffeeItems} height={450} />
       </Card>
 
       {/* ── Food Costings ── */}
-      <Card emoji="🥪" title="Food Costings" headerRight={addButton('food')}>
+      <Card emoji="🥪" title="Food Costings" headerRight={addButton('food')}
+        collapsible defaultCollapsed
+        badgeText={foodItems.length}
+        alert={foodItems.some(p => p.margin !== null && p.margin < 60)}>
         <MarginBadges items={foodItems} />
         <ProductColumn items={foodItems} height={450} />
       </Card>
@@ -1231,7 +1269,11 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
 
       {/* ── Ingredient Prices ── (full width) */}
       <div className="md:col-span-2">
-        <Card emoji="📦" title="Supplier Prices" headerRight={
+        <Card emoji="📦" title="Supplier Prices"
+          collapsible defaultCollapsed
+          badgeText={ingredientChanges.length || undefined}
+          alert={changedCount > 0 || ingredientChanges.some(i => i.drift)}
+          headerRight={
           <button
             onClick={() => setAddIngredientOpen(true)}
             className="text-xs font-semibold px-2 py-1 rounded-lg transition-colors"
@@ -1830,7 +1872,10 @@ export default function Home() {
         </Card>
 
         {/* PROJECTS (brain-dump capture + ongoing projects, merged) */}
-        <Card emoji="🎯" title="Projects">
+        <Card emoji="🎯" title="Projects"
+          collapsible defaultCollapsed
+          badgeText={`${projectsDone}/${projectsTotal}`}
+          alert={data.projects.some(p => p.status === 'Blocked')}>
          <div className="uppercase">
           {/* ── Capture zone ── */}
           {!draft ? (
