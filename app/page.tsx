@@ -1358,6 +1358,15 @@ const getNextDateStr = (dateStr: string): string => {
   return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
 };
 
+// "Today" in Melbourne, computed identically to the server (/api/dashboard):
+// UTC + 10h, then YYYY-MM-DD from UTC components. Matching the server exactly
+// is what stops the day-rollover check from ever false-triggering a reload.
+const melbourneToday = (): string => {
+  const d = new Date(Date.now() + 10 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+};
+
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1469,21 +1478,25 @@ export default function Home() {
     setWeekTasks(enriched);
   };
 
+  // Pull every data source. Reused on first load and on tab refocus.
+  const refreshData = async () => {
+    const state = await fetchServerState();
+    await fetchDashboard(state).catch(() => {});
+    fetch('/api/roster').then(r => r.json()).then(d => setShifts(d.shifts || [])).catch(() => {});
+    fetchWeekTasks(state).catch(() => {});
+    fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
+    fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
+    fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
+    fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
+    fetchTaskContext().catch(() => {});
+  };
+
   useEffect(() => {
     // Safety net: never let a slow or stalled request freeze the app on the loading screen.
     const safety = setTimeout(() => setLoading(false), 12000);
     const init = async () => {
       try {
-        const state = await fetchServerState();
-        // Only the core dashboard data blocks the loading screen; everything else fills in after.
-        await fetchDashboard(state).catch(() => {});
-        fetch('/api/roster').then(r => r.json()).then(d => setShifts(d.shifts || [])).catch(() => {});
-        fetchWeekTasks(state).catch(() => {});
-        fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
-        fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
-        fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
-        fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
-        fetchTaskContext().catch(() => {});
+        await refreshData();
       } finally {
         clearTimeout(safety);
         setLoading(false);
@@ -1492,6 +1505,29 @@ export default function Home() {
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-refresh: the app usually lives in one always-open tab, so detect the
+  // overnight day rollover and reload (exactly what a manual refresh does) so
+  // every morning shows the current day without intervention. A minute timer
+  // catches it if the machine stays awake; visibilitychange catches the common
+  // case where the device slept and is woken in the morning. Same-day refocus
+  // just soft-refreshes the data so returning to the tab shows fresh numbers.
+  useEffect(() => {
+    if (loading || !data?.todayStr) return;
+    const loadedDay = data.todayStr;
+    const rolledOver = () => {
+      if (melbourneToday() !== loadedDay) { window.location.reload(); return true; }
+      return false;
+    };
+    const interval = setInterval(rolledOver, 60000);
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!rolledOver()) refreshData();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, data?.todayStr]);
 
   useEffect(() => {
     if (loading) return;
