@@ -1891,9 +1891,9 @@ export default function Home() {
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
         <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
           <LauncherTile emoji="🎯" title="Projects" badgeText={`${projectsDone}/${projectsTotal}`} alert={data.projects.some(p => p.status === 'Blocked')} active={openWidgets.has('projects')} onClick={() => toggleWidget('projects')} />
-          <LauncherTile emoji="☕" title="Coffee" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
-          <LauncherTile emoji="🥪" title="Food" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
-          <LauncherTile emoji="📦" title="Suppliers" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
+          <LauncherTile emoji="☕" title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
+          <LauncherTile emoji="🥪" title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
+          <LauncherTile emoji="📦" title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
         </div>
 
         {/* PROJECTS (brain-dump capture + ongoing projects, merged) */}
