@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
 import AddProductModal from './components/AddProductModal';
 import AddIngredientModal from './components/AddIngredientModal';
+import { VERSION, UPDATED, COMMITS } from './lib/version';
 
 interface Todo {
   id: string;
@@ -27,6 +28,15 @@ interface ProjectDraft {
   matchProjectId: string;
   matchProjectName: string;
   actions: string[];
+}
+
+// TIGER OS Backlog — manual to-do tasks (Update widget). Subtasks reuse Todo.
+interface BacklogTask {
+  id: string;
+  name: string;
+  done: boolean;
+  order: number | null;
+  subtasks: Todo[];
 }
 
 interface Shift {
@@ -120,8 +130,8 @@ function Card({ emoji, title, children, onEmojiClick, headerRight, onCollapse }:
 
 // Square launcher tile — uniform size, opens its full widget on tap. `active`
 // gives the open tile a highlighted ring so the dock reads as a set.
-function LauncherTile({ emoji, title, badgeText, alert, active, onClick }: {
-  emoji: string; title: string; badgeText?: string | number; alert?: boolean; active?: boolean; onClick: () => void;
+function LauncherTile({ emoji, title, subtitle, badgeText, alert, active, onClick }: {
+  emoji: string; title: string; subtitle?: string; badgeText?: string | number; alert?: boolean; active?: boolean; onClick: () => void;
 }) {
   return (
     <div
@@ -136,6 +146,7 @@ function LauncherTile({ emoji, title, badgeText, alert, active, onClick }: {
     >
       <span style={{ fontSize: '26px', lineHeight: 1, filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>{emoji}</span>
       <span className="text-[10px] font-bold tracking-widest uppercase leading-tight" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
+      {subtitle && <span className="text-[9px] tabular-nums" style={{ color: '#9ca3af', marginTop: '-2px' }}>{subtitle}</span>}
       <div className="flex items-center gap-1.5" style={{ minHeight: '22px' }}>
         {alert && (
           <span title="Needs attention" style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626', flexShrink: 0, boxShadow: '0 0 0 3px rgba(220,38,38,0.15)' }} />
@@ -1367,6 +1378,122 @@ const melbourneToday = (): string => {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 };
 
+// 🚀 TIGER OS Update widget — current version + "What's New" (from git commits)
+// on top, then a manual to-do list (tasks + subtasks) that mirrors the Projects
+// widget: swipe a task to delete, tap to expand its subtasks, hand any task or
+// subtask to Claude with the 🤖 button.
+function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggleDone, onDeleteTask, onDelegate }: {
+  tasks: BacklogTask[];
+  onAddTask: (name: string) => void;
+  onAddSubtask: (taskId: string, text: string) => void;
+  onToggleSubtask: (taskId: string, blockId: string, checked: boolean) => void;
+  onToggleDone: (taskId: string, done: boolean) => void;
+  onDeleteTask: (taskId: string) => void;
+  onDelegate: (taskName: string, subtaskText?: string) => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [addingTask, setAddingTask] = useState(false);
+  const [newTaskText, setNewTaskText] = useState('');
+  const [addingSubFor, setAddingSubFor] = useState<string | null>(null);
+  const [newSubText, setNewSubText] = useState('');
+  const [showAllLog, setShowAllLog] = useState(false);
+
+  const toggleExpand = (id: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const submitTask = () => { if (newTaskText.trim()) { onAddTask(newTaskText.trim()); setNewTaskText(''); setAddingTask(false); } };
+  const submitSub = (taskId: string) => { if (newSubText.trim()) { onAddSubtask(taskId, newSubText.trim()); setNewSubText(''); setAddingSubFor(null); } };
+
+  const openCount = tasks.filter(t => !t.done).length;
+  const builtDate = UPDATED ? new Date(UPDATED + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const visibleLog = showAllLog ? COMMITS : COMMITS.slice(0, 5);
+
+  return (
+    <div>
+      {/* ── Version + What's New ── */}
+      <div className="rounded-2xl p-3 mb-4" style={{ ...TILE_STYLE }}>
+        <div className="flex items-center gap-2">
+          <span className="text-base" style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>🐯</span>
+          <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: '#6b7280' }}>TIGER OS</span>
+          <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full tabular-nums" style={{ background: '#fbcdad', color: '#333' }}>{VERSION}</span>
+        </div>
+        {builtDate && <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1.5">Updated {builtDate}</p>}
+        <div className="mt-2.5 pt-2.5 space-y-1.5" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+          <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">What&rsquo;s New</p>
+          {visibleLog.map(c => (
+            <div key={c.hash} className="flex gap-2 text-xs leading-snug">
+              <span className="tabular-nums text-gray-300 shrink-0" style={{ width: '38px' }}>{c.date.slice(5)}</span>
+              <span className="text-gray-600 flex-1 min-w-0">{c.subject}</span>
+            </div>
+          ))}
+          {COMMITS.length > 5 && (
+            <button onClick={() => setShowAllLog(v => !v)} className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors pt-0.5">
+              {showAllLog ? '▲ Less' : `▼ ${COMMITS.length - 5} more`}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Manual to-do list ── */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-bold tracking-widest uppercase text-gray-400">To Do</span>
+        <span className="text-xs text-gray-400">{openCount} open</span>
+        <button onClick={() => { setAddingTask(true); setNewTaskText(''); }} className="ml-auto text-xs font-semibold px-2 py-1 rounded-lg transition-colors" style={{ background: 'rgba(0,0,0,0.06)', color: '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}>+ TASK</button>
+      </div>
+
+      {addingTask && (
+        <div className="flex gap-2 mb-2">
+          <input value={newTaskText} onChange={e => setNewTaskText(e.target.value)} autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') submitTask(); if (e.key === 'Escape') { setAddingTask(false); setNewTaskText(''); } }}
+            placeholder="NEW TASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+          <button onClick={submitTask} disabled={!newTaskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
+          <button onClick={() => { setAddingTask(false); setNewTaskText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {tasks.length === 0 ? <p className="text-sm text-gray-400 italic">No tasks yet — add one above.</p> : (
+          tasks.map(task => {
+            const isOpen = expanded.has(task.id);
+            const subDone = task.subtasks.filter(s => s.checked).length;
+            return (
+              <div key={task.id} className="space-y-2">
+                <SwipeToDelete onDelete={() => onDeleteTask(task.id)} onClick={() => toggleExpand(task.id)}>
+                  <div className="px-4 flex items-center gap-2.5 cursor-pointer" style={{ minHeight: '62px' }}>
+                    <div onClick={e => { e.stopPropagation(); onToggleDone(task.id, !task.done); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: task.done ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: task.done ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
+                      {task.done && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <span className={`flex-1 min-w-0 text-sm font-semibold transition-colors ${task.done ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.name}</span>
+                    {task.subtasks.length > 0 && <span className="text-xs text-gray-400 shrink-0">{subDone}/{task.subtasks.length}</span>}
+                    <button onClick={e => { e.stopPropagation(); onDelegate(task.name); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>
+                    <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{isOpen ? '▼' : '▶'}</span>
+                  </div>
+                </SwipeToDelete>
+                {isOpen && (
+                  <div className="space-y-2">
+                    {task.subtasks.map(s => (
+                      <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} onChange={(id, checked) => onToggleSubtask(task.id, id, checked)} onDelegate={() => onDelegate(task.name, s.text)} />
+                    ))}
+                    {addingSubFor === task.id ? (
+                      <div className="flex gap-2 mt-1">
+                        <input value={newSubText} onChange={e => setNewSubText(e.target.value)} autoFocus
+                          onKeyDown={e => { if (e.key === 'Enter') submitSub(task.id); if (e.key === 'Escape') { setAddingSubFor(null); setNewSubText(''); } }}
+                          placeholder="NEW SUBTASK..." className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                        <button onClick={() => submitSub(task.id)} disabled={!newSubText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
+                        <button onClick={() => { setAddingSubFor(null); setNewSubText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setAddingSubFor(task.id); setNewSubText(''); }} className="text-xs text-gray-400 hover:text-gray-600 transition-colors uppercase">+ Add subtask</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1384,6 +1511,7 @@ export default function Home() {
   // collapsed to square tiles (resets every load by design).
   const [openWidgets, setOpenWidgets] = useState<Set<string>>(new Set());
   const toggleWidget = (key: string) => setOpenWidgets(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const [tigerTasks, setTigerTasks] = useState<BacklogTask[]>([]);
   const [serverState, setServerState] = useState<Record<string, string[]>>({});
   const [delegateToast, setDelegateToast] = useState<string | null>(null);
   const [costings, setCostings] = useState<CostingProduct[]>([]);
@@ -1488,6 +1616,7 @@ export default function Home() {
     fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
     fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
     fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
+    fetch('/api/tigeros-tasks').then(r => r.json()).then(d => setTigerTasks(d.tasks || [])).catch(() => {});
     fetchTaskContext().catch(() => {});
   };
 
@@ -1633,6 +1762,46 @@ export default function Home() {
     window.location.assign(url);
   };
 
+  // ── TIGER OS Backlog (Update widget) handlers ──
+  const fetchTigerTasks = async () => {
+    const d = await fetch('/api/tigeros-tasks').then(r => r.json()).catch(() => null);
+    if (d) setTigerTasks(d.tasks || []);
+  };
+  const addTigerTask = async (name: string) => {
+    await fetch('/api/tigeros-tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, order: Date.now() }) });
+    await fetchTigerTasks();
+  };
+  const addTigerSubtask = async (taskId: string, text: string) => {
+    // Subtasks are child to_do blocks — reuse the project-action endpoint.
+    await fetch('/api/add-project-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: taskId, text }) });
+    await fetchTigerTasks();
+  };
+  const toggleTigerSubtask = async (taskId: string, blockId: string, checked: boolean) => {
+    setTigerTasks(prev => prev.map(t => t.id === taskId ? { ...t, subtasks: t.subtasks.map(s => s.id === blockId ? { ...s, checked } : s) } : t));
+    await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
+  };
+  const toggleTigerDone = async (taskId: string, done: boolean) => {
+    setTigerTasks(prev => prev.map(t => t.id === taskId ? { ...t, done } : t));
+    await fetch('/api/tigeros-tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId, done }) });
+  };
+  const deleteTigerTask = async (taskId: string) => {
+    setTigerTasks(prev => prev.filter(t => t.id !== taskId));
+    await fetch('/api/archive-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: taskId }) });
+  };
+  const delegateTigerTask = (taskName: string, subtaskText?: string) => {
+    const focus = subtaskText ? `this subtask:\n\n"${subtaskText}"\n\n(part of the task "${taskName}")` : `this task:\n\n"${taskName}"`;
+    const prompt = `I'm working on TIGER OS (my café dashboard, repo at ~/gdaytiger-app). Help me with ${focus}`;
+    const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+      navigator.clipboard?.writeText(prompt).catch(() => {});
+      setDelegateToast('Task copied — paste it into Claude');
+      setTimeout(() => setDelegateToast(null), 4000);
+      window.location.assign('https://claude.ai/new');
+      return;
+    }
+    window.location.assign(`claude://cowork/new?q=${encodeURIComponent(prompt)}&folder=${encodeURIComponent(REPO_FOLDER)}`);
+  };
+
   const STATUS_CYCLE = ['In Progress', 'Blocked', 'On Hold', 'Done'];
   const handleStatusChange = async (projectId: string, currentStatus: string) => {
     const idx = STATUS_CYCLE.indexOf(currentStatus);
@@ -1771,6 +1940,7 @@ export default function Home() {
   const foodAlert    = costMargin.some(p => p.category !== 'Coffee' && p.margin! < 60);
   const supplierCount = ingredientPrices?.ingredients?.length ?? 0;
   const supplierAlert = (priceDrift?.warnings?.length ?? 0) > 0;
+  const tigerOpenCount = tigerTasks.filter(t => !t.done).length;
 
   const CATEGORIES = ['Coffee', 'Food', 'Retail', 'Vending', 'Uncategorised'];
 
@@ -1925,11 +2095,12 @@ export default function Home() {
         </Card>
 
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
-        <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-3">
           <LauncherTile emoji="🎯" title="Projects" badgeText={`${projectsDone}/${projectsTotal}`} alert={data.projects.some(p => p.status === 'Blocked')} active={openWidgets.has('projects')} onClick={() => toggleWidget('projects')} />
           <LauncherTile emoji="☕" title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
           <LauncherTile emoji="🥪" title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
           <LauncherTile emoji="📦" title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
+          <LauncherTile emoji="🚀" title="Updates" subtitle={VERSION} badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
         </div>
 
         {/* PROJECTS (brain-dump capture + ongoing projects, merged) */}
@@ -2024,6 +2195,23 @@ export default function Home() {
           </div>
          </div>
         </Card>
+        </div>
+        )}
+
+        {/* TIGER OS UPDATE — version + What's New + manual to-do list */}
+        {openWidgets.has('updates') && (
+        <div className="md:col-span-2">
+          <Card emoji="🚀" title="TIGER OS Updates" onCollapse={() => toggleWidget('updates')}>
+            <UpdateWidget
+              tasks={tigerTasks}
+              onAddTask={addTigerTask}
+              onAddSubtask={addTigerSubtask}
+              onToggleSubtask={toggleTigerSubtask}
+              onToggleDone={toggleTigerDone}
+              onDeleteTask={deleteTigerTask}
+              onDelegate={delegateTigerTask}
+            />
+          </Card>
         </div>
         )}
 
