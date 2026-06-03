@@ -91,65 +91,29 @@ const TILE_STYLE: React.CSSProperties = {
   boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
 };
 
-// ── Custom icon set (duotone peach) ──────────────────────────────────────────
-// Inline line glyphs that replace the emoji throughout TIGER OS. Each renders
-// in a soft peach chip with a warm terracotta stroke. The "updates" glyph is a
-// hand-drawn tiger — the brand mark. Stroke-only except the tiger's eyes/nose.
-const ICON_PEACH = '#fbcdad';
-const ICON_INK = '#9c4f22';
+// ── Icon set — Microsoft 3D Fluent Emoji (glossy, transparent background) ─────
+// Rendered as <img> from the open-source CDN; no chip/background. Everything
+// routes through WidgetIcon (and supplierIcon) so the whole set can be restyled
+// or localised into /public later from one place.
+const FLUENT_BASE = 'https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets';
+const fluent3d = (folder: string, file: string) => `${FLUENT_BASE}/${encodeURIComponent(folder)}/3D/${file}_3d.png`;
 
 type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping';
 
-function GlyphPaths({ name }: { name: WidgetIconName }) {
-  switch (name) {
-    case 'daily': return (<>
-      <path d="M3.5 5.4l1.4 1.4l2.6 -2.6" /><path d="M3.5 11.5l1.4 1.4l2.6 -2.6" /><path d="M3.5 17.6l1.4 1.4l2.6 -2.6" />
-      <path d="M11 5h9.5" /><path d="M11 12h9.5" /><path d="M11 19h9.5" />
-    </>);
-    case 'week': return (<>
-      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path d="M3.5 9.6h17" /><path d="M8 3.2v3.2" /><path d="M16 3.2v3.2" />
-      <path d="M7.4 14h1.6" /><path d="M11.2 14h1.6" /><path d="M15 14h1.6" />
-    </>);
-    case 'projects': return (<>
-      <circle cx="11" cy="13" r="7" /><circle cx="11" cy="13" r="3.4" />
-      <path d="M11 13l6.5 -6.5" /><path d="M14.6 4h4v4" />
-      <circle cx="11" cy="13" r="0.9" fill={ICON_INK} stroke="none" />
-    </>);
-    case 'coffee': return (<>
-      <path d="M4 8.5h12v4.4a4 4 0 0 1 -4 4h-4a4 4 0 0 1 -4 -4z" />
-      <path d="M16 9.6h2.3a2.4 2.4 0 0 1 0 4.8h-1.1" />
-      <path d="M7 3.4c-.6 1 .6 1.8 0 2.9" /><path d="M11 3.4c-.6 1 .6 1.8 0 2.9" />
-    </>);
-    case 'food': return (<>
-      <path d="M6.4 3.5v4.6" /><path d="M9.6 3.5v4.6" /><path d="M8 8.1v12.9" /><path d="M6.4 8.1h3.2" />
-      <path d="M15.6 3.5c-2.1 1.9 -2.1 6.6 0 8.4h0v9.1" />
-    </>);
-    case 'supplier': return (<>
-      <path d="M12 3.2l8 4.4v8.8l-8 4.4l-8 -4.4v-8.8z" /><path d="M4 7.6l8 4.4l8 -4.4" /><path d="M12 12v9" /><path d="M8 5.4l8 4.4" />
-    </>);
-    case 'shopping': return (<>
-      <circle cx="9" cy="19.5" r="1.4" /><circle cx="17" cy="19.5" r="1.4" />
-      <path d="M3 4h2.2l2.2 11h9.6l2 -7.6h-13.2" />
-    </>);
-    case 'updates': return (<>
-      <path d="M7.6 6.6L5.8 3L9.4 5.1" /><path d="M16.4 6.6L18.2 3L14.6 5.1" />
-      <path d="M12 5C16.1 5 18.1 8.3 18.1 12C18.1 16 15.4 18.7 12 18.7C8.6 18.7 5.9 16 5.9 12C5.9 8.3 7.9 5 12 5Z" />
-      <path d="M8 8.8L9.1 9.9" /><path d="M16 8.8L14.9 9.9" /><path d="M12 13.6L12 15.2" />
-      <path d="M12 15.2C11.2 15.2 10.7 15.7 10.7 15.7" /><path d="M12 15.2C12.8 15.2 13.3 15.7 13.3 15.7" />
-      <circle cx="9.7" cy="12" r="0.95" fill={ICON_INK} stroke="none" /><circle cx="14.3" cy="12" r="0.95" fill={ICON_INK} stroke="none" />
-      <path d="M11 13.1L13 13.1L12 14.3Z" fill={ICON_INK} stroke="none" />
-    </>);
-  }
-}
+const WIDGET_ICON_SRC: Record<WidgetIconName, string> = {
+  daily:    fluent3d('Clipboard', 'clipboard'),
+  week:     fluent3d('Calendar', 'calendar'),
+  projects: fluent3d('Direct hit', 'direct_hit'),
+  coffee:   fluent3d('Hot beverage', 'hot_beverage'),
+  food:     fluent3d('Sandwich', 'sandwich'),
+  supplier: fluent3d('Package', 'package'),
+  updates:  fluent3d('Tiger face', 'tiger_face'),
+  shopping: fluent3d('Shopping cart', 'shopping_cart'),
+};
 
-function WidgetIcon({ name, chip = 40, glyph = 24 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
-  return (
-    <span style={{ width: chip, height: chip, borderRadius: Math.round(chip * 0.3), background: ICON_PEACH, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <svg width={glyph} height={glyph} viewBox="0 0 24 24" fill="none" stroke={ICON_INK} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-        <GlyphPaths name={name} />
-      </svg>
-    </span>
-  );
+function WidgetIcon({ name, chip = 40 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={WIDGET_ICON_SRC[name]} width={chip} height={chip} alt="" style={{ objectFit: 'contain', flexShrink: 0, display: 'block' }} />;
 }
 
 const SUPPLIER_LINKS: Record<string, string> = {
@@ -1007,33 +971,34 @@ function ChangeCard({ c }: { c: MarginChange }) {
   );
 }
 
-// Per-supplier emoji. Matched case-insensitively by substring so name variants
-// (e.g. "Redi Milk" / "RediMilk") resolve. Falls back to a box.
+// Per-supplier 3D icon. Matched case-insensitively by substring so name variants
+// (e.g. "Redi Milk" / "RediMilk") resolve. Each maps to a Microsoft 3D Fluent
+// Emoji by category. Falls back to a package.
 const SUPPLIER_ICONS: { match: string; icon: string }[] = [
-  { match: '5ways', icon: '🍖' },
-  { match: 'candied', icon: '🍪' },
-  { match: 'dench', icon: '🍞' },
-  { match: "g'day tiger", icon: '🐯' },
-  { match: 'gday tiger', icon: '🐯' },
-  { match: 'matsu', icon: '🍵' },
-  { match: 'mörk', icon: '🍫' },
-  { match: 'mork', icon: '🍫' },
-  { match: 'noisette', icon: '🥐' },
-  { match: 'pfd', icon: '🍗' },
-  { match: 'planetware', icon: '🥤' },
-  { match: 'product distribution', icon: '🥒' },
-  { match: 'redi milk', icon: '🥛' },
-  { match: 'redimilk', icon: '🥛' },
-  { match: 'sciclunas', icon: '🥬' },
-  { match: 'seven seeds', icon: '☕' },
-  { match: 'trio', icon: '📦' },
-  { match: 'uncle', icon: '🥩' },
-  { match: 'woolworths', icon: '🛍️' },
+  { match: '5ways', icon: fluent3d('Meat on bone', 'meat_on_bone') },
+  { match: 'candied', icon: fluent3d('Cookie', 'cookie') },
+  { match: 'dench', icon: fluent3d('Bread', 'bread') },
+  { match: "g'day tiger", icon: fluent3d('Tiger face', 'tiger_face') },
+  { match: 'gday tiger', icon: fluent3d('Tiger face', 'tiger_face') },
+  { match: 'matsu', icon: fluent3d('Teacup without handle', 'teacup_without_handle') },
+  { match: 'mörk', icon: fluent3d('Chocolate bar', 'chocolate_bar') },
+  { match: 'mork', icon: fluent3d('Chocolate bar', 'chocolate_bar') },
+  { match: 'noisette', icon: fluent3d('Croissant', 'croissant') },
+  { match: 'pfd', icon: fluent3d('Poultry leg', 'poultry_leg') },
+  { match: 'planetware', icon: fluent3d('Cup with straw', 'cup_with_straw') },
+  { match: 'product distribution', icon: fluent3d('Cucumber', 'cucumber') },
+  { match: 'redi milk', icon: fluent3d('Glass of milk', 'glass_of_milk') },
+  { match: 'redimilk', icon: fluent3d('Glass of milk', 'glass_of_milk') },
+  { match: 'sciclunas', icon: fluent3d('Leafy green', 'leafy_green') },
+  { match: 'seven seeds', icon: fluent3d('Hot beverage', 'hot_beverage') },
+  { match: 'trio', icon: fluent3d('Package', 'package') },
+  { match: 'uncle', icon: fluent3d('Cut of meat', 'cut_of_meat') },
+  { match: 'woolworths', icon: fluent3d('Shopping bags', 'shopping_bags') },
 ];
 function supplierIcon(name: string): string {
   const n = (name || '').toLowerCase();
   const hit = SUPPLIER_ICONS.find(s => n.includes(s.match));
-  return hit ? hit.icon : '📦';
+  return hit ? hit.icon : fluent3d('Package', 'package');
 }
 
 function ProductItem({ p }: { p: CostingProduct }) {
@@ -1393,7 +1358,8 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
                         return (
                           <div key={group.supplier} className={open ? 'md:col-span-2' : ''}>
                             <div onClick={() => toggleSupplier(group.supplier)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3 py-2.5" style={tileStyle}>
-                              <span className="text-base">{supplierIcon(group.supplier)}</span>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={supplierIcon(group.supplier)} width={24} height={24} alt="" style={{ objectFit: 'contain', flexShrink: 0, display: 'block' }} />
                               <span className="flex-1 min-w-0 text-sm font-normal uppercase truncate text-gray-800" style={{ fontFamily: '"stolzl", sans-serif' }}>{group.supplier}</span>
                               {changeCount > 0 && (
                                 <span className="flex items-center justify-center rounded-full font-bold" style={{ minWidth: '22px', height: '22px', padding: '0 6px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{changeCount}</span>
