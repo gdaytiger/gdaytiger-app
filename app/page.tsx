@@ -91,29 +91,17 @@ const TILE_STYLE: React.CSSProperties = {
   boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
 };
 
-// ── Icon set — Microsoft 3D Fluent Emoji (glossy, transparent background) ─────
-// Rendered as <img> from the open-source CDN; no chip/background. Everything
-// routes through WidgetIcon (and supplierIcon) so the whole set can be restyled
-// or localised into /public later from one place.
-const FLUENT_BASE = 'https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets';
-const fluent3d = (folder: string, file: string) => `${FLUENT_BASE}/${encodeURIComponent(folder)}/3D/${file}_3d.png`;
-
+// ── Widget icons (emoji) ─────────────────────────────────────────────────────
+// One place mapping each widget to its emoji, rendered at a size derived from
+// the caller's chip value. Kept as a component so the set can be swapped later.
 type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping';
 
-const WIDGET_ICON_SRC: Record<WidgetIconName, string> = {
-  daily:    fluent3d('Clipboard', 'clipboard'),
-  week:     fluent3d('Calendar', 'calendar'),
-  projects: fluent3d('Direct hit', 'direct_hit'),
-  coffee:   fluent3d('Hot beverage', 'hot_beverage'),
-  food:     fluent3d('Sandwich', 'sandwich'),
-  supplier: fluent3d('Package', 'package'),
-  updates:  fluent3d('Tiger face', 'tiger_face'),
-  shopping: fluent3d('Shopping cart', 'shopping_cart'),
+const WIDGET_ICON_EMOJI: Record<WidgetIconName, string> = {
+  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒',
 };
 
-function WidgetIcon({ name, chip = 40 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={WIDGET_ICON_SRC[name]} width={chip} height={chip} alt="" style={{ objectFit: 'contain', flexShrink: 0, display: 'block' }} />;
+function WidgetIcon({ name, chip = 28 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
+  return <span style={{ fontSize: Math.round(chip * 0.56), lineHeight: 1, filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>{WIDGET_ICON_EMOJI[name]}</span>;
 }
 
 const SUPPLIER_LINKS: Record<string, string> = {
@@ -136,7 +124,7 @@ function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onColla
 }) {
   return (
     <div style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', height: '575px', overflow: 'hidden' }} className="rounded-3xl p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2.5 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {icon ? icon : <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>}
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
         {(headerRight || onCollapse) && (
@@ -971,34 +959,33 @@ function ChangeCard({ c }: { c: MarginChange }) {
   );
 }
 
-// Per-supplier 3D icon. Matched case-insensitively by substring so name variants
-// (e.g. "Redi Milk" / "RediMilk") resolve. Each maps to a Microsoft 3D Fluent
-// Emoji by category. Falls back to a package.
+// Per-supplier emoji. Matched case-insensitively by substring so name variants
+// (e.g. "Redi Milk" / "RediMilk") resolve. Falls back to a box.
 const SUPPLIER_ICONS: { match: string; icon: string }[] = [
-  { match: '5ways', icon: fluent3d('Meat on bone', 'meat_on_bone') },
-  { match: 'candied', icon: fluent3d('Cookie', 'cookie') },
-  { match: 'dench', icon: fluent3d('Bread', 'bread') },
-  { match: "g'day tiger", icon: fluent3d('Tiger face', 'tiger_face') },
-  { match: 'gday tiger', icon: fluent3d('Tiger face', 'tiger_face') },
-  { match: 'matsu', icon: fluent3d('Teacup without handle', 'teacup_without_handle') },
-  { match: 'mörk', icon: fluent3d('Chocolate bar', 'chocolate_bar') },
-  { match: 'mork', icon: fluent3d('Chocolate bar', 'chocolate_bar') },
-  { match: 'noisette', icon: fluent3d('Croissant', 'croissant') },
-  { match: 'pfd', icon: fluent3d('Poultry leg', 'poultry_leg') },
-  { match: 'planetware', icon: fluent3d('Cup with straw', 'cup_with_straw') },
-  { match: 'product distribution', icon: fluent3d('Cucumber', 'cucumber') },
-  { match: 'redi milk', icon: fluent3d('Glass of milk', 'glass_of_milk') },
-  { match: 'redimilk', icon: fluent3d('Glass of milk', 'glass_of_milk') },
-  { match: 'sciclunas', icon: fluent3d('Leafy green', 'leafy_green') },
-  { match: 'seven seeds', icon: fluent3d('Hot beverage', 'hot_beverage') },
-  { match: 'trio', icon: fluent3d('Package', 'package') },
-  { match: 'uncle', icon: fluent3d('Cut of meat', 'cut_of_meat') },
-  { match: 'woolworths', icon: fluent3d('Shopping bags', 'shopping_bags') },
+  { match: '5ways', icon: '🍖' },
+  { match: 'candied', icon: '🍪' },
+  { match: 'dench', icon: '🍞' },
+  { match: "g'day tiger", icon: '🐯' },
+  { match: 'gday tiger', icon: '🐯' },
+  { match: 'matsu', icon: '🍵' },
+  { match: 'mörk', icon: '🍫' },
+  { match: 'mork', icon: '🍫' },
+  { match: 'noisette', icon: '🥐' },
+  { match: 'pfd', icon: '🍗' },
+  { match: 'planetware', icon: '🥤' },
+  { match: 'product distribution', icon: '🥒' },
+  { match: 'redi milk', icon: '🥛' },
+  { match: 'redimilk', icon: '🥛' },
+  { match: 'sciclunas', icon: '🥬' },
+  { match: 'seven seeds', icon: '☕' },
+  { match: 'trio', icon: '📦' },
+  { match: 'uncle', icon: '🥩' },
+  { match: 'woolworths', icon: '🛍️' },
 ];
 function supplierIcon(name: string): string {
   const n = (name || '').toLowerCase();
   const hit = SUPPLIER_ICONS.find(s => n.includes(s.match));
-  return hit ? hit.icon : fluent3d('Package', 'package');
+  return hit ? hit.icon : '📦';
 }
 
 function ProductItem({ p }: { p: CostingProduct }) {
@@ -1358,8 +1345,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
                         return (
                           <div key={group.supplier} className={open ? 'md:col-span-2' : ''}>
                             <div onClick={() => toggleSupplier(group.supplier)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3 py-2.5" style={tileStyle}>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={supplierIcon(group.supplier)} width={24} height={24} alt="" style={{ objectFit: 'contain', flexShrink: 0, display: 'block' }} />
+                              <span className="text-base">{supplierIcon(group.supplier)}</span>
                               <span className="flex-1 min-w-0 text-sm font-normal uppercase truncate text-gray-800" style={{ fontFamily: '"stolzl", sans-serif' }}>{group.supplier}</span>
                               {changeCount > 0 && (
                                 <span className="flex items-center justify-center rounded-full font-bold" style={{ minWidth: '22px', height: '22px', padding: '0 6px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{changeCount}</span>
@@ -1439,7 +1425,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
       {/* ── Version + What's New (details revealed by tapping the version) ── */}
       <div className="rounded-2xl p-3 mb-4" style={{ ...TILE_STYLE }}>
         <div className="flex items-center gap-2">
-          <WidgetIcon name="updates" chip={28} glyph={17} />
+          <span className="text-base" style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>🐯</span>
           <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: '#6b7280' }}>TIGER OS</span>
           <button onClick={() => setShowVer(v => !v)} className="ml-auto flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full tabular-nums transition-colors cursor-pointer" style={{ background: '#fbcdad', color: '#333' }} title="Tap for what's new">
             {VERSION}
