@@ -91,6 +91,67 @@ const TILE_STYLE: React.CSSProperties = {
   boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
 };
 
+// ── Custom icon set (duotone peach) ──────────────────────────────────────────
+// Inline line glyphs that replace the emoji throughout TIGER OS. Each renders
+// in a soft peach chip with a warm terracotta stroke. The "updates" glyph is a
+// hand-drawn tiger — the brand mark. Stroke-only except the tiger's eyes/nose.
+const ICON_PEACH = '#fbcdad';
+const ICON_INK = '#9c4f22';
+
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping';
+
+function GlyphPaths({ name }: { name: WidgetIconName }) {
+  switch (name) {
+    case 'daily': return (<>
+      <path d="M3.5 5.4l1.4 1.4l2.6 -2.6" /><path d="M3.5 11.5l1.4 1.4l2.6 -2.6" /><path d="M3.5 17.6l1.4 1.4l2.6 -2.6" />
+      <path d="M11 5h9.5" /><path d="M11 12h9.5" /><path d="M11 19h9.5" />
+    </>);
+    case 'week': return (<>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path d="M3.5 9.6h17" /><path d="M8 3.2v3.2" /><path d="M16 3.2v3.2" />
+      <path d="M7.4 14h1.6" /><path d="M11.2 14h1.6" /><path d="M15 14h1.6" />
+    </>);
+    case 'projects': return (<>
+      <circle cx="11" cy="13" r="7" /><circle cx="11" cy="13" r="3.4" />
+      <path d="M11 13l6.5 -6.5" /><path d="M14.6 4h4v4" />
+      <circle cx="11" cy="13" r="0.9" fill={ICON_INK} stroke="none" />
+    </>);
+    case 'coffee': return (<>
+      <path d="M4 8.5h12v4.4a4 4 0 0 1 -4 4h-4a4 4 0 0 1 -4 -4z" />
+      <path d="M16 9.6h2.3a2.4 2.4 0 0 1 0 4.8h-1.1" />
+      <path d="M7 3.4c-.6 1 .6 1.8 0 2.9" /><path d="M11 3.4c-.6 1 .6 1.8 0 2.9" />
+    </>);
+    case 'food': return (<>
+      <path d="M6.4 3.5v4.6" /><path d="M9.6 3.5v4.6" /><path d="M8 8.1v12.9" /><path d="M6.4 8.1h3.2" />
+      <path d="M15.6 3.5c-2.1 1.9 -2.1 6.6 0 8.4h0v9.1" />
+    </>);
+    case 'supplier': return (<>
+      <path d="M12 3.2l8 4.4v8.8l-8 4.4l-8 -4.4v-8.8z" /><path d="M4 7.6l8 4.4l8 -4.4" /><path d="M12 12v9" /><path d="M8 5.4l8 4.4" />
+    </>);
+    case 'shopping': return (<>
+      <circle cx="9" cy="19.5" r="1.4" /><circle cx="17" cy="19.5" r="1.4" />
+      <path d="M3 4h2.2l2.2 11h9.6l2 -7.6h-13.2" />
+    </>);
+    case 'updates': return (<>
+      <path d="M7.6 6.6L5.8 3L9.4 5.1" /><path d="M16.4 6.6L18.2 3L14.6 5.1" />
+      <path d="M12 5C16.1 5 18.1 8.3 18.1 12C18.1 16 15.4 18.7 12 18.7C8.6 18.7 5.9 16 5.9 12C5.9 8.3 7.9 5 12 5Z" />
+      <path d="M8 8.8L9.1 9.9" /><path d="M16 8.8L14.9 9.9" /><path d="M12 13.6L12 15.2" />
+      <path d="M12 15.2C11.2 15.2 10.7 15.7 10.7 15.7" /><path d="M12 15.2C12.8 15.2 13.3 15.7 13.3 15.7" />
+      <circle cx="9.7" cy="12" r="0.95" fill={ICON_INK} stroke="none" /><circle cx="14.3" cy="12" r="0.95" fill={ICON_INK} stroke="none" />
+      <path d="M11 13.1L13 13.1L12 14.3Z" fill={ICON_INK} stroke="none" />
+    </>);
+  }
+}
+
+function WidgetIcon({ name, chip = 40, glyph = 24 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
+  return (
+    <span style={{ width: chip, height: chip, borderRadius: Math.round(chip * 0.3), background: ICON_PEACH, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <svg width={glyph} height={glyph} viewBox="0 0 24 24" fill="none" stroke={ICON_INK} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <GlyphPaths name={name} />
+      </svg>
+    </span>
+  );
+}
+
 const SUPPLIER_LINKS: Record<string, string> = {
   'dench': 'https://denchbakers.cybakeshop.com.au/home',
   'seven seeds': 'https://sevenseedswholesale.com.au/account/',
@@ -105,14 +166,14 @@ const applyServerChecked = (todos: Todo[], date: string, state: Record<string, s
   return todos.map(t => t.isHeader ? t : { ...t, checked: checkedIds.has(t.id) });
 };
 
-function Card({ emoji, title, children, onEmojiClick, headerRight, onCollapse }: {
-  emoji: string; title: string; children: React.ReactNode; onEmojiClick?: () => void; headerRight?: React.ReactNode;
+function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onCollapse }: {
+  emoji?: string; icon?: React.ReactNode; title: string; children: React.ReactNode; onEmojiClick?: () => void; headerRight?: React.ReactNode;
   onCollapse?: () => void;
 }) {
   return (
     <div style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', height: '575px', overflow: 'hidden' }} className="rounded-3xl p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2 shrink-0">
-        <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>
+      <div className="flex items-center gap-2.5 shrink-0">
+        {icon ? icon : <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>}
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
         {(headerRight || onCollapse) && (
           <div className="ml-auto flex items-center gap-2">
@@ -130,8 +191,8 @@ function Card({ emoji, title, children, onEmojiClick, headerRight, onCollapse }:
 
 // Square launcher tile — uniform size, opens its full widget on tap. `active`
 // gives the open tile a highlighted ring so the dock reads as a set.
-function LauncherTile({ emoji, title, subtitle, badgeText, alert, active, onClick }: {
-  emoji: string; title: string; subtitle?: string; badgeText?: string | number; alert?: boolean; active?: boolean; onClick: () => void;
+function LauncherTile({ emoji, icon, title, subtitle, badgeText, alert, active, onClick }: {
+  emoji?: string; icon?: React.ReactNode; title: string; subtitle?: string; badgeText?: string | number; alert?: boolean; active?: boolean; onClick: () => void;
 }) {
   return (
     <div
@@ -144,7 +205,7 @@ function LauncherTile({ emoji, title, subtitle, badgeText, alert, active, onClic
         ...(active ? { border: '1.5px solid #fbcdad', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 3px rgba(251,205,173,0.35)' } : {}),
       }}
     >
-      <span style={{ fontSize: '26px', lineHeight: 1, filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>{emoji}</span>
+      {icon ? icon : <span style={{ fontSize: '26px', lineHeight: 1, filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>{emoji}</span>}
       <span className="text-[10px] font-bold tracking-widest uppercase leading-tight" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
       {subtitle && <span className="text-[9px] tabular-nums" style={{ color: '#9ca3af', marginTop: '-2px' }}>{subtitle}</span>}
       <div className="flex items-center gap-1.5" style={{ minHeight: '22px' }}>
@@ -1253,7 +1314,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
     <>
       {/* ── Coffee Costings ── */}
       {open.coffee && (
-        <Card emoji="☕" title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
+        <Card icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
           <MarginBadges items={coffeeItems} />
           <ProductColumn items={coffeeItems} height={450} />
         </Card>
@@ -1261,7 +1322,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
 
       {/* ── Food Costings ── */}
       {open.food && (
-        <Card emoji="🥪" title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
+        <Card icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
           <MarginBadges items={foodItems} />
           <ProductColumn items={foodItems} height={450} />
         </Card>
@@ -1285,7 +1346,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
       {/* ── Ingredient Prices ── (full width) */}
       {open.supplier && (
       <div className="md:col-span-2">
-        <Card emoji="📦" title="Supplier Prices"
+        <Card icon={<WidgetIcon name="supplier" chip={28} glyph={17} />} title="Supplier Prices"
           onCollapse={() => onCollapse('supplier')}
           headerRight={
           <button
@@ -1412,7 +1473,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
       {/* ── Version + What's New (details revealed by tapping the version) ── */}
       <div className="rounded-2xl p-3 mb-4" style={{ ...TILE_STYLE }}>
         <div className="flex items-center gap-2">
-          <span className="text-base" style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>🐯</span>
+          <WidgetIcon name="updates" chip={28} glyph={17} />
           <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: '#6b7280' }}>TIGER OS</span>
           <button onClick={() => setShowVer(v => !v)} className="ml-auto flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full tabular-nums transition-colors cursor-pointer" style={{ background: '#fbcdad', color: '#333' }} title="Tap for what's new">
             {VERSION}
@@ -1972,7 +2033,7 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-5 pb-10 grid grid-cols-1 md:grid-cols-2 gap-4 relative">
 
         {/* DAILY TO DO */}
-        <Card emoji="⚡" title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'}
+        <Card icon={<WidgetIcon name="daily" chip={28} glyph={17} />} title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'}
           headerRight={
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
@@ -2030,7 +2091,7 @@ export default function Home() {
               if (!isViewingOtherDay) elements.push(
                 <div key="shopping" style={{ marginTop: '2px' }}>
                   <div onClick={() => setShoppingOpen(o => !o)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3" style={tileStyle}>
-                    <span className="text-base">🛒</span>
+                    <WidgetIcon name="shopping" chip={28} glyph={17} />
                     <span className="flex-1 text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>Shopping List</span>
                     <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: shoppingCount > 0 ? '#fbcdad' : 'rgba(0,0,0,0.06)', color: shoppingCount > 0 ? '#333' : '#aaa', fontSize: '11px', flexShrink: 0 }}>{shoppingCount}</span>
                     <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{shoppingOpen ? '▼' : '▶'}</span>
@@ -2087,7 +2148,7 @@ export default function Home() {
         </Card>
 
         {/* THE WEEK AHEAD */}
-        <Card emoji="📅" title="The Week Ahead">
+        <Card icon={<WidgetIcon name="week" chip={28} glyph={17} />} title="The Week Ahead">
           <div className="space-y-2">
             {shifts.length === 0 ? <p className="text-sm text-gray-400 italic">No shifts found</p> : (
               shifts.map(shift => (
@@ -2104,17 +2165,17 @@ export default function Home() {
 
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
         <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-3">
-          <LauncherTile emoji="🎯" title="Projects" badgeText={`${projectsDone}/${projectsTotal}`} alert={data.projects.some(p => p.status === 'Blocked')} active={openWidgets.has('projects')} onClick={() => toggleWidget('projects')} />
-          <LauncherTile emoji="☕" title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
-          <LauncherTile emoji="🥪" title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
-          <LauncherTile emoji="📦" title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
-          <LauncherTile emoji="🚀" title="Updates" subtitle={VERSION} badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
+          <LauncherTile icon={<WidgetIcon name="projects" chip={48} glyph={26} />} title="Projects" badgeText={`${projectsDone}/${projectsTotal}`} alert={data.projects.some(p => p.status === 'Blocked')} active={openWidgets.has('projects')} onClick={() => toggleWidget('projects')} />
+          <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
+          <LauncherTile icon={<WidgetIcon name="food" chip={48} glyph={26} />} title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
+          <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
+          <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Updates" subtitle={VERSION} badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
         </div>
 
         {/* PROJECTS (brain-dump capture + ongoing projects, merged) */}
         {openWidgets.has('projects') && (
         <div className="md:col-span-2">
-        <Card emoji="🎯" title="Projects" onCollapse={() => toggleWidget('projects')}>
+        <Card icon={<WidgetIcon name="projects" chip={28} glyph={17} />} title="Projects" onCollapse={() => toggleWidget('projects')}>
          <div className="uppercase">
           {/* ── Capture zone ── */}
           {!draft ? (
@@ -2209,7 +2270,7 @@ export default function Home() {
         {/* TIGER OS UPDATE — version + What's New + manual to-do list */}
         {openWidgets.has('updates') && (
         <div className="md:col-span-2">
-          <Card emoji="🚀" title="TIGER OS Updates" onCollapse={() => toggleWidget('updates')}>
+          <Card icon={<WidgetIcon name="updates" chip={28} glyph={17} />} title="TIGER OS Updates" onCollapse={() => toggleWidget('updates')}>
             <UpdateWidget
               tasks={tigerTasks}
               onAddTask={addTigerTask}
