@@ -1989,7 +1989,9 @@ export default function Home() {
         <img src="/logo.png" alt="G'Day Tiger" style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0px 4px 12px rgba(0,0,0,0.3))' }} />
       </div>
 
-      <div className="max-w-5xl mx-auto px-5 pb-10 grid grid-cols-1 md:grid-cols-2 gap-4 relative">
+      <div className="max-w-5xl mx-auto px-5 pb-10 relative">
+        {/* ── Stable top section — grid never reflows when widgets open below ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* DAILY TO DO */}
         <Card icon={<WidgetIcon name="daily" chip={28} glyph={17} />} title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'}
@@ -2089,9 +2091,14 @@ export default function Home() {
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Tiger OS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
         </div>
 
+        </div>{/* end stable grid */}
+
+        {/* ── Widget panels — stacked below; never shifts the top grid ── */}
+        <div className="flex flex-col gap-4 mt-4">
+
         {/* SHOPPING LIST widget */}
         {openWidgets.has('shopping') && (
-        <div className="md:col-span-2">
+        <div>
           <Card icon={<WidgetIcon name="shopping" chip={28} />} title="Shopping List" onCollapse={() => toggleWidget('shopping')}>
             <div className="space-y-2">
               {shoppingAllUnchecked.length === 0 && shoppingAllChecked.length === 0 ? (
@@ -2141,7 +2148,7 @@ export default function Home() {
 
         {/* PROJECTS (brain-dump capture + ongoing projects, merged) */}
         {openWidgets.has('projects') && (
-        <div className="md:col-span-2">
+        <div>
         <Card icon={<WidgetIcon name="projects" chip={28} glyph={17} />} title="Projects" onCollapse={() => toggleWidget('projects')}>
          <div className="uppercase">
           {/* ── Capture zone ── */}
@@ -2236,7 +2243,7 @@ export default function Home() {
 
         {/* TIGER OS UPDATE — version + What's New + manual to-do list */}
         {openWidgets.has('updates') && (
-        <div className="md:col-span-2">
+        <div>
           <Card icon={<WidgetIcon name="updates" chip={28} glyph={17} />} title="TIGER OS Updates" onCollapse={() => toggleWidget('updates')}>
             <UpdateWidget
               tasks={tigerTasks}
@@ -2257,6 +2264,7 @@ export default function Home() {
           onCollapse={(k) => toggleWidget(k)}
           onIngredientsChanged={() => fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {})} />
 
+        </div>{/* end widget panels */}
       </div>
 
       {/* DELEGATE TOAST (mobile clipboard handoff) */}
