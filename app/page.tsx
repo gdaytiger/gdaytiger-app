@@ -1529,7 +1529,17 @@ export default function Home() {
   // Which of the four launcher widgets are expanded to full cards. Empty = all
   // collapsed to square tiles (resets every load by design).
   const [openWidgets, setOpenWidgets] = useState<Set<string>>(new Set());
-  const toggleWidget = (key: string) => setOpenWidgets(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const toggleWidget = (key: string) => {
+    // Pin scroll position — iOS Safari collapses the URL bar when the page
+    // becomes scrollable, shifting the viewport. We capture position before
+    // the state change and restore it after the next two animation frames
+    // (first rAF = React commit, second = browser layout + scroll settle).
+    const scrollY = window.scrollY;
+    setOpenWidgets(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.scrollTo({ top: scrollY, behavior: 'instant' });
+    }));
+  };
   const [tigerTasks, setTigerTasks] = useState<BacklogTask[]>([]);
   const [serverState, setServerState] = useState<Record<string, string[]>>({});
   const [delegateToast, setDelegateToast] = useState<string | null>(null);

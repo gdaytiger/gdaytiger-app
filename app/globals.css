@@ -3,6 +3,12 @@
 /* App-wide default typeface: stolzl (loaded via Typekit in layout.tsx), so all
    widgets read consistently. Elements that need a different face (e.g. the
    Bodoni page title) set fontFamily explicitly and still win. */
+html {
+  /* Reserve scrollbar gutter on desktop so layout doesn't shift when
+     page becomes scrollable (e.g. a widget panel opening). */
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: "stolzl", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
