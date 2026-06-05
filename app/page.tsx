@@ -1315,18 +1315,18 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
             <>
               <div className="flex items-center gap-2 mb-2 shrink-0">
                 {changedCount > 0 && (
-                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: '#fbcdad', color: '#7c4a2d' }}>
+                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full shrink-0 uppercase" style={{ background: '#fbcdad', color: '#7c4a2d' }}>
                     {changedCount} price {changedCount === 1 ? 'change' : 'changes'}
                   </span>
                 )}
                 <input
                   value={priceQuery}
                   onChange={e => setPriceQuery(e.target.value)}
-                  placeholder="Search Ingredient or supplier..."
-                  className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
+                  placeholder="SEARCH INGREDIENT OR SUPPLIER..."
+                  className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all"
                   style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }}
                 />
-                <span className="text-xs text-gray-400 whitespace-nowrap shrink-0">
+                <span className="text-xs text-gray-400 whitespace-nowrap shrink-0 uppercase">
                   {priceQuery.trim() ? `${filteredCount} of ${ingredientChanges.length}` : `${ingredientChanges.length} tracked`}
                 </span>
               </div>
