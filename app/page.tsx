@@ -500,9 +500,9 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
             {(() => {
               const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
               if (supplierUrl && !checked) {
-                return <a href={supplierUrl} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text}</a>;
+                return <a href={supplierUrl} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text.toUpperCase()}</a>;
               }
-              return <span className={`transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text}</span>;
+              return <span className={`transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text.toUpperCase()}</span>;
             })()}
           </div>
           {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
@@ -1000,8 +1000,8 @@ function ProductItem({ p }: { p: CostingProduct }) {
       boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
     }}>
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <p className="text-sm font-normal text-gray-800 leading-snug flex-1 min-w-0 truncate uppercase"
-          style={{ fontFamily: '"stolzl", sans-serif' }}>
+        <p className="text-sm font-normal text-gray-800 leading-snug flex-1 min-w-0 truncate"
+          style={{ fontFamily: '"stolzl", sans-serif', textTransform: 'uppercase' }}>
           {p.name.toUpperCase()}
         </p>
         <span className="text-base font-black shrink-0 leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
@@ -1056,7 +1056,7 @@ function MarginBadges({ items }: { items: CostingProduct[] }) {
           <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.8 }}>{label}</span>
         </span>
       ))}
-      <span className="text-xs text-gray-400 ml-auto">{items.length} products</span>
+      <span className="text-xs text-gray-400 ml-auto uppercase">{items.length} products</span>
     </div>
   );
 }
