@@ -1264,21 +1264,21 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
 
   return (
     <>
-      {/* ── Coffee Costings ── */}
-      {open.coffee && (
+      {/* ── Coffee Costings — always in DOM ── */}
+      <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
           <MarginBadges items={coffeeItems} />
           <ProductColumn items={coffeeItems} height={450} />
         </Card>
-      )}
+      </div>
 
-      {/* ── Food Costings ── */}
-      {open.food && (
+      {/* ── Food Costings — always in DOM ── */}
+      <div style={{ display: open.food ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
           <MarginBadges items={foodItems} />
           <ProductColumn items={foodItems} height={450} />
         </Card>
-      )}
+      </div>
 
       <AddProductModal
         open={addProductOpen !== null}
@@ -1295,9 +1295,8 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
         />
       )}
 
-      {/* ── Ingredient Prices ── (full width) */}
-      {open.supplier && (
-      <div className="md:col-span-2">
+      {/* ── Ingredient Prices — always in DOM ── */}
+      <div style={{ display: open.supplier ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="supplier" chip={28} glyph={17} />} title="Supplier Prices"
           onCollapse={() => onCollapse('supplier')}
           headerRight={
@@ -1371,7 +1370,6 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
           )}
         </Card>
       </div>
-      )}
     </>
   );
 }
@@ -2096,9 +2094,8 @@ export default function Home() {
         {/* ── Widget panels — stacked below; never shifts the top grid ── */}
         <div className="flex flex-col gap-4 mt-4">
 
-        {/* SHOPPING LIST widget */}
-        {openWidgets.has('shopping') && (
-        <div>
+        {/* SHOPPING LIST widget — always in DOM, shown/hidden via CSS to avoid scroll-jump */}
+        <div style={{ display: openWidgets.has('shopping') ? 'block' : 'none' }}>
           <Card icon={<WidgetIcon name="shopping" chip={28} />} title="Shopping List" onCollapse={() => toggleWidget('shopping')}>
             <div className="space-y-2">
               {shoppingAllUnchecked.length === 0 && shoppingAllChecked.length === 0 ? (
@@ -2144,11 +2141,9 @@ export default function Home() {
             </div>
           </Card>
         </div>
-        )}
 
-        {/* PROJECTS (brain-dump capture + ongoing projects, merged) */}
-        {openWidgets.has('projects') && (
-        <div>
+        {/* PROJECTS — always in DOM */}
+        <div style={{ display: openWidgets.has('projects') ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="projects" chip={28} glyph={17} />} title="Projects" onCollapse={() => toggleWidget('projects')}>
          <div className="uppercase">
           {/* ── Capture zone ── */}
@@ -2239,11 +2234,9 @@ export default function Home() {
          </div>
         </Card>
         </div>
-        )}
 
-        {/* TIGER OS UPDATE — version + What's New + manual to-do list */}
-        {openWidgets.has('updates') && (
-        <div>
+        {/* TIGER OS UPDATES — always in DOM */}
+        <div style={{ display: openWidgets.has('updates') ? 'block' : 'none' }}>
           <Card icon={<WidgetIcon name="updates" chip={28} glyph={17} />} title="TIGER OS Updates" onCollapse={() => toggleWidget('updates')}>
             <UpdateWidget
               tasks={tigerTasks}
@@ -2256,7 +2249,6 @@ export default function Home() {
             />
           </Card>
         </div>
-        )}
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (each renders only when its tile is open) */}
         <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} recipeMap={recipeMap}
