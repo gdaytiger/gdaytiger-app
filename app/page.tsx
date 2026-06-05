@@ -568,7 +568,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   const inputRef = useRef<HTMLInputElement>(null);
   const openInput = (e: React.MouseEvent) => { e.stopPropagation(); setIsAdding(true); setTimeout(() => inputRef.current?.focus(), 320); };
   const close = () => { setIsAdding(false); setTaskText(''); setRecurrence('once'); };
-  const submit = async () => { if (!taskText.trim()) return; setSaving(true); await onAdd(shift.date, taskText, recurrence); setSaving(false); close(); };
+  const submit = async () => { if (!taskText.trim()) return; setSaving(true); await onAdd(shift.date, taskText.trim().toUpperCase(), recurrence); setSaving(false); close(); };
 
   const baseStyle = isDragOver
     ? { background: 'rgba(22,163,74,0.10)', borderColor: 'rgba(22,163,74,0.25)', boxShadow: '0 0 0 2px rgba(22,163,74,0.15)' }
@@ -1002,7 +1002,7 @@ function ProductItem({ p }: { p: CostingProduct }) {
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <p className="text-sm font-normal text-gray-800 leading-snug flex-1 min-w-0 truncate uppercase"
           style={{ fontFamily: '"stolzl", sans-serif' }}>
-          {p.name}
+          {p.name.toUpperCase()}
         </p>
         <span className="text-base font-black shrink-0 leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
           {p.margin!.toFixed(1)}%
@@ -1411,8 +1411,8 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
   const [showVer, setShowVer] = useState(false); // version details hidden until the version badge is tapped
 
   const toggleExpand = (id: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const submitTask = () => { if (newTaskText.trim()) { onAddTask(newTaskText.trim()); setNewTaskText(''); setAddingTask(false); } };
-  const submitSub = (taskId: string) => { if (newSubText.trim()) { onAddSubtask(taskId, newSubText.trim()); setNewSubText(''); setAddingSubFor(null); } };
+  const submitTask = () => { if (newTaskText.trim()) { onAddTask(newTaskText.trim().toUpperCase()); setNewTaskText(''); setAddingTask(false); } };
+  const submitSub = (taskId: string) => { if (newSubText.trim()) { onAddSubtask(taskId, newSubText.trim().toUpperCase()); setNewSubText(''); setAddingSubFor(null); } };
 
   const openCount = tasks.filter(t => !t.done).length;
   const builtDate = UPDATED ? new Date(UPDATED + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
@@ -1460,7 +1460,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
 
       {addingTask && (
         <div className="flex gap-2 mb-2">
-          <input value={newTaskText} onChange={e => setNewTaskText(e.target.value)} autoFocus
+          <input value={newTaskText} onChange={e => setNewTaskText(e.target.value.toUpperCase())} autoFocus
             onKeyDown={e => { if (e.key === 'Enter') submitTask(); if (e.key === 'Escape') { setAddingTask(false); setNewTaskText(''); } }}
             placeholder="NEW TASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
           <button onClick={submitTask} disabled={!newTaskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
@@ -1480,7 +1480,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
                     <div onClick={e => { e.stopPropagation(); onToggleDone(task.id, !task.done); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: task.done ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: task.done ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
                       {task.done && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
-                    <span className={`flex-1 min-w-0 text-sm font-semibold transition-colors ${task.done ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.name}</span>
+                    <span className={`flex-1 min-w-0 text-sm font-semibold transition-colors uppercase ${task.done ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.name}</span>
                     {task.subtasks.length > 0 && <span className="text-xs text-gray-400 shrink-0">{subDone}/{task.subtasks.length}</span>}
                     <button onClick={e => { e.stopPropagation(); onDelegate(task.name); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>
                     <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{isOpen ? '▼' : '▶'}</span>
@@ -1493,7 +1493,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
                     ))}
                     {addingSubFor === task.id ? (
                       <div className="flex gap-2 mt-1">
-                        <input value={newSubText} onChange={e => setNewSubText(e.target.value)} autoFocus
+                        <input value={newSubText} onChange={e => setNewSubText(e.target.value.toUpperCase())} autoFocus
                           onKeyDown={e => { if (e.key === 'Enter') submitSub(task.id); if (e.key === 'Escape') { setAddingSubFor(null); setNewSubText(''); } }}
                           placeholder="NEW SUBTASK..." className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
                         <button onClick={() => submitSub(task.id)} disabled={!newSubText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
@@ -2108,10 +2108,7 @@ export default function Home() {
         <div style={{ display: openWidgets.has('shopping') ? 'block' : 'none' }}>
           <Card icon={<WidgetIcon name="shopping" chip={28} />} title="Shopping List" onCollapse={() => toggleWidget('shopping')}>
             <div className="space-y-2">
-              {shoppingAllUnchecked.length === 0 && shoppingAllChecked.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">Nothing on the list.</p>
-              ) : (
-                [...shoppingAllUnchecked, ...shoppingAllChecked].map(item => {
+              {[...shoppingAllUnchecked, ...shoppingAllChecked].map(item => {
                   const { name, qty } = parseShoppingQty(item.text);
                   const editing = editingQtyId === item.id;
                   return (
@@ -2132,13 +2129,12 @@ export default function Home() {
                       )}
                     </div>
                   );
-                })
-              )}
+              })}
               {addingShopping ? (
                 <div className="flex items-center gap-2 pt-1">
-                  <input value={newShoppingText} onChange={e => setNewShoppingText(e.target.value)} autoFocus
+                  <input value={newShoppingText} onChange={e => setNewShoppingText(e.target.value.toUpperCase())} autoFocus
                     onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); if (e.key === 'Escape') { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); } }}
-                    placeholder="ADD ITEM..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                    placeholder="ADD ITEM..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
                   <input type="number" min={1} value={newShoppingQty} onChange={e => setNewShoppingQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
                     onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); }}
                     aria-label="Quantity" title="Quantity" className="w-12 text-sm text-center px-1 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
@@ -2146,7 +2142,14 @@ export default function Home() {
                   <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
                 </div>
               ) : (
-                <button onClick={() => setAddingShopping(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 transition-colors" style={{ border: '1px dashed rgba(0,0,0,0.12)' }} aria-label="Add item"><span className="text-base leading-none font-light">+</span> Add item</button>
+                <textarea
+                  onClick={() => { setAddingShopping(true); }}
+                  readOnly
+                  placeholder="ADD ITEM..."
+                  rows={1}
+                  className="w-full rounded-2xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 uppercase resize-none focus:outline-none cursor-text"
+                  style={{ ...TILE_STYLE, minHeight: '62px' }}
+                />
               )}
             </div>
           </Card>
