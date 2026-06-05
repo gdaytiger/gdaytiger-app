@@ -1541,7 +1541,7 @@ export default function Home() {
   const [priceDrift, setPriceDrift] = useState<PriceDriftData | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [taskContext, setTaskContext] = useState<Record<string, string>>({});
-  const [shoppingOpen, setShoppingOpen] = useState(false);
+
   const [addingShopping, setAddingShopping] = useState(false);
   const [newShoppingText, setNewShoppingText] = useState('');
   const [newShoppingQty, setNewShoppingQty] = useState(1);
@@ -1963,6 +1963,13 @@ export default function Home() {
   const supplierAlert = (priceDrift?.warnings?.length ?? 0) > 0;
   const tigerOpenCount = tigerTasks.filter(t => !t.done).length;
 
+  // Shopping items — always derived from today's tasks (not the selected day)
+  const _shopAll: typeof data.dailyTasks = [];
+  { let _inShop = false; for (const t of data.dailyTasks) { if (t.isHeader) { _inShop = t.text.toUpperCase().includes('SHOPPING'); continue; } if (_inShop) _shopAll.push(t); } }
+  const shoppingAllUnchecked = _shopAll.filter(t => !t.checked);
+  const shoppingAllChecked = _shopAll.filter(t => t.checked);
+  const shoppingBadge = shoppingAllUnchecked.length;
+
   const CATEGORIES = ['Coffee', 'Food', 'Retail', 'Vending', 'Uncategorised'];
 
   return (
@@ -2040,58 +2047,15 @@ export default function Home() {
               const shoppingChecked = shoppingItems.filter(t => t.checked);
               const shoppingCount = shoppingUnchecked.length;
               const tileStyle = { minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
-              if (!isViewingOtherDay) elements.push(
-                <div key="shopping" style={{ marginTop: '2px' }}>
-                  <div onClick={() => setShoppingOpen(o => !o)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3" style={tileStyle}>
-                    <WidgetIcon name="shopping" chip={28} glyph={17} />
-                    <span className="flex-1 text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>Shopping List</span>
-                    <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: shoppingCount > 0 ? '#fbcdad' : 'rgba(0,0,0,0.06)', color: shoppingCount > 0 ? '#333' : '#aaa', fontSize: '11px', flexShrink: 0 }}>{shoppingCount}</span>
-                    <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{shoppingOpen ? '▼' : '▶'}</span>
-                  </div>
-                  {shoppingOpen && (
-                    <div className="space-y-2 mt-2 pl-3" style={{ borderLeft: '2px solid rgba(251,205,173,0.4)' }}>
-                      {[...shoppingUnchecked, ...shoppingChecked].map(item => (
-                        <div key={item.id} className="rounded-2xl flex items-start gap-3 px-3 py-2.5" style={tileStyle}>
-                          <div onClick={() => toggleShopping(item.id, !item.checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: item.checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: item.checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
-                            {item.checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                          {(() => {
-                            const { name, qty } = parseShoppingQty(item.text);
-                            const editing = editingQtyId === item.id;
-                            return (
-                              <>
-                                <span onClick={() => toggleShopping(item.id, !item.checked)} className={`flex-1 text-sm leading-snug font-semibold cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{name}</span>
-                                {editing ? (
-                                  <input type="number" min={1} value={editingQtyVal} autoFocus
-                                    onChange={e => setEditingQtyVal(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') saveShoppingQty(item.id, name); if (e.key === 'Escape') setEditingQtyId(null); }}
-                                    onBlur={() => saveShoppingQty(item.id, name)}
-                                    aria-label="Quantity"
-                                    className="w-12 text-sm text-center px-1 py-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.12)' }} />
-                                ) : (
-                                  <button onClick={() => { setEditingQtyId(item.id); setEditingQtyVal(String(qty)); }} className={`shrink-0 text-sm font-semibold tabular-nums px-1.5 transition-colors ${item.checked ? 'text-gray-300' : 'text-gray-400 hover:text-gray-600'}`} title="Change quantity">×{qty}</button>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                      ))}
-                      {addingShopping ? (
-                        <div className="flex items-center gap-2">
-                          <input value={newShoppingText} onChange={e => setNewShoppingText(e.target.value)} autoFocus
-                            onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); if (e.key === 'Escape') { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); } }}
-                            placeholder="ADD ITEM..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                          <input type="number" min={1} value={newShoppingQty} onChange={e => setNewShoppingQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                            onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); }}
-                            aria-label="Quantity" title="Quantity" className="w-12 text-sm text-center px-1 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                          <button onClick={() => addShopping(newShoppingText, newShoppingQty)} disabled={!newShoppingText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>ADD</button>
-                          <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
-                        </div>
-                      ) : (
-                        <button onClick={() => setAddingShopping(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 transition-colors" style={{ border: '1px dashed rgba(0,0,0,0.12)' }} aria-label="Add item"><span className="text-base leading-none font-light">+</span> Add item</button>
-                      )}
-                    </div>
-                  )}
+              // Shopping link row — only shown when there are items; opens the shopping widget
+              if (!isViewingOtherDay && shoppingBadge > 0) elements.push(
+                <div key="shopping" onClick={() => toggleWidget('shopping')} role="button"
+                  className="rounded-2xl cursor-pointer flex items-center gap-3 px-3"
+                  style={{ ...tileStyle, minHeight: '62px', ...(openWidgets.has('shopping') ? { border: '1.5px solid #fbcdad', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 3px rgba(251,205,173,0.35)' } : {}) }}>
+                  <WidgetIcon name="shopping" chip={28} glyph={17} />
+                  <span className="flex-1 text-sm font-semibold text-gray-800">Shopping List</span>
+                  <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{shoppingBadge}</span>
+                  <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('shopping') ? '▼' : '▶'}</span>
                 </div>
               );
               return elements;
@@ -2116,13 +2080,64 @@ export default function Home() {
         </Card>
 
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
-        <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="md:col-span-2 grid grid-cols-3 md:grid-cols-6 gap-3">
+          <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />
           <LauncherTile icon={<WidgetIcon name="projects" chip={48} glyph={26} />} title="Projects" badgeText={`${projectsDone}/${projectsTotal}`} alert={data.projects.some(p => p.status === 'Blocked')} active={openWidgets.has('projects')} onClick={() => toggleWidget('projects')} />
           <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
           <LauncherTile icon={<WidgetIcon name="food" chip={48} glyph={26} />} title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Updates" subtitle={VERSION} badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
         </div>
+
+        {/* SHOPPING LIST widget */}
+        {openWidgets.has('shopping') && (
+        <div className="md:col-span-2">
+          <Card icon={<WidgetIcon name="shopping" chip={28} />} title="Shopping List" onCollapse={() => toggleWidget('shopping')}>
+            <div className="space-y-2">
+              {shoppingAllUnchecked.length === 0 && shoppingAllChecked.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">Nothing on the list.</p>
+              ) : (
+                [...shoppingAllUnchecked, ...shoppingAllChecked].map(item => {
+                  const { name, qty } = parseShoppingQty(item.text);
+                  const editing = editingQtyId === item.id;
+                  return (
+                    <div key={item.id} className="rounded-2xl flex items-center gap-3 px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)', minHeight: '54px' }}>
+                      <div onClick={() => toggleShopping(item.id, !item.checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: item.checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: item.checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
+                        {item.checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <span onClick={() => toggleShopping(item.id, !item.checked)} className={`flex-1 text-sm leading-snug font-semibold cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{name}</span>
+                      {editing ? (
+                        <input type="number" min={1} value={editingQtyVal} autoFocus
+                          onChange={e => setEditingQtyVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveShoppingQty(item.id, name); if (e.key === 'Escape') setEditingQtyId(null); }}
+                          onBlur={() => saveShoppingQty(item.id, name)}
+                          aria-label="Quantity"
+                          className="w-14 text-sm text-center px-1 py-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.12)' }} />
+                      ) : (
+                        <button onClick={() => { setEditingQtyId(item.id); setEditingQtyVal(String(qty)); }} className={`shrink-0 text-sm font-semibold tabular-nums px-2 py-1 rounded-lg transition-colors ${item.checked ? 'text-gray-300' : 'text-gray-400 hover:text-gray-600'}`} title="Change quantity" style={{ background: 'rgba(0,0,0,0.04)' }}>×{qty}</button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+              {addingShopping ? (
+                <div className="flex items-center gap-2 pt-1">
+                  <input value={newShoppingText} onChange={e => setNewShoppingText(e.target.value)} autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); if (e.key === 'Escape') { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); } }}
+                    placeholder="ADD ITEM..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                  <input type="number" min={1} value={newShoppingQty} onChange={e => setNewShoppingQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); }}
+                    aria-label="Quantity" title="Quantity" className="w-12 text-sm text-center px-1 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                  <button onClick={() => addShopping(newShoppingText, newShoppingQty)} disabled={!newShoppingText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>ADD</button>
+                  <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
+                </div>
+              ) : (
+                <button onClick={() => setAddingShopping(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 transition-colors" style={{ border: '1px dashed rgba(0,0,0,0.12)' }} aria-label="Add item"><span className="text-base leading-none font-light">+</span> Add item</button>
+              )}
+            </div>
+          </Card>
+        </div>
+        )}
 
         {/* PROJECTS (brain-dump capture + ongoing projects, merged) */}
         {openWidgets.has('projects') && (
