@@ -1530,15 +1530,25 @@ export default function Home() {
   // Which of the four launcher widgets are expanded to full cards. Empty = all
   // collapsed to square tiles (resets every load by design).
   const [openWidgets, setOpenWidgets] = useState<Set<string>>(new Set());
+  const shoppingWidgetRef = useRef<HTMLDivElement>(null);
   const toggleWidget = (key: string) => {
-    // Pin scroll position — iOS Safari collapses the URL bar when the page
-    // becomes scrollable, shifting the viewport. We capture position before
-    // the state change and restore it after the next two animation frames
-    // (first rAF = React commit, second = browser layout + scroll settle).
     const scrollY = window.scrollY;
     setOpenWidgets(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
     requestAnimationFrame(() => requestAnimationFrame(() => {
       window.scrollTo({ top: scrollY, behavior: 'instant' });
+    }));
+  };
+  // Used by the Daily To Do shopping link row — opens the widget and scrolls to it.
+  const openShoppingWidget = () => {
+    const alreadyOpen = openWidgets.has('shopping');
+    const scrollY = window.scrollY;
+    setOpenWidgets(prev => { const n = new Set(prev); if (n.has('shopping')) n.delete('shopping'); else n.add('shopping'); return n; });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!alreadyOpen) {
+        shoppingWidgetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: scrollY, behavior: 'instant' });
+      }
     }));
   };
   const [tigerTasks, setTigerTasks] = useState<BacklogTask[]>([]);
@@ -2065,11 +2075,11 @@ export default function Home() {
               const tileStyle = { minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
               // Shopping link row — only shown when there are items; opens the shopping widget
               if (!isViewingOtherDay && shoppingBadge > 0) elements.push(
-                <div key="shopping" onClick={() => toggleWidget('shopping')} role="button"
+                <div key="shopping" onClick={openShoppingWidget} role="button"
                   className="rounded-2xl cursor-pointer flex items-center gap-3 px-3"
                   style={{ ...tileStyle, minHeight: '62px', ...(openWidgets.has('shopping') ? { border: '1.5px solid #fbcdad', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 3px rgba(251,205,173,0.35)' } : {}) }}>
                   <WidgetIcon name="shopping" chip={28} glyph={17} />
-                  <span className="flex-1 text-sm font-semibold text-gray-800">Shopping List</span>
+                  <span className="flex-1 text-sm font-semibold text-gray-800 uppercase">Shopping List</span>
                   <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{shoppingBadge}</span>
                   <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('shopping') ? '▼' : '▶'}</span>
                 </div>
@@ -2111,7 +2121,7 @@ export default function Home() {
         <div className="flex flex-col gap-4 mt-4">
 
         {/* SHOPPING LIST widget — always in DOM, shown/hidden via CSS to avoid scroll-jump */}
-        <div style={{ display: openWidgets.has('shopping') ? 'block' : 'none' }}>
+        <div ref={shoppingWidgetRef} style={{ display: openWidgets.has('shopping') ? 'block' : 'none' }}>
           <Card icon={<WidgetIcon name="shopping" chip={28} />} title="Shopping List" onCollapse={() => toggleWidget('shopping')}>
             <div className="space-y-2">
               {[...shoppingAllUnchecked, ...shoppingAllChecked].map(item => {
