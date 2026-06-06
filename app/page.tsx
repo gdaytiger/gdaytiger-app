@@ -509,6 +509,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         </div>
         {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: '#fbcdad' }} title="Has context" />}
         {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
+        {!isMobile && onDelete && <button onClick={e => { e.stopPropagation(); onDelete(id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Delete" title="Delete">✕</button>}
       </div>
       {expanded && (
         <div className="px-4 pb-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
@@ -1586,6 +1587,11 @@ export default function Home() {
     fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) }).catch(() => {});
   };
 
+  const deleteShopping = (blockId: string) => {
+    setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(t => t.id !== blockId) } : prev);
+    fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) }).catch(() => {});
+  };
+
   const addShopping = async (name: string, qty: number = 1) => {
     const n = name.trim();
     if (!n) return;
@@ -2112,7 +2118,8 @@ export default function Home() {
                   const { name, qty } = parseShoppingQty(item.text);
                   const editing = editingQtyId === item.id;
                   return (
-                    <div key={item.id} className="rounded-2xl flex items-center gap-3 px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)', minHeight: '54px' }}>
+                    <SwipeToDelete key={item.id} onDelete={() => deleteShopping(item.id)}>
+                    <div className="group flex items-center gap-3 px-3 py-2.5" style={{ minHeight: '54px' }}>
                       <div onClick={() => toggleShopping(item.id, !item.checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: item.checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: item.checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
                         {item.checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       </div>
@@ -2127,7 +2134,9 @@ export default function Home() {
                       ) : (
                         <button onClick={() => { setEditingQtyId(item.id); setEditingQtyVal(String(qty)); }} className={`shrink-0 text-sm font-semibold tabular-nums px-2 py-1 rounded-lg transition-colors ${item.checked ? 'text-gray-300' : 'text-gray-400 hover:text-gray-600'}`} title="Change quantity" style={{ background: 'rgba(0,0,0,0.04)' }}>×{qty}</button>
                       )}
+                      <button onClick={e => { e.stopPropagation(); deleteShopping(item.id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" aria-label="Delete" title="Delete">✕</button>
                     </div>
+                    </SwipeToDelete>
                   );
               })}
               {addingShopping ? (
