@@ -569,11 +569,11 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   const [isAdding, setIsAdding] = useState(false);
   const [taskText, setTaskText] = useState('');
   const [recurrence, setRecurrence] = useState<string>('once');
-  const [saving, setSaving] = useState(false);
+  const [saving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const openInput = (e: React.MouseEvent) => { e.stopPropagation(); setIsAdding(true); setTimeout(() => inputRef.current?.focus(), 320); };
   const close = () => { setIsAdding(false); setTaskText(''); setRecurrence('once'); };
-  const submit = async () => { if (!taskText.trim()) return; setSaving(true); await onAdd(shift.date, taskText.trim().toUpperCase(), recurrence); setSaving(false); close(); };
+  const submit = () => { if (!taskText.trim()) return; onAdd(shift.date, taskText.trim().toUpperCase(), recurrence); close(); };
 
   const baseStyle = isDragOver
     ? { background: 'rgba(22,163,74,0.10)', borderColor: 'rgba(22,163,74,0.25)', boxShadow: '0 0 0 2px rgba(22,163,74,0.15)' }
@@ -1766,15 +1766,17 @@ export default function Home() {
     }
   };
 
-  const handleAddTask = async (date: string, text: string, recurrence: string = 'once') => {
+  const handleAddTask = (date: string, text: string, recurrence: string = 'once') => {
     // Optimistic update: increment the roster count immediately so the UI feels instant.
     setWeekTasks(prev => {
       if (!prev[date]) return prev;
       return { ...prev, [date]: { ...prev[date], count: prev[date].count + 1 } };
     });
-    await fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, text, recurrence }) });
+    // Fire-and-forget: API + refresh run in background so the modal closes instantly.
     const needsDashboard = date === todayStr || recurrence === 'daily' || recurrence === 'monthly';
-    await refreshAfterMutation({ dashboard: needsDashboard });
+    fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, text, recurrence }) })
+      .then(() => refreshAfterMutation({ dashboard: needsDashboard }))
+      .catch(() => {});
   };
 
   const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean, fromDate?: string, category?: string) => {
