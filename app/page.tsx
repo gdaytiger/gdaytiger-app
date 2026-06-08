@@ -1637,20 +1637,38 @@ export default function Home() {
     fetch('/api/update-shopping', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, text: newText }) }).catch(() => {});
   };
 
-  const fetchDashboard = async (state: Record<string, string[]>) => {
-    const res = await fetch('/api/dashboard');
+  const fetchDashboard = async (state: Record<string, string[]>, bustCache = false) => {
+    const url = bustCache ? `/api/dashboard?t=${Date.now()}` : '/api/dashboard';
+    const res = await fetch(url);
     if (res.status === 401) { window.location.assign('/login'); return; }
     const d = await res.json();
     setData({ ...d, dailyTasks: applyServerChecked(d.dailyTasks, d.todayStr, state) });
   };
 
-  const fetchWeekTasks = async (state: Record<string, string[]>) => {
-    const d = await fetch('/api/week-tasks').then(r => r.json());
+  const fetchWeekTasks = async (state: Record<string, string[]>, bustCache = false) => {
+    const url = bustCache ? `/api/week-tasks?t=${Date.now()}` : '/api/week-tasks';
+    const d = await fetch(url).then(r => r.json());
     const enriched: Record<string, WeekDay> = {};
     for (const [date, day] of Object.entries(d.days as Record<string, WeekDay>)) {
       enriched[date] = { ...day, tasks: applyServerChecked(day.tasks, date, state) };
     }
     setWeekTasks(enriched);
+  };
+
+  // After a mutation (add/move/delete), fetch fresh data bypassing the Vercel edge cache
+  // and run state + week-tasks concurrently (they're independent).
+  const refreshAfterMutation = async (opts: { dashboard?: boolean } = {}) => {
+    const [state, weekRaw] = await Promise.all([
+      fetchServerState(),
+      fetch(`/api/week-tasks?t=${Date.now()}`).then(r => r.json()),
+    ]);
+    const enriched: Record<string, WeekDay> = {};
+    for (const [date, day] of Object.entries(weekRaw.days as Record<string, WeekDay>)) {
+      enriched[date] = { ...day, tasks: applyServerChecked(day.tasks, date, state) };
+    }
+    setWeekTasks(enriched);
+    if (opts.dashboard) await fetchDashboard(state, true);
+    return state;
   };
 
   // Pull every data source. Reused on first load and on tab refocus.
@@ -1740,8 +1758,7 @@ export default function Home() {
     // Recurring tasks — especially daily/monthly, which are mirrored across all 7 day
     // pages — need a full refresh so every copy clears from the UI, not just this view.
     if (isRecurring) {
-      const state = await fetchServerState();
-      await Promise.all([fetchWeekTasks(state), fetchDashboard(state)]);
+      await refreshAfterMutation({ dashboard: true });
     }
   };
 
@@ -1752,10 +1769,8 @@ export default function Home() {
       return { ...prev, [date]: { ...prev[date], count: prev[date].count + 1 } };
     });
     await fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, text, recurrence }) });
-    const state = await fetchServerState();
-    await fetchWeekTasks(state);
-    // Daily / monthly land on every weekday, so refresh today's view regardless of the picked day.
-    if (date === todayStr || recurrence === 'daily' || recurrence === 'monthly') await fetchDashboard(state);
+    const needsDashboard = date === todayStr || recurrence === 'daily' || recurrence === 'monthly';
+    await refreshAfterMutation({ dashboard: needsDashboard });
   };
 
   const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean, fromDate?: string, category?: string) => {
@@ -1776,8 +1791,7 @@ export default function Home() {
       setMovedRecurringIds(prev => new Set(prev).add(blockId));
     }
     await Promise.all(ops);
-    const state = await fetchServerState();
-    await fetchWeekTasks(state);
+    await refreshAfterMutation({ dashboard: sourceDate === todayStr || targetDate === todayStr });
   };
 
   const handleDeferToTomorrow = async (blockId: string, text: string, isRecurring?: boolean) => {
@@ -1785,6 +1799,10 @@ export default function Home() {
     const t = new Date(y, m - 1, d + 1);
     const tomorrowStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
     setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(task => task.id !== blockId) } : prev);
+    if (isRecurring) {
+      // Suppress recurring task for the rest of this session so it doesn't reappear on re-fetch.
+      setMovedRecurringIds(prev => new Set(prev).add(blockId));
+    }
     const ops: Promise<Response>[] = [
       fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: tomorrowStr, text }) }),
     ];
@@ -1794,8 +1812,7 @@ export default function Home() {
       ops.push(fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) }));
     }
     await Promise.all(ops);
-    const state = await fetchServerState();
-    await fetchWeekTasks(state);
+    await refreshAfterMutation();
   };
 
   // Hand the action item off to full Claude. Desktop opens a Cowork session
@@ -1877,8 +1894,7 @@ export default function Home() {
   const handleAddProjectAction = async (projectId: string, text: string) => {
     if (!text.trim()) return;
     await fetch('/api/add-project-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, text: text.trim() }) });
-    const state = await fetchServerState();
-    await fetchDashboard(state);
+    await refreshAfterMutation({ dashboard: true });
     setAddingActionFor(null);
     setNewActionText('');
   };
@@ -1955,8 +1971,7 @@ export default function Home() {
       setPromoting(true);
       await fetch('/api/braindump', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectName: draft.projectName.trim(), nextActions: actions, ideaText: braindump }) });
     }
-    const state = await fetchServerState();
-    await fetchDashboard(state);
+    await refreshAfterMutation({ dashboard: true });
     setBraindump(''); setDraft(null); setPromoting(false);
   };
 
@@ -2111,7 +2126,7 @@ export default function Home() {
                   isDragOver={dragOverDate === shift.date}
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverDate(shift.date); }}
                   onDragLeave={() => setDragOverDate(null)}
-                  onDrop={(e) => { e.preventDefault(); setDragOverDate(null); try { const d = JSON.parse(e.dataTransfer.getData('application/json')); handleMoveToDay(d.id, d.text, shift.date, d.isRecurring, undefined, d.category); } catch { /* ignore */ } }}
+                  onDrop={(e) => { e.preventDefault(); setDragOverDate(null); try { const d = JSON.parse(e.dataTransfer.getData('application/json')); handleMoveToDay(d.id, d.text, shift.date, d.isRecurring, d.fromDate, d.category); } catch { /* ignore */ } }}
                 />
               ))
             )}
