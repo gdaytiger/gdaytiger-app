@@ -115,7 +115,11 @@ const SUPPLIER_LINKS: Record<string, string> = {
 
 const applyServerChecked = (todos: Todo[], date: string, state: Record<string, string[]>): Todo[] => {
   const checkedIds = new Set(state[date] || []);
-  return todos.map(t => t.isHeader ? t : { ...t, checked: checkedIds.has(t.id) });
+  // Recurring tasks moved away from this date are stored under `date:moved` and filtered out entirely.
+  const movedIds = new Set(state[`${date}:moved`] || []);
+  return todos
+    .filter(t => t.isHeader || !movedIds.has(t.id))
+    .map(t => t.isHeader ? t : { ...t, checked: checkedIds.has(t.id) });
 };
 
 function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onCollapse }: {
@@ -1789,6 +1793,9 @@ export default function Home() {
       // Recurring task moved away from today — suppress it in the UI after server re-fetch
       // so it doesn't reappear (the block stays in Notion so it recurs next week).
       setMovedRecurringIds(prev => new Set(prev).add(blockId));
+      // Persist suppression so it survives a hard refresh (stored under `date:moved` key,
+      // auto-cleaned after 8 days by the checked-state cleanup routine).
+      fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, date: `${sourceDate}:moved`, checked: true }) }).catch(() => {});
     }
     await Promise.all(ops);
     await refreshAfterMutation({ dashboard: sourceDate === todayStr || targetDate === todayStr });
@@ -1800,8 +1807,9 @@ export default function Home() {
     const tomorrowStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
     setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(task => task.id !== blockId) } : prev);
     if (isRecurring) {
-      // Suppress recurring task for the rest of this session so it doesn't reappear on re-fetch.
+      // Suppress recurring task for the rest of this session and persist so it survives a reload.
       setMovedRecurringIds(prev => new Set(prev).add(blockId));
+      fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, date: `${todayStr}:moved`, checked: true }) }).catch(() => {});
     }
     const ops: Promise<Response>[] = [
       fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: tomorrowStr, text }) }),
