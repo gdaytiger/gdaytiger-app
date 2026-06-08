@@ -559,7 +559,7 @@ const RECURRENCE_OPTIONS = [
 
 function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDay, onDrop, onDragOver, onDragLeave, isDragOver }: {
   shift: Shift; isToday: boolean; isHighlighted: boolean; taskCount: number;
-  onAdd: (date: string, text: string, recurrence: string) => Promise<void>;
+  onAdd: (date: string, text: string, recurrence: string) => void;
   onSelectDay: (date: string) => void;
   onDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
