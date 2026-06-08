@@ -2058,7 +2058,7 @@ export default function Home() {
           headerRight={
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
-              {isViewingOtherDay && <button onClick={() => setSelectedDate(null)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← Back</button>}
+              {isViewingOtherDay && <button onClick={() => setSelectedDate(null)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← BACK</button>}
             </div>
           }>
           <div className="space-y-2">
