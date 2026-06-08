@@ -1559,6 +1559,8 @@ export default function Home() {
   const [recipeMap, setRecipeMap] = useState<RecipeMapData | null>(null);
   const [priceDrift, setPriceDrift] = useState<PriceDriftData | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  // Recurring task IDs moved away from today — suppressed in UI until next refresh/session.
+  const [movedRecurringIds, setMovedRecurringIds] = useState<Set<string>>(new Set());
   const [taskContext, setTaskContext] = useState<Record<string, string>>({});
 
   const [addingShopping, setAddingShopping] = useState(false);
@@ -1763,6 +1765,10 @@ export default function Home() {
     ];
     if (!isRecurring) {
       ops.push(fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) }));
+    } else if (sourceDate === todayStr) {
+      // Recurring task moved away from today — suppress it in the UI after server re-fetch
+      // so it doesn't reappear (the block stays in Notion so it recurs next week).
+      setMovedRecurringIds(prev => new Set(prev).add(blockId));
     }
     await Promise.all(ops);
     const state = await fetchServerState();
@@ -1963,7 +1969,9 @@ export default function Home() {
   );
 
   const isViewingOtherDay = selectedDate !== null && selectedDate !== todayStr;
-  const displayedTasks = isViewingOtherDay ? (weekTasks[selectedDate!]?.tasks ?? []) : data.dailyTasks;
+  const displayedTasks = isViewingOtherDay
+    ? (weekTasks[selectedDate!]?.tasks ?? [])
+    : data.dailyTasks.filter(t => !movedRecurringIds.has(t.id));
   const selectedShift = selectedDate ? shifts.find(s => s.date === selectedDate) : null;
   const displayDayLabel = isViewingOtherDay && selectedShift ? selectedShift.label : null;
   // Day tasks only (exclude the 🛒 Shopping List group — it has its own tile + count)
