@@ -161,7 +161,9 @@ async function getPageChildren(pageId: string): Promise<any[]> {
 // Insert a single bulleted task block onto a page. If a category is supplied and a
 // matching heading exists, insert after the last task in that section; otherwise
 // append to the end of the page. Returns the new block id, or null on failure.
-async function insertTaskBlock(pageId: string, content: string, category: string): Promise<{ blockId: string | null; error?: string }> {
+// Pass pre-fetched `children` to avoid a serial Notion read (caller can fetch in parallel
+// with category classification).
+async function insertTaskBlock(pageId: string, content: string, category: string, prefetchedChildren?: any[]): Promise<{ blockId: string | null; error?: string }> {
   const newBlock = {
     type: 'bulleted_list_item',
     bulleted_list_item: {
@@ -170,7 +172,7 @@ async function insertTaskBlock(pageId: string, content: string, category: string
   };
 
   if (category) {
-    const children = await getPageChildren(pageId);
+    const children = prefetchedChildren ?? await getPageChildren(pageId);
 
     const headingIndex = children.findIndex(block => {
       const isHeading = block.type === 'heading_1' || block.type === 'heading_2' || block.type === 'heading_3';
@@ -252,9 +254,6 @@ export async function POST(req: NextRequest) {
 
   const recurrence: Recurrence = VALID_RECURRENCE.includes(rawRecurrence) ? rawRecurrence : 'once';
 
-  // Auto-classify if no category provided — uses Claude Haiku to pick the right section.
-  const category: string = rawCategory || await classifyCategory(text.trim());
-
   const [year, month, day] = date.split('-').map(Number);
   const d = new Date(year, month - 1, day);
 
@@ -270,7 +269,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No page for that day' }, { status: 400 });
   }
 
-  const results = await Promise.all(targetPages.map(pageId => insertTaskBlock(pageId, content, category)));
+  // Parallelize category classification and page children fetches — previously these ran
+  // serially (classify → fetch → insert), adding ~500–800ms. Now they run concurrently.
+  const [category, ...childrenPerPage] = await Promise.all([
+    rawCategory ? Promise.resolve(rawCategory as string) : classifyCategory(text.trim()),
+    ...targetPages.map(pageId => getPageChildren(pageId)),
+  ]);
+
+  const results = await Promise.all(
+    targetPages.map((pageId, i) => insertTaskBlock(pageId, content, category as string, childrenPerPage[i] as any[]))
+  );
 
   const firstError = results.find(r => r.error);
   if (firstError) {

@@ -1746,6 +1746,11 @@ export default function Home() {
   };
 
   const handleAddTask = async (date: string, text: string, recurrence: string = 'once') => {
+    // Optimistic update: increment the roster count immediately so the UI feels instant.
+    setWeekTasks(prev => {
+      if (!prev[date]) return prev;
+      return { ...prev, [date]: { ...prev[date], count: prev[date].count + 1 } };
+    });
     await fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, text, recurrence }) });
     const state = await fetchServerState();
     await fetchWeekTasks(state);
