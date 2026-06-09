@@ -1,77 +1,105 @@
 # TIGER OS
 
-G'Day Tiger internal operations dashboard. Built on Next.js, deployed on Vercel, data from Notion.
+G'Day Tiger internal operations dashboard. Built on Next.js, deployed on Vercel, data from Notion + Deputy.
 
 ---
 
 ## Stack
 
-| Layer | Tool |
+| Layer | Tool / Version |
 |---|---|
-| Framework | Next.js (App Router) |
-| Styling | Tailwind CSS + inline styles |
-| Hosting | Vercel |
-| Database | Notion (via REST API) |
-| Automation | Google Apps Script |
+| Framework | Next.js 16.2.6 (App Router, TypeScript) |
+| UI | React 19.2.4, Tailwind CSS v4 |
+| Hosting | Vercel (auto-deploys from `main`) |
+| Primary DB | Notion (via REST API) |
+| Roster | Deputy API |
+| AI | Anthropic API — `claude-opus-4-8` (Projects chat + brain-dump), `claude-haiku-4-5-20251001` (task classify) |
+| Automation | Google Apps Script (linked to Food Costings sheet) |
 | Fonts | Stolzl (labels), Bodoni PT (headings) |
 
 ---
 
 ## Deploying
 
-Always deploy via the included script — it merges the current branch into `main` and pushes, which triggers Vercel automatically.
+Always deploy via the included script — merges current branch into `main`, pushes, Vercel auto-deploys.
 
 ```bash
 bash deploy.sh
 ```
 
-Live in ~30 seconds after push. To roll back, go to **vercel.com → your project → Deployments → Promote** any previous deployment.
+Live in ~30 seconds. To roll back: **vercel.com → your project → Deployments → Promote** any previous deployment.
+
+---
+
+## Layout
+
+Two persistent cards at the top (Daily To Do + Week Ahead), then a **6-tile launcher dock**. Each tile shows a count badge and a red alert dot when something needs attention. Dock resets to all-collapsed on every load. App auto-reloads on day rollover and soft-refreshes on tab refocus.
+
+| Tile | Widget |
+|---|---|
+| 🛒 Shopping List | Standalone shopping list (own launcher tile) |
+| 🎯 Projects | Brain Dump capture + Ongoing Projects |
+| 📦 Supplier Prices | Ingredient-level price tracking with 7-day drift |
+| ☕ Coffee Costings | Coffee products, sorted worst→best margin |
+| 🥪 Food Costings | Food products, sorted worst→best margin |
+| 🐯 Tiger OS Updates | In-app changelog + backlog (Notion Backlog DB) |
 
 ---
 
 ## Dashboard Cards
 
 ### ⚡ Daily To Do
-Pulls today's tasks from Notion. Swipe right to defer to tomorrow, swipe left to delete. Recurring tasks (no date prefix) stay in Notion and reappear each cycle.
+Notion day pages. Swipe right = defer to tomorrow; swipe left = delete (one-off only). Recurring undeletable. Drag-drop reorder (desktop). Category labels display below task name. Checked tasks sink to bottom. When shopping items exist, a "Shopping List" link row appears at the bottom — tap to open. All task text displayed uppercase.
 
-**🛒 Shopping List section** — renders at the bottom of the card as its own labelled group, pulled from a dedicated Shopping List Notion page (`3683c99c0e8581c7b19cc2eec6b27b47`, lives under ⚙️ Daily Task Sources). Only *unchecked* items appear, so the list self-clears as things are bought. Add or tick items on that page (or via the standalone live widget) from any device. The same Shopping List page also feeds the `gdaytiger-os` daily updater (`api/update.js`, v8+), which renders the same section onto the TIGER OS Notion page each morning — so the shopping list shows consistently across the app, the Notion page, and the widget.
+**Task prefix system:**
+
+| Prefix | Behaviour |
+|---|---|
+| `[YYYY-MM-DD]` | One-off — shows only on that date |
+| `[F]` | Fortnightly — odd ISO weeks only |
+| `[F2]` | Fortnightly — even ISO weeks only |
+| `[M]` | Monthly — first 7 days of month |
+| `[CARRY]` | Carry-over — re-appears daily until checked |
+| *(none)* | Recurring — every week on that day |
+
+**Category order:** ORDER → ADMIN → MAINTENANCE → STAFF → COSTING → MERCHANDISE → PERSONAL
+
+### 🛒 Shopping List
+Standalone launcher tile. Sourced from dedicated Shopping List Notion page (`3683c99c0e8581c7b19cc2eec6b27b47`). Only unchecked items show — self-clears as bought. Per-item quantity as trailing `×N` — tap to adjust. Swipe-left (mobile) or hover-X (desktop) to delete an item.
 
 ### 📅 The Week Ahead
-Roster pulled from Notion. Tap any day to view/add tasks for that date. Task count badge shows items per shift.
+Deputy roster for 7 days — shift times + area. Task count badge per day. Tap day = view/add tasks inline. Add panel supports recurring options (daily/weekly/fortnightly/monthly); recurring tasks deletable from here.
 
-### 🎯 Ongoing Projects
-Projects from Notion with next-action checklists. Click status badge to cycle (In Progress → Blocked → On Hold → Done). 🤖 button opens Claude assistant for any action item.
+### 🎯 Projects (+ Brain Dump)
+Brain Dump capture at top: free-text idea → `/api/braindump-analyze` (Opus) decides new project vs new action on existing → structured draft. Projects from Notion Projects DB. Status cycles In Progress → Blocked → On Hold → Done. Swipe-left archives (→ Notion trash, recoverable 30 days). Claude-logo button on an action = deep-link handoff to full Claude (Cowork on desktop; clipboard on mobile).
 
-### 🧠 Brain Dump
-Free-text idea capture. "Move to Projects" promotes it to Notion with a project name and up to 3 next actions.
+### ☕ Coffee Costings / 🥪 Food Costings
+Live margin view from Notion Costings DB. Sorted worst→best margin. MarginBadge summary (avg %, red/amber/green counts). Add-product button → AddProductModal.
 
-### 💰 Product Costings
-Live margin view pulled from the Notion Product Costings database.
-- Two columns: **Coffee** (left) and **Food** (right), sorted worst → best margin
-- Thumb-scrollable, no scrollbar, fade mask at edges
-- Liquid glass card style matching the rest of the UI
-- Highlight banners: red (<60%), amber (60–70%), green (70%+)
-- **Ingredient price change panel**: saves a localStorage snapshot on each load, shows any margin shifts with pp change and implied cost impact on subsequent loads
+### 📦 Supplier Prices
+Ingredient-level price tracking, grouped into collapsible supplier tiles with search. Cards show ingredient, supplier, price/unit, affected-product count. 7-day delta shown red/green. "Add ingredient from invoice" via `/api/find-ingredient-price`. Data from `SyncIngredientPrices` → Notion JSON block.
+
+### 🐯 Tiger OS Updates
+TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e84269b85765e20096c6be`). Reuses Projects UI patterns for subtask toggle/add. Badge shows open-task count.
 
 ---
 
-## Notion Databases
+## Notion Resources
 
-| Database | ID |
+| Resource | ID |
 |---|---|
-| Product Costings | `8f16358a47e54062b5fe1ce7a7480754` |
-
-### Costings DB schema
-
-| Field | Type | Notes |
-|---|---|---|
-| Name | Title | Product name |
-| Category | Select | Coffee / Food / Retail / Vending |
-| Sell Price | Number | Retail price |
-| Profit % | Number | Synced by Apps Script every 30 min |
-| Cost | Number | Legacy calculated cost (may be null — Profit % is primary) |
-| Last Reviewed | Date | Triggers ⚠️ if >60 days ago |
-| Notes | Text | Free notes |
+| Projects DB | `f7712afe4c7247d7b1690f2e1ecc1a0d` |
+| Costings DB | `8f16358a47e54062b5fe1ce7a7480754` |
+| Tiger OS Backlog DB (Updates widget) | `657d36eb15e84269b85765e20096c6be` |
+| Main OS page (checked-state + ingredient_prices + recipe_map + price_drift_warnings JSON blocks) | `3403c99c0e858113a941c2118b3cdef9` |
+| Shopping List page | `3683c99c0e8581c7b19cc2eec6b27b47` |
+| Monday | `3403c99c0e858139bd34e9f3873dc7ef` |
+| Tuesday | `3403c99c0e858133bb31f63559b18716` |
+| Wednesday | `3403c99c0e85814fab17e09b32693999` |
+| Thursday | `3403c99c0e8581a39fd1e3587887a1e0` |
+| Friday | `3403c99c0e858192bfa7d94c8189fe3c` |
+| Saturday | `3403c99c0e8581b3a01dc82031df8f09` |
+| Sunday | `3403c99c0e8581fa80d7ef629e63aa9c` |
 
 ---
 
@@ -79,87 +107,80 @@ Live margin view pulled from the Notion Product Costings database.
 
 | Route | Method | Description |
 |---|---|---|
-| `/api/dashboard` | GET | Daily tasks (incl. 🛒 Shopping List group), projects, personal todos, weather |
-| `/api/costings` | GET | All products from Notion with margin calculated |
-| `/api/roster` | GET | Week's shifts |
-| `/api/week-tasks` | GET | Tasks per day this week |
-| `/api/checked-state` | GET / POST | Persist checkbox state server-side |
-| `/api/add-task` | POST | Add a task to a specific date |
-| `/api/delete-task` | DELETE | Remove a Notion block |
-| `/api/add-project-action` | POST | Add next action to a project |
-| `/api/project-status` | PATCH | Cycle project status |
-| `/api/braindump` | POST | Promote brain dump to project |
-| `/api/todos` | PATCH | Toggle project/personal todo |
-| `/api/claude-assist` | POST | Proxy to Claude API for in-app assistant |
-| `/api/login` | POST | Password auth |
+| `/api/dashboard` | GET | All data: daily tasks (incl. Shopping List group), projects, weather. Edge-cached. |
+| `/api/week-tasks` | GET | Tasks for next 7 days. Edge-cached. |
+| `/api/roster` | GET | Deputy shifts for 7 days |
+| `/api/costings` | GET | Product costings from Notion |
+| `/api/todos` | PATCH | Toggle project/personal todo checked state |
+| `/api/checked-state` | GET/POST | Read/write daily task checked state (Notion JSON block) |
+| `/api/add-task` | POST | Add task to Notion day page; optional `context` field; Haiku category classify |
+| `/api/task-context` | GET/POST | Read/write per-task context notes (keyed by block ID) |
+| `/api/delete-task` | DELETE | Delete Notion block |
+| `/api/add-shopping` | POST | Add item to Shopping List page (with `×N` qty) |
+| `/api/update-shopping` | PATCH | Rewrite a shopping item's text (adjust qty) |
+| `/api/add-project-action` | POST | Add to_do block to a project |
+| `/api/project-status` | PATCH | Update project status |
+| `/api/archive-project` | POST | Move project page to Notion trash (recoverable 30 days) |
+| `/api/braindump` | POST | Create new project from brain dump |
+| `/api/braindump-analyze` | POST | Opus: classify brain dump as new project vs action on existing |
+| `/api/claude-assist` | POST | Opus chat for project actions |
+| `/api/add-product` | POST | AddProduct Apps Script web app: writes costings sheet + Notion row |
+| `/api/add-ingredient` | POST | Adds custom ingredient via AddProduct web app |
+| `/api/find-ingredient-price` | POST | Proxies invoice-price keyword search to AddProduct web app |
+| `/api/ingredient-prices` | GET | Reads chunked `ingredient_prices` JSON block from OS page |
+| `/api/recipe-map` | GET | Reads `recipe_map` JSON block (ingredient→product attribution) |
+| `/api/price-drift` | GET | Reads `price_drift_warnings` JSON block |
+| `/api/tigeros-tasks` | GET | Fetch Tiger OS backlog tasks + subtasks (Updates widget) |
+| `/api/login` | POST | Password auth → set `gdt_session` cookie |
+
+---
+
+## Environment Variables (Vercel)
+
+| Variable | Used by |
+|---|---|
+| `NOTION_API_KEY` | All Notion API routes |
+| `DEPUTY_ENDPOINT` | `/api/roster` |
+| `DEPUTY_ACCESS_TOKEN` | `/api/roster` |
+| `ANTHROPIC_API_KEY` | `/api/claude-assist`, `/api/braindump-analyze`, `/api/add-task` |
+| `APP_PASSWORD` | Verified by `/api/login` |
+| `SESSION_TOKEN` | Value of `gdt_session` cookie; `middleware.ts` gates the whole app |
+
+---
+
+## Auth
+
+Password → `gdt_session` cookie (30 days, `sameSite: lax` for iOS PWA). `middleware.ts` gates the entire app.
 
 ---
 
 ## Costing Automation (Google Apps Script)
 
-All scripts live in the Apps Script project linked to the Food Costings spreadsheet.  
-Access: [script.google.com/home](https://script.google.com/home) → open the project linked to the Food Costings sheet.
-
-Local copies saved to: `/Users/gdaytiger/Documents/Claude/Projects/TIGER OS/`
-
-### Scripts
-
-| File | Purpose | Trigger |
-|---|---|---|
-| `SaveInvoicesToDrive.gs` | Gmail watcher — sweeps all supplier inboxes hourly, saves PDF attachments to `Supplier Invoices/[Supplier]/[Year]/` in Drive, labels processed emails `invoice-saved` | Hourly via `createSaveToDriveTrigger()` |
-| `ScanSuppliers.gs` | Price scanner — reads Drive PDFs and writes updated ingredient prices to Food + Coffee Costings sheets. Gmail direct for PFD and Trio Supplies | Hourly via `createScanTrigger()` |
-| `SyncCostingsToNotion.gs` | Reads Sell Price + Profit % from both sheets, pushes to Notion Product Costings DB | Every 30 min via `updateSyncTrigger()` |
-| `CoffeeCostingsSetup.gs` | One-time setup — archives old Coffee Notion items, recreates 52 fresh ones from COFFEE COSTINGS sheet | Run manually after major Coffee sheet changes |
-
-### How the pipeline works
+Scripts live in the Apps Script project linked to the Food Costings sheet. Local copies in `gdaytiger-app/apps-script/`.
 
 ```
 Gmail → SaveInvoicesToDrive (hourly) → Drive folders
-                                           ↓
-                                    ScanSuppliers (hourly) → Food/Coffee Costings sheets
-                                                                        ↓
-                                                           SyncCostingsToNotion (30 min) → Notion → TIGER OS dashboard
+                                         ↓
+                                  ScanSuppliers (hourly) → Food/Coffee Costings sheets
+                                                                      ↓
+                                         SyncCostingsToNotion (30 min) → Notion → TIGER OS
+SyncSquarePrices (hourly) → live Square retail prices → Coffee Costings sheet
+BuildRecipeMap (daily) → recipe_map JSON → Notion OS page
+SyncIngredientPrices (30 min) → ingredient_prices JSON → Notion OS page
+TakeawayCupCounter (daily) → Planetware cup reorder at 10,000 cups
 ```
 
-### SaveInvoicesToDrive — supplier coverage
-
-**Regular PDF invoice emails:**
-- Noisette — orders@noisette.com.au / billings@noisette.com.au
-- PFD Foods — ar@pfdfoods.com.au
-- 5Ways Foodservice — prontodocuments@5ways.com.au
-- Sciclunas Wholesale — orders@fresho.com / ar@sciclunas.com.au
-- Dench Bakers — messaging-service@post.xero.com (subject: "Dench Bakers")
-- Redi Milk — hello@redimilk.com.au
-- Seven Seeds Coffee — Xero / Stripe
-- Little Bertha — messaging-service@post.xero.com (subject: "Little Bertha")
-- Candied Bakery — messaging-service@post.xero.com (subject: "Tea and Cake")
-- Product Distribution — noreply@unleashedsoftware.com
-- WF Plastics — sales@wfplastic.com.au
-- Trio Supplies — sales@triosuppliesaustralia.com.au (subject: "Invoice from Trio")
-
-**Self-forwarded (email to yourself with subject keyword):**
-- Mork Chocolate, Matsu Tea, Woolworths
-
-**Ordermentum (email body → PDF, no attachment):**
-- Assembly (teas — no price rules)
-- Uncle's Smallgoods (pastrami price extraction)
-
-### ScanSuppliers — price extraction coverage
-
-**Food sheet (FOOD tab):**
-- 5Ways — Drive TAX INVOICE PDFs (~20 items: meats, cheese, veg, sauces, pantry)
-- Sciclunas — Drive FreshoInvoice PDFs (14 items: vegetables, eggs)
-- Uncle's — Drive Order Confirmation PDFs (pastrami)
-- Woolworths — Drive eReceipt PDFs (parmesan /kg)
-- Dench Bakers — Drive Invoice PDFs (sourdough, ciabatta)
-- Noisette, Product Distribution, Candied Bakery — Drive PDFs
-- PFD Foods — Gmail direct (sales@PFDPortal@pfdfoods.com.au) — chicken, sauerkraut
-- Trio Supplies — Gmail direct (sales@triosuppliesaustralia.com.au) — napkins, trays
-
-**Coffee sheet (COFFEE tab):**
-- Seven Seeds, Mörk, Matsu Tea — Drive PDFs
-- Redi Milk — Drive PDFs (all milks; also cross-writes FOOD R12)
-- 5Ways — Drive TAX INVOICE PDFs (Bundaberg Sugar)
+| File | Purpose |
+|---|---|
+| `SaveInvoicesToDrive.js` | Gmail watcher — saves supplier PDF attachments to Drive, labels `invoice-saved` |
+| `ScanSuppliers.js` | Reads Drive/Gmail PDFs → writes ingredient prices to Food + Coffee sheets |
+| `SyncCostingsToNotion.js` | Pushes Sell Price + Profit % to Notion Costings DB (30 min) |
+| `SyncSquarePrices.js` | Pulls live Square retail prices → Coffee Costings sheet (hourly) |
+| `SyncIngredientPrices.js` | Writes ingredient prices as chunked JSON to Notion OS page (30 min) |
+| `BuildRecipeMap.js` | Parses FOOD sheet formulas → ingredient→product map → `recipe_map` Notion block (daily) |
+| `TakeawayCupCounter.js` | Polls Square Orders daily, tallies Planetware cups. At 10,000, appends reorder to Shopping List. Counter start: 2026-06-01. |
+| `AddProduct.js` / `AddIngredient.js` | Web-app endpoints backing in-app Add Product / Add Ingredient modals |
+| `BackupCostings.js` | Costings sheet backup |
 
 ### Margin thresholds
 - 🔴 Red: below 60%
@@ -168,14 +189,13 @@ Gmail → SaveInvoicesToDrive (hourly) → Drive folders
 
 ---
 
-## Environment Variables (Vercel)
+## Git Branches
 
-| Variable | Used by |
+| Branch | Status |
 |---|---|
-| `NOTION_API_KEY` | All `/api/` routes that talk to Notion |
-| `ANTHROPIC_API_KEY` | `/api/claude-assist` |
-| `APP_PASSWORD` | The password entered at `/login` (verified by `/api/login`) |
-| `SESSION_TOKEN` | Value of the `gdt_session` cookie; `middleware.ts` gates the whole app against it |
+| `main` | **Production** — all current code here |
+| `feature/costings` | Stale — merged into main |
+| `feature/personal-todo` | Stale — do not merge; rebuild fresh off `main` |
 
 ---
 
@@ -186,15 +206,4 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Requires environment variables set in `.env.local`.
-
----
-
-## Git Branches
-
-| Branch | Purpose |
-|---|---|
-| `main` | Production — auto-deploys to Vercel on push |
-| `feature/costings` | Active development branch |
-
-`deploy.sh` merges current branch → main and pushes both.
+Open [http://localhost:3000](http://localhost:3000). Requires `.env.local` with all env vars above.

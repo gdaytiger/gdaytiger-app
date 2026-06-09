@@ -851,7 +851,7 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
         <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
           {hasPriceDelta
             ? `$${ing.oldPrice!.toFixed(2)} → $${ing.currentPrice.toFixed(2)}`
-            : `$${ing.currentPrice.toFixed(2)} / ${ing.unit}`}
+            : `$${ing.currentPrice.toFixed(2)} / ${ing.unit.toUpperCase()}`}
         </span>
       </div>
 
@@ -884,7 +884,7 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
       )}
 
       {!open && ing.affectedProducts.length > 0 && (
-        <p className="text-xs text-right mt-0.5" style={{ color: '#9ca3af' }}>▼ {ing.affectedProducts.length} affected</p>
+        <p className="text-xs text-right mt-0.5" style={{ color: '#9ca3af' }}>▼ {ing.affectedProducts.length} AFFECTED</p>
       )}
     </div>
   );
