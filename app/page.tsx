@@ -1596,11 +1596,12 @@ export default function Home() {
     } catch { return {}; }
   };
 
-  // Shopping items live on the Shopping List Notion page (not date-based).
-  // Checking writes straight to the Notion checkbox so a bought item never returns.
+  // Shopping items use the same date-based checked state as daily tasks.
+  // Checked items sink to the bottom and are cleared at end of day — not permanently
+  // marked in Notion. This keeps the list reusable across days.
   const toggleShopping = (blockId: string, checked: boolean) => {
     setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
-    fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) }).catch(() => {});
+    syncCheckedState(blockId, todayStr, checked);
   };
 
   const deleteShopping = (blockId: string) => {
