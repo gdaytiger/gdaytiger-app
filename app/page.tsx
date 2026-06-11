@@ -644,7 +644,47 @@ type DriftWarning = {
   ingredientKey: string | null;
   neverSeen: boolean;
 };
-type PriceDriftData = { type: string; updated: string | null; warnings: DriftWarning[] };
+type PackChange = {
+  cell: string;
+  label: string;
+  oldPack: number;
+  newPack: number;
+  cartonPrice: number;
+  oldUnitCost: number | null;
+  newUnitCost: number;
+  unitCostPct: number | null;
+  date: string;
+};
+type UnmappedSku = { sig: string; supplier: string; description: string; price: number; date: string };
+type PriceDriftData = {
+  type: string;
+  updated: string | null;
+  warnings: DriftWarning[];
+  packChanges?: PackChange[];
+  unmappedSkus?: UnmappedSku[];
+};
+
+type MarginReviewItem = {
+  name: string;
+  category: string;
+  margin: number;
+  sell: number;
+  weeklyQty: number;
+  weeklyGross: number;
+  shortfall: number;
+  severity: 'red' | 'amber';
+};
+type MarginReviewData = {
+  type: string;
+  updated: string | null;
+  weekStart?: string;
+  weekEnd?: string;
+  targetMargin?: number;
+  items: MarginReviewItem[];
+  totalShortfall?: number;
+  greenCount?: number;
+  unmatched?: { name: string; weeklyQty: number; weeklyGross: number }[];
+};
 
 type RecipeMapProduct = {
   id?: string;
@@ -804,6 +844,106 @@ function DriftChip({ drift }: { drift: DriftWarning }) {
     >
       ⚠ {label}
     </span>
+  );
+}
+
+// ── Pack-size change banner (Supplier Prices card) ───────────────────────────
+// Rendered when the invoice scanner detects a supplier changed units-per-carton.
+// The headline case: carton price drops but pack shrinks more — unit cost rises
+// while the invoice looks cheaper. Cleared via clearPackChange() in Apps Script
+// or auto-expires after 30 days.
+function PackChangeBanner({ packChanges, unmappedSkus }: { packChanges: PackChange[]; unmappedSkus: UnmappedSku[] }) {
+  if (packChanges.length === 0 && unmappedSkus.length === 0) return null;
+  return (
+    <div className="mb-2 space-y-2 shrink-0">
+      {packChanges.map(pc => {
+        const up = (pc.unitCostPct ?? 0) > 0;
+        return (
+          <div key={pc.cell + pc.date} className="rounded-2xl px-3 py-2.5"
+            style={{ background: 'rgba(254,202,202,0.55)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#7f1d1d', fontFamily: '"stolzl", sans-serif' }}>
+                ⚠ Pack size changed
+              </span>
+              {pc.unitCostPct !== null && (
+                <span className="text-xs font-black ml-auto shrink-0" style={{ color: up ? '#dc2626' : '#16a34a', fontVariantNumeric: 'tabular-nums' }}>
+                  unit cost {up ? '+' : ''}{pc.unitCostPct.toFixed(1)}%
+                </span>
+              )}
+            </div>
+            <p className="text-xs leading-snug" style={{ color: '#7f1d1d' }}>
+              {pc.label}: /{pc.oldPack} → /{pc.newPack} per carton (${pc.cartonPrice.toFixed(2)}).
+              {pc.oldUnitCost !== null && (
+                <> True unit cost ${pc.oldUnitCost.toFixed(3)} → ${pc.newUnitCost.toFixed(3)}.</>
+              )}
+              {' '}Sheet price normalised to per-1000 — recipes stay correct.
+            </p>
+          </div>
+        );
+      })}
+      {unmappedSkus.map(sku => (
+        <div key={sku.sig} className="rounded-2xl px-3 py-2 flex items-center gap-2"
+          style={{ background: 'rgba(254,215,170,0.5)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0" style={{ background: '#fed7aa', color: '#7c2d12' }}>
+            new sku
+          </span>
+          <span className="text-xs flex-1 min-w-0 truncate" style={{ color: '#7c2d12' }} title={`${sku.supplier}: ${sku.description} — $${sku.price} (not mapped to any ingredient cell)`}>
+            {sku.supplier}: {sku.description}
+          </span>
+          <span className="text-xs font-bold shrink-0" style={{ color: '#7c2d12', fontVariantNumeric: 'tabular-nums' }}>${sku.price.toFixed(2)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Weekly margin review (top of Coffee + Food Costings cards) ───────────────
+// Written by MarginReview.gs every Monday 6am: 7 days of Square sales joined
+// against Notion costings, ranked by weekly $ shortfall vs the 70% target —
+// so the biggest money leak sits at the top, not the worst percentage.
+function MarginReviewSection({ review, category }: { review: MarginReviewData | null; category: 'Coffee' | 'Food' }) {
+  const items = (review?.items ?? []).filter(i =>
+    category === 'Coffee' ? i.category === 'Coffee' : i.category !== 'Coffee');
+  if (!review || items.length === 0) return null;
+  const total = items.reduce((s, i) => s + i.shortfall, 0);
+
+  return (
+    <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0"
+      style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span style={LABEL_STYLE}>Weekly margin review</span>
+        <span className="text-[10px] text-gray-400 uppercase" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {review.weekStart?.slice(5)} – {review.weekEnd?.slice(5)}
+        </span>
+        <span className="text-xs font-bold px-1.5 py-0.5 rounded-full ml-auto shrink-0 uppercase" style={{ background: '#fecaca', color: '#7f1d1d', fontVariantNumeric: 'tabular-nums' }}>
+          ~${Math.round(total)}/wk at risk
+        </span>
+      </div>
+      {items.map((item, idx) => {
+        const s = item.severity === 'red' ? { bg: '#fecaca', fg: '#7f1d1d' } : { bg: '#fed7aa', fg: '#7c2d12' };
+        return (
+          <div key={item.name} className="flex items-center gap-2 py-1" style={{ borderTop: idx > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
+            <span className="text-sm flex-1 min-w-0 truncate text-gray-800 uppercase" style={{ fontFamily: '"stolzl", sans-serif' }}>
+              {item.name}
+            </span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: s.bg, color: s.fg, fontVariantNumeric: 'tabular-nums' }}>
+              {item.margin.toFixed(0)}%
+            </span>
+            <span className="text-xs text-gray-400 shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {item.weeklyQty}/wk
+            </span>
+            <span className="text-xs font-black shrink-0" style={{ color: '#dc2626', fontVariantNumeric: 'tabular-nums', minWidth: '52px', textAlign: 'right' }}>
+              −${Math.round(item.shortfall)}/wk
+            </span>
+          </div>
+        );
+      })}
+      {(review.greenCount ?? 0) > 0 && (
+        <p className="text-[10px] text-gray-400 uppercase mt-1.5">
+          ✓ {review.greenCount} other selling recipes at or above {review.targetMargin ?? 70}%
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -1066,7 +1206,7 @@ function MarginBadges({ items }: { items: CostingProduct[] }) {
   );
 }
 
-function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { coffee: boolean; food: boolean; supplier: boolean }; onCollapse: (key: 'coffee' | 'food' | 'supplier') => void }) {
+function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { coffee: boolean; food: boolean; supplier: boolean }; onCollapse: (key: 'coffee' | 'food' | 'supplier') => void }) {
   const withMargin  = costings.filter(p => p.margin !== null);
   const coffeeItems = [...withMargin].filter(p => p.category === 'Coffee').sort((a, b) => a.margin! - b.margin!);
   const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee').sort((a, b) => a.margin! - b.margin!);
@@ -1272,6 +1412,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
       {/* ── Coffee Costings — always in DOM ── */}
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
+          <MarginReviewSection review={marginReview} category="Coffee" />
           <MarginBadges items={coffeeItems} />
           <ProductColumn items={coffeeItems} height={450} />
         </Card>
@@ -1280,6 +1421,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
       {/* ── Food Costings — always in DOM ── */}
       <div style={{ display: open.food ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
+          <MarginReviewSection review={marginReview} category="Food" />
           <MarginBadges items={foodItems} />
           <ProductColumn items={foodItems} height={450} />
         </Card>
@@ -1312,6 +1454,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, recipeMap, onIng
             title="Add an ingredient from a recent invoice"
           >+ ADD</button>
         }>
+          <PackChangeBanner packChanges={priceDrift?.packChanges ?? []} unmappedSkus={priceDrift?.unmappedSkus ?? []} />
           {firstLoad ? (
             <p className="text-xs text-gray-400 italic">Baseline saved — ingredient changes appear from tomorrow.</p>
           ) : ingredientChanges.length === 0 ? (
@@ -1562,6 +1705,7 @@ export default function Home() {
   const [ingredientPrices, setIngredientPrices] = useState<IngredientPricesData | null>(null);
   const [recipeMap, setRecipeMap] = useState<RecipeMapData | null>(null);
   const [priceDrift, setPriceDrift] = useState<PriceDriftData | null>(null);
+  const [marginReview, setMarginReview] = useState<MarginReviewData | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   // Recurring task IDs moved away from today — suppressed in UI until next refresh/session.
   const [movedRecurringIds, setMovedRecurringIds] = useState<Set<string>>(new Set());
@@ -1685,6 +1829,7 @@ export default function Home() {
     fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
     fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
     fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
+    fetch('/api/margin-review').then(r => r.json()).then(d => setMarginReview(d)).catch(() => {});
     fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
     fetch('/api/tigeros-tasks').then(r => r.json()).then(d => setTigerTasks(d.tasks || [])).catch(() => {});
     fetchTaskContext().catch(() => {});
@@ -2322,7 +2467,7 @@ export default function Home() {
         </div>
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (each renders only when its tile is open) */}
-        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} recipeMap={recipeMap}
+        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} marginReview={marginReview} recipeMap={recipeMap}
           open={{ coffee: openWidgets.has('coffee'), food: openWidgets.has('food'), supplier: openWidgets.has('supplier') }}
           onCollapse={(k) => toggleWidget(k)}
           onIngredientsChanged={() => fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {})} />

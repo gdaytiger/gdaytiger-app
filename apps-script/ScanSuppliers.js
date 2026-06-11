@@ -95,9 +95,12 @@ const COFFEE_CELL_META = {
   D8:  { min: 28,  max: 45,  refreshDays: 21, label: 'Alt.Dairy.Co Oat /carton' },
   D9:  { min: 28,  max: 45,  refreshDays: 21, label: 'Alt.Dairy.Co Almond /carton' },
   F5:  { min: 25,  max: 50,  refreshDays: 30, label: 'Bundaberg Raw Sugar /15KG' },
-  H5:  { min: 60,  max: 120, refreshDays: 90, label: 'Cup 6oz /1000' },
-  H6:  { min: 70,  max: 140, refreshDays: 90, label: 'Cup 12oz /1000' },
-  H7:  { min: 50,  max: 100, refreshDays: 90, label: 'Hot Lid /1000' },
+  // pack — expected units per carton. Sheet prices are stored per this pack
+  //        size; the Planetware parser normalises any other pack back to it
+  //        and flags the change (see trackPackChange_).
+  H5:  { min: 60,  max: 120, refreshDays: 90, label: 'Cup 6oz /1000',  pack: 1000 },
+  H6:  { min: 70,  max: 140, refreshDays: 90, label: 'Cup 12oz /1000', pack: 1000 },
+  H7:  { min: 50,  max: 100, refreshDays: 90, label: 'Hot Lid /1000',  pack: 1000 },
   H9:  { min: 40,  max: 80,  refreshDays: 60, label: 'Sipper Lid /1000' },
   H10: { min: 80,  max: 150, refreshDays: 60, label: 'Paper Straw /2500' },
 };
@@ -316,7 +319,10 @@ function scanFoodSuppliers(cutoffOverride) {
       items.forEach(item => {
         const map = SCICLUNAS_MAP.find(m => matchesAny(item.description, m.match));
         if (map) { if (updateIfChanged(sheet, map.cell, map.convert(item.unitPrice, item.unit), map.note, log)) updates++; }
-        else { log.push(`  NO MAP: ${item.description} ${item.unit} $${item.unitPrice}`); }
+        else {
+          log.push(`  NO MAP: ${item.description} ${item.unit} $${item.unitPrice}`);
+          recordUnmappedSku_('Sciclunas', item.description, item.unitPrice);
+        }
       });
     });
   } catch(e) { log.push('ERROR (Sciclunas): ' + e.message); }
@@ -535,13 +541,20 @@ function scanCoffeeSuppliers(cutoffOverride) {
     log.push(`${files.length} invoice(s)`);
     files.forEach(f => {
       const text   = extractPdfText(f.getId()); if (!text) return;
-      const prices = parsePlanetwareText(text);
-      Object.keys(prices).forEach(cell => {
+      const parsed = parsePlanetwareText(text);
+      Object.keys(parsed).forEach(cell => {
         const label = cell === 'H5' ? 'Planetware Cup 6oz /1000'
                     : cell === 'H6' ? 'Planetware Cup 12oz Slim /1000'
                     : cell === 'H7' ? 'Planetware Lid 8oz CPLA /1000'
                     : 'Planetware';
-        if (validateAndUpdate(coffeeSheet, cell, prices[cell], label, log, COFFEE_CELL_META)) updates++;
+        const { price, pack } = parsed[cell];
+        const expectedPack = (COFFEE_CELL_META[cell] && COFFEE_CELL_META[cell].pack) || 1000;
+        // Sheet convention is price-per-expectedPack. Normalise so recipe
+        // formulas (which divide by 1000) stay correct even if the carton
+        // size changes — then flag the change for the TIGEROS dashboard.
+        const normalised = (pack === expectedPack) ? price : r2(price / pack * expectedPack);
+        trackPackChange_(coffeeSheet, cell, pack, price, normalised, label, log);
+        if (validateAndUpdate(coffeeSheet, cell, normalised, label, log, COFFEE_CELL_META)) updates++;
       });
     });
   } catch(e) { log.push('ERROR (Planetware): ' + e.message); }
@@ -659,8 +672,10 @@ function scanAbicorFromGmail_(log) {
     if (item.unitPrice <= 0.50) return;
     const inFoodMap   = ABICOR_MAP.some(map => matchesAny(item.description, map.match));
     const inCoffeeMap = ABICOR_COFFEE_MAP.some(map => matchesAny(item.description, map.match));
-    if (!inFoodMap && !inCoffeeMap)
+    if (!inFoodMap && !inCoffeeMap) {
       log.push(`  NO MAP: ${item.description.substring(0, 80)} | $${item.unitPrice}`);
+      recordUnmappedSku_('Trio Supplies', item.description, item.unitPrice);
+    }
   });
 
   return updates;
@@ -935,7 +950,13 @@ function parseMatsuText(text) {
 function parsePlanetwareText(text) {
   // Invoice format (single-line OCR collapse):
   //   QTY  ITEMCODE  DESCRIPTION  / 1000  UNITPRICE  LINETOTAL  GSTAMOUNT
-  // We anchor on the item code, then capture the first decimal after "/ 1000".
+  // We anchor on the item code, then capture the pack divisor AND the price.
+  //
+  // v2 (Jun 2026): the old regex hardcoded "/ 1000" — if Planetware ever
+  // changed carton size (e.g. /800), the parser silently stopped matching and
+  // the price went stale with no warning. Now we capture ANY "/ N" pack size,
+  // return { price, pack } per cell, and let the caller normalise back to the
+  // sheet's per-1000 convention + flag the pack change.
   const results = {};
   const items = [
     { code: 'PW6WPC-GDT',   cell: 'H5', alt: '6OZ COMPOSTABLE' },
@@ -948,8 +969,8 @@ function parsePlanetwareText(text) {
     if (idx === -1) idx = upper.indexOf(item.alt);
     if (idx === -1) continue;
     const window = text.substring(idx, idx + 300);
-    const m = window.match(/\/\s*1000\s+(\d+\.\d{2})/);
-    if (m) results[item.cell] = parseFloat(m[1]);
+    const m = window.match(/\/\s*(\d{2,5})\s+(\d+\.\d{2})/);
+    if (m) results[item.cell] = { price: parseFloat(m[2]), pack: parseInt(m[1], 10) };
   }
   return results;
 }
@@ -1067,6 +1088,115 @@ function markCellSeen_(cell) {
   PropertiesService.getScriptProperties().setProperty(`lastSeen.${cell}`, Date.now().toString());
 }
 
+// ─── PACK-SIZE CHANGE TRACKING ────────────────────────────────────────────────
+// Suppliers sometimes shrink the carton while holding (or even lowering) the
+// carton price — the invoice looks cheaper but the per-unit cost rises.
+// trackPackChange_ compares the pack size on this invoice against the last
+// one seen (Script Property `packSize.<cell>`), and on a change records a
+// structured warning (`packChange.<cell>`) that syncDriftToNotion() ships to
+// the TIGEROS dashboard. Warnings expire after PACK_CHANGE_TTL_DAYS or can be
+// cleared manually with clearPackChange('H6').
+
+const PACK_CHANGE_TTL_DAYS = 30;
+
+function trackPackChange_(sheet, cell, pack, cartonPrice, normalisedPrice, label, log) {
+  if (!pack || pack <= 0) return;
+  const props   = PropertiesService.getScriptProperties();
+  const prevStr = props.getProperty(`packSize.${cell}`);
+  const prev    = prevStr ? parseInt(prevStr, 10) : null;
+
+  if (prev !== null && prev !== pack) {
+    // Per-unit cost before/after. The sheet currently holds the normalised
+    // per-expectedPack price from the PREVIOUS invoice — read it before
+    // validateAndUpdate overwrites it.
+    const expectedPack = (COFFEE_CELL_META[cell] && COFFEE_CELL_META[cell].pack) || 1000;
+    const prevSheet    = parseFloat(sheet.getRange(cell).getValue()) || 0;
+    const oldUnit      = prevSheet > 0 ? prevSheet / expectedPack : null;
+    const newUnit      = normalisedPrice / expectedPack;
+    const pctChange    = oldUnit ? r2((newUnit - oldUnit) / oldUnit * 100) : null;
+
+    const warning = {
+      cell: cell,
+      label: label,
+      oldPack: prev,
+      newPack: pack,
+      cartonPrice: cartonPrice,
+      oldUnitCost: oldUnit !== null ? r2(oldUnit * 100) / 100 : null,  // $ per unit
+      newUnitCost: r2(newUnit * 100) / 100,
+      unitCostPct: pctChange,
+      date: new Date().toISOString(),
+    };
+    props.setProperty(`packChange.${cell}`, JSON.stringify(warning));
+    if (log) log.push(`  ⚠ PACK CHANGE ${cell} [${label}]: /${prev} → /${pack}` +
+                      (pctChange !== null ? ` (unit cost ${pctChange > 0 ? '+' : ''}${pctChange}%)` : ''));
+    // Don't wait for Monday's weekly drift sync — push this to the dashboard now.
+    try { syncDriftToNotion(); } catch (e) { if (log) log.push('  WARN: immediate drift sync failed: ' + e.message); }
+  }
+  props.setProperty(`packSize.${cell}`, String(pack));
+}
+
+// Collect non-expired pack-change warnings for the drift payload.
+function collectPackChanges_() {
+  const props  = PropertiesService.getScriptProperties();
+  const all    = props.getProperties();
+  const cutoff = Date.now() - PACK_CHANGE_TTL_DAYS * 86400000;
+  const out    = [];
+  for (const key in all) {
+    if (key.indexOf('packChange.') !== 0) continue;
+    try {
+      const w = JSON.parse(all[key]);
+      if (new Date(w.date).getTime() >= cutoff) out.push(w);
+      else props.deleteProperty(key);  // expired — clean up
+    } catch (e) { props.deleteProperty(key); }
+  }
+  out.sort(function(a, b) { return b.date.localeCompare(a.date); });
+  return out;
+}
+
+// Manual: clear a pack-change warning once actioned, e.g. clearPackChange('H6').
+function clearPackChange(cell) {
+  PropertiesService.getScriptProperties().deleteProperty(`packChange.${cell}`);
+  Logger.log('Cleared pack-change warning for ' + cell);
+}
+
+// ─── UNMAPPED SKU TRACKING ────────────────────────────────────────────────────
+// Parsers already log "NO MAP" lines, but those logs are only visible in the
+// Apps Script editor. recordUnmappedSku_ persists recent unmapped invoice
+// lines (deduped, capped) so the dashboard can surface "new SKU on an invoice
+// that isn't wired to any ingredient cell".
+
+const UNMAPPED_SKU_TTL_DAYS = 14;
+const UNMAPPED_SKU_CAP      = 20;
+
+function recordUnmappedSku_(supplier, description, price) {
+  if (!description || description.length < 4) return;
+  try {
+    const props = PropertiesService.getScriptProperties();
+    let list = [];
+    try { list = JSON.parse(props.getProperty('unmappedSkus') || '[]'); } catch (e) {}
+    const cutoff = Date.now() - UNMAPPED_SKU_TTL_DAYS * 86400000;
+    list = list.filter(function(s) { return new Date(s.date).getTime() >= cutoff; });
+
+    const sig = (supplier + '|' + description.substring(0, 40)).toUpperCase();
+    const existing = list.find(function(s) { return s.sig === sig; });
+    if (existing) { existing.date = new Date().toISOString(); existing.price = price; }
+    else {
+      list.push({ sig: sig, supplier: supplier, description: description.substring(0, 80),
+                  price: price, date: new Date().toISOString() });
+    }
+    list.sort(function(a, b) { return b.date.localeCompare(a.date); });
+    props.setProperty('unmappedSkus', JSON.stringify(list.slice(0, UNMAPPED_SKU_CAP)));
+  } catch (e) { /* never let bookkeeping break a scan */ }
+}
+
+function collectUnmappedSkus_() {
+  try {
+    const list   = JSON.parse(PropertiesService.getScriptProperties().getProperty('unmappedSkus') || '[]');
+    const cutoff = Date.now() - UNMAPPED_SKU_TTL_DAYS * 86400000;
+    return list.filter(function(s) { return new Date(s.date).getTime() >= cutoff; });
+  } catch (e) { return []; }
+}
+
 // Maps tracked sheet cells to ingredient keys used by SyncIngredientPrices.gs.
 // Used by the TIGEROS Supplier Prices widget to render drift badges on the
 // matching ingredient card. Cells with no obvious match are null — they still
@@ -1173,14 +1303,19 @@ function checkPriceDrift() {
 //   SIP_NOTION_API_KEY, SIP_NOTION_PAGE_ID  (defined in SyncIngredientPrices.gs)
 
 function syncDriftToNotion() {
-  const warnings = checkPriceDrift();
+  const warnings    = checkPriceDrift();
+  const packChanges = collectPackChanges_();
+  const unmapped    = collectUnmappedSkus_();
   const payload = {
     type: 'price_drift_warnings',
     updated: new Date().toISOString(),
     warnings: warnings,
+    packChanges: packChanges,
+    unmappedSkus: unmapped,
   };
   driftWriteToNotion_(payload);
-  Logger.log('Drift warnings synced to Notion: ' + warnings.length + ' warning(s).');
+  Logger.log('Drift sync → Notion: ' + warnings.length + ' drift, ' +
+             packChanges.length + ' pack change(s), ' + unmapped.length + ' unmapped SKU(s).');
 }
 
 function driftWriteToNotion_(payload) {
