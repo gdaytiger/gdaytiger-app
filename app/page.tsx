@@ -720,15 +720,6 @@ type MarginChange = {
   via?: string; // set when the ingredient reaches the product through a made-in-house mix
 };
 
-const LABEL_STYLE: React.CSSProperties = {
-  fontFamily: '"stolzl", sans-serif',
-  fontSize: '10px',
-  fontWeight: 700,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
-  color: '#aaa',
-};
-
 const FADE_MASK = 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)';
 
 function productMatchesIngredient(productName: string, ingredientKey: string): boolean {
@@ -893,56 +884,6 @@ function PackChangeBanner({ packChanges, unmappedSkus }: { packChanges: PackChan
           <span className="text-xs font-bold shrink-0" style={{ color: '#7c2d12', fontVariantNumeric: 'tabular-nums' }}>${sku.price.toFixed(2)}</span>
         </div>
       ))}
-    </div>
-  );
-}
-
-// ── Weekly margin review (top of Coffee + Food Costings cards) ───────────────
-// Written by MarginReview.gs every Monday 6am: 7 days of Square sales joined
-// against Notion costings, ranked by weekly $ shortfall vs the 70% target —
-// so the biggest money leak sits at the top, not the worst percentage.
-function MarginReviewSection({ review, category }: { review: MarginReviewData | null; category: 'Coffee' | 'Food' }) {
-  const items = (review?.items ?? []).filter(i =>
-    category === 'Coffee' ? i.category === 'Coffee' : i.category !== 'Coffee');
-  if (!review || items.length === 0) return null;
-  const total = items.reduce((s, i) => s + i.shortfall, 0);
-
-  return (
-    <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0"
-      style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
-      <div className="flex items-center gap-2 mb-1.5">
-        <span style={LABEL_STYLE}>Weekly margin review</span>
-        <span className="text-[10px] text-gray-400 uppercase" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {review.weekStart?.slice(5)} – {review.weekEnd?.slice(5)}
-        </span>
-        <span className="text-xs font-bold px-1.5 py-0.5 rounded-full ml-auto shrink-0 uppercase" style={{ background: '#fecaca', color: '#7f1d1d', fontVariantNumeric: 'tabular-nums' }}>
-          ~${Math.round(total)}/wk at risk
-        </span>
-      </div>
-      {items.map((item, idx) => {
-        const s = item.severity === 'red' ? { bg: '#fecaca', fg: '#7f1d1d' } : { bg: '#fed7aa', fg: '#7c2d12' };
-        return (
-          <div key={item.name} className="flex items-center gap-2 py-1" style={{ borderTop: idx > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
-            <span className="text-sm flex-1 min-w-0 truncate text-gray-800 uppercase" style={{ fontFamily: '"stolzl", sans-serif' }}>
-              {item.name}
-            </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: s.bg, color: s.fg, fontVariantNumeric: 'tabular-nums' }}>
-              {item.margin.toFixed(0)}%
-            </span>
-            <span className="text-xs text-gray-400 shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {item.weeklyQty}/wk
-            </span>
-            <span className="text-xs font-black shrink-0" style={{ color: '#dc2626', fontVariantNumeric: 'tabular-nums', minWidth: '52px', textAlign: 'right' }}>
-              −${Math.round(item.shortfall)}/wk
-            </span>
-          </div>
-        );
-      })}
-      {(review.greenCount ?? 0) > 0 && (
-        <p className="text-[10px] text-gray-400 uppercase mt-1.5">
-          ✓ {review.greenCount} other selling recipes at or above {review.targetMargin ?? 70}%
-        </p>
-      )}
     </div>
   );
 }
@@ -1133,7 +1074,7 @@ function supplierIcon(name: string): string {
   return hit ? hit.icon : '📦';
 }
 
-function ProductItem({ p }: { p: CostingProduct }) {
+function ProductItem({ p, review }: { p: CostingProduct; review?: MarginReviewItem }) {
   const mc = p.margin! >= 70 ? '#16a34a' : p.margin! >= 60 ? '#d97706' : '#dc2626';
   const bar = Math.min(100, Math.max(0, p.margin!));
   return (
@@ -1160,12 +1101,23 @@ function ProductItem({ p }: { p: CostingProduct }) {
         <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.07)' }}>
           <div className="h-full rounded-full" style={{ width: `${bar}%`, background: mc, transition: 'width 0.6s ease' }} />
         </div>
+        {review && (
+          <span className="text-xs text-gray-400 shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}
+            title={`Sold ${review.weeklyQty} in the last 7 days — earning ~$${Math.round(review.shortfall)}/wk less than at the 70% target margin`}>
+            {review.weeklyQty}/wk
+          </span>
+        )}
+        {review && (
+          <span className="text-xs font-black shrink-0" style={{ color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>
+            −${Math.round(review.shortfall)}/wk
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function ProductColumn({ items, height = 272 }: { items: CostingProduct[]; height?: number }) {
+function ProductColumn({ items, height = 272, reviews }: { items: CostingProduct[]; height?: number; reviews?: Map<string, MarginReviewItem> }) {
   return (
     <div className="flex-1 min-w-0">
       {items.length === 0 ? (
@@ -1174,7 +1126,7 @@ function ProductColumn({ items, height = 272 }: { items: CostingProduct[]; heigh
         <div className="relative" style={{ height: `${height}px` }}>
           <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
           <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
-            {items.map(p => <ProductItem key={p.id} p={p} />)}
+            {items.map(p => <ProductItem key={p.id} p={p} review={reviews?.get(p.name.toUpperCase().trim())} />)}
           </div>
         </div>
       )}
@@ -1182,7 +1134,7 @@ function ProductColumn({ items, height = 272 }: { items: CostingProduct[]; heigh
   );
 }
 
-function MarginBadges({ items }: { items: CostingProduct[] }) {
+function MarginBadges({ items, atRisk, week }: { items: CostingProduct[]; atRisk?: number; week?: string }) {
   const avg    = items.length > 0 ? items.reduce((s, p) => s + p.margin!, 0) / items.length : null;
   const red    = items.filter(p => p.margin! < 60).length;
   const yellow = items.filter(p => p.margin! >= 60 && p.margin! < 70).length;
@@ -1201,6 +1153,13 @@ function MarginBadges({ items }: { items: CostingProduct[] }) {
           <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.8 }}>{label}</span>
         </span>
       ))}
+      {atRisk !== undefined && atRisk > 0 && (
+        <span className="text-xs font-bold px-2 py-0.5 rounded-lg uppercase"
+          style={{ background: 'rgba(220,38,38,0.10)', border: '1px solid rgba(220,38,38,0.25)', color: '#991b1b', fontVariantNumeric: 'tabular-nums' }}
+          title={`Weekly profit below the 70% target margin across flagged items${week ? ` — sales week ${week}` : ''}`}>
+          ~${Math.round(atRisk)}/wk at risk
+        </span>
+      )}
       <span className="text-xs text-gray-400 ml-auto uppercase">{items.length} products</span>
     </div>
   );
@@ -1210,6 +1169,15 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, re
   const withMargin  = costings.filter(p => p.margin !== null);
   const coffeeItems = [...withMargin].filter(p => p.category === 'Coffee').sort((a, b) => a.margin! - b.margin!);
   const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee').sort((a, b) => a.margin! - b.margin!);
+
+  // Margin review lookup (Notion names match costing names — both come from
+  // the same DB). Rendered inline on each product tile as qty/wk + −$/wk.
+  const reviewItems  = marginReview?.items ?? [];
+  const reviewMap    = new Map<string, MarginReviewItem>(reviewItems.map(i => [i.name.toUpperCase().trim(), i]));
+  const coffeeAtRisk = reviewItems.filter(i => i.category === 'Coffee').reduce((s, i) => s + i.shortfall, 0);
+  const foodAtRisk   = reviewItems.filter(i => i.category !== 'Coffee').reduce((s, i) => s + i.shortfall, 0);
+  const reviewWeek   = marginReview?.weekStart && marginReview?.weekEnd
+    ? `${marginReview.weekStart.slice(5)} – ${marginReview.weekEnd.slice(5)}` : undefined;
 
   const [firstLoad, setFirstLoad] = useState(false);
   const [ingredientChanges, setIngredientChanges] = useState<IngredientChange[]>([]);
@@ -1412,18 +1380,16 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, re
       {/* ── Coffee Costings — always in DOM ── */}
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
-          <MarginReviewSection review={marginReview} category="Coffee" />
-          <MarginBadges items={coffeeItems} />
-          <ProductColumn items={coffeeItems} height={450} />
+          <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} week={reviewWeek} />
+          <ProductColumn items={coffeeItems} height={450} reviews={reviewMap} />
         </Card>
       </div>
 
       {/* ── Food Costings — always in DOM ── */}
       <div style={{ display: open.food ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
-          <MarginReviewSection review={marginReview} category="Food" />
-          <MarginBadges items={foodItems} />
-          <ProductColumn items={foodItems} height={450} />
+          <MarginBadges items={foodItems} atRisk={foodAtRisk} week={reviewWeek} />
+          <ProductColumn items={foodItems} height={450} reviews={reviewMap} />
         </Card>
       </div>
 
