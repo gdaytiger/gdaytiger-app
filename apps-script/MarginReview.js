@@ -48,7 +48,16 @@ var MR_MAX_UNMATCHED = 12;    // top Square sellers with no costing match
 // attribution. DECAF is recognised but unmapped on purpose — decaf sales
 // surface in `unmatched` until a decaf costing exists.
 var MR_RECOGNISED_MODS = ['SOY', 'OAT', 'ALMOND', 'CHOCOLATE', 'CHAI', 'DECAF',
-                          'TIGER STYLE', 'ADD CHEESE'];
+                          'MOCHA', 'MATCHA', 'TIGER STYLE', 'ADD CHEESE'];
+
+// Alternate modifier names observed in real orders (printAllModifiers, Jun
+// 2026): registers use both "Soy" and "Soy Milk" etc. Canonicalise before
+// matching.
+var MR_MOD_ALIASES = {
+  'SOY MILK':    'SOY',
+  'OAT MILK':    'OAT',
+  'ALMOND MILK': 'ALMOND',
+};
 
 // Recipe-name → Notion-costing-name aliases, for recipes whose sheet section
 // name differs from the Notion product name. Checked before fuzzy resolution.
@@ -81,6 +90,25 @@ var MR_EXTRA_MAP = (function () {
   // Dine-in black coffee.
   entries.push({ squareItem: 'Long Black', modifiers: [],
     recipes: ['DINE IN BLACK COFFEE', 'TAKEAWAY BLACK COFFEE'] });
+
+  // Mocha + matcha — ring as modifiers on the white-coffee items (76/wk and
+  // 86/wk observed). If no matching costing exists yet they surface in
+  // `unmatched` rather than blending into plain white coffee.
+  [
+    { mod: 'Mocha',  base: 'MOCHA' },
+    { mod: 'Matcha', base: 'MATCHA LATTE' },
+  ].forEach(function (v) {
+    entries.push({ squareItem: 'TA White', modifiers: [v.mod],
+      recipes: ['TAKEAWAY ' + v.base, 'TAKEAWAY ' + v.base + ' (SMALL)', 'DINE IN ' + v.base] });
+    entries.push({ squareItem: 'LG White', modifiers: [v.mod],
+      recipes: ['TAKEAWAY ' + v.base + ' (LARGE)', 'DINE IN ' + v.base + ' (LARGE)'] });
+    ['Flat White', 'Latte', 'Cappuccino'].forEach(function (item) {
+      entries.push({ squareItem: item, modifiers: [v.mod],
+        recipes: ['DINE IN ' + v.base, 'DINE IN ' + v.base + ' (SMALL)', 'TAKEAWAY ' + v.base] });
+      entries.push({ squareItem: item, modifiers: [v.mod], variation: 'Large',
+        recipes: ['DINE IN ' + v.base + ' (LARGE)', 'TAKEAWAY ' + v.base + ' (LARGE)'] });
+    });
+  });
 
   // Takeaway iced lattes — same structure as the DINE IN item in
   // COFFEE_SQUARE_MAP: Small is the default variation, Large is named.
@@ -156,6 +184,36 @@ function printAllBuckets() {
     Logger.log('%s | qty %s | $%s', b.display, b.qty, (b.gross / 100).toFixed(2));
   });
   Logger.log('— %s buckets total —', list.length);
+}
+
+// Diagnostic: every distinct line-item modifier name in the last 7 days,
+// with quantities. Use to keep MR_RECOGNISED_MODS / MR_MOD_ALIASES honest.
+function printAllModifiers() {
+  var token = PropertiesService.getScriptProperties().getProperty('SQUARE_ACCESS_TOKEN');
+  var locationId = PropertiesService.getScriptProperties().getProperty(PK_LOCATION_ID) || cacheSquareLocation_();
+  var end = new Date(); var start = new Date(end.getTime() - 7 * 86400000);
+  var counts = {};
+  var cursor = null; var safety = 0;
+  do {
+    var body = { location_ids: [locationId], query: { filter: { date_time_filter: { created_at: { start_at: start.toISOString(), end_at: end.toISOString() } }, state_filter: { states: ['COMPLETED'] } } }, limit: 500 };
+    if (cursor) body.cursor = cursor;
+    var resp = UrlFetchApp.fetch('https://connect.squareup.com/v2/orders/search', { method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + token, 'Square-Version': '2024-06-04' }, payload: JSON.stringify(body), muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) break;
+    var json = JSON.parse(resp.getContentText());
+    (json.orders || []).forEach(function (o) {
+      (o.line_items || []).forEach(function (li) {
+        (li.modifiers || []).forEach(function (mod) {
+          var n = (mod.name || '').trim();
+          if (n) counts[n] = (counts[n] || 0) + (parseInt(li.quantity || '1', 10) || 1);
+        });
+      });
+    });
+    cursor = json.cursor || null; safety++;
+  } while (cursor && safety < 50);
+  var out = [];
+  for (var k in counts) out.push(k + ':' + counts[k]);
+  out.sort();
+  Logger.log(out.join('  |  ') || 'NO MODIFIERS');
 }
 
 function installMarginReview() {
@@ -269,7 +327,10 @@ function mrNorm_(s) {
 // Canonical key for a set of recognised modifiers.
 function mrModsKey_(mods) {
   return (mods || [])
-    .map(function (m) { return String(m).toUpperCase().trim(); })
+    .map(function (m) {
+      var up = String(m).toUpperCase().trim();
+      return MR_MOD_ALIASES[up] || up;
+    })
     .filter(function (m) { return MR_RECOGNISED_MODS.indexOf(m) !== -1; })
     .sort()
     .join('+');
@@ -400,6 +461,13 @@ function mrFetchSquareBuckets_(startIso, endIso) {
         var itemName  = li.name.trim();
         var variation = (li.variation_name || '').toUpperCase().trim();
         var modNames  = (li.modifiers || []).map(function (m) { return (m.name || '').trim(); });
+        // Some registers ring size as a LARGE modifier rather than a
+        // variation (152/wk observed) — promote it so larges aren't costed
+        // as smalls.
+        if (!variation || variation === 'REGULAR') {
+          var hasLarge = modNames.some(function (n) { return n.toUpperCase() === 'LARGE'; });
+          if (hasLarge) variation = 'LARGE';
+        }
         var modsKey   = mrModsKey_(modNames);
 
         var key = mrNorm_(itemName) + '|' + variation + '|' + modsKey;
@@ -529,48 +597,4 @@ function mrWriteToNotion_(payload) {
       muteHttpExceptions: true,
     });
   }
-}
-
-
-// TEMP diagnostic: one-line summary of every bucket mentioning CHAI.
-function printChaiBuckets() {
-  var end = new Date(); var start = new Date(end.getTime() - 7 * 86400000);
-  var buckets = mrFetchSquareBuckets_(start.toISOString(), end.toISOString());
-  var out = [];
-  for (var k in buckets) {
-    if (buckets[k].display.toUpperCase().indexOf('CHAI') !== -1) {
-      out.push(buckets[k].display + ' qty ' + buckets[k].qty);
-    }
-  }
-  Logger.log(out.join('  ||  ') || 'NO CHAI BUCKETS FOUND');
-}
-
-
-// TEMP diagnostic: every distinct line-item modifier name in the last 7 days.
-function printAllModifiers() {
-  var token = PropertiesService.getScriptProperties().getProperty('SQUARE_ACCESS_TOKEN');
-  var locationId = PropertiesService.getScriptProperties().getProperty(PK_LOCATION_ID) || cacheSquareLocation_();
-  var end = new Date(); var start = new Date(end.getTime() - 7 * 86400000);
-  var counts = {};
-  var cursor = null; var safety = 0;
-  do {
-    var body = { location_ids: [locationId], query: { filter: { date_time_filter: { created_at: { start_at: start.toISOString(), end_at: end.toISOString() } }, state_filter: { states: ['COMPLETED'] } } }, limit: 500 };
-    if (cursor) body.cursor = cursor;
-    var resp = UrlFetchApp.fetch('https://connect.squareup.com/v2/orders/search', { method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + token, 'Square-Version': '2024-06-04' }, payload: JSON.stringify(body), muteHttpExceptions: true });
-    if (resp.getResponseCode() !== 200) break;
-    var json = JSON.parse(resp.getContentText());
-    (json.orders || []).forEach(function (o) {
-      (o.line_items || []).forEach(function (li) {
-        (li.modifiers || []).forEach(function (mod) {
-          var n = (mod.name || '').trim();
-          if (n) counts[n] = (counts[n] || 0) + (parseInt(li.quantity || '1', 10) || 1);
-        });
-      });
-    });
-    cursor = json.cursor || null; safety++;
-  } while (cursor && safety < 50);
-  var out = [];
-  for (var k in counts) out.push(k + ':' + counts[k]);
-  out.sort();
-  Logger.log(out.join('  |  ') || 'NO MODIFIERS');
 }
