@@ -27,7 +27,7 @@ const BRM_COFFEE_CELL_TO_KEY = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Master ingredient cell map (mirrors SyncIngredientPrices.js exactly).
 // Key = A1 cell reference. Value = ingredient key.
-// Cells in MADE-IN-HOUSE rows (L col, rows 5–11) point at SUB-RECIPES that
+// Cells in MADE-IN-HOUSE rows (L col, rows 5–13) point at SUB-RECIPES that
 // are expanded recursively after the first pass.
 // ─────────────────────────────────────────────────────────────────────────────
 const BRM_FOOD_CELL_TO_KEY = {
@@ -52,7 +52,7 @@ const BRM_FOOD_CELL_TO_KEY = {
   // MADE IN HOUSE — these expand recursively
   'L5':  'tuna_mix',           'L6':  'caponata',           'L7':  'mushroom_mix',
   'L8':  'schnittas',          'L9':  'basil_pesto',        'L10': 'tiger_sauce',
-  'L11': 'honey_mustard_mayo',
+  'L11': 'honey_mustard_mayo', 'L12': 'pickled_onions',     'L13': 'fennel_slaw',
   // Extras
   'N5':  'butter',             'N6':  'olive_oil',          'N7':  'salt',
   'N8':  'pepper',             'N9':  'eggs',
@@ -67,7 +67,8 @@ const BRM_FOOD_CELL_TO_KEY = {
 
 // Made-in-house keys (these get expanded into their sub-recipe ingredients)
 const BRM_MADE_IN_HOUSE = ['tuna_mix', 'caponata', 'mushroom_mix', 'schnittas',
-                           'basil_pesto', 'tiger_sauce', 'honey_mustard_mayo'];
+                           'basil_pesto', 'tiger_sauce', 'honey_mustard_mayo',
+                           'pickled_onions', 'fennel_slaw'];
 
 // Map of K-col label prefix → MIH key. Used by the sub-recipe auto-detector to
 // figure out which made-in-house item each L-col formula corresponds to.
@@ -80,6 +81,8 @@ const BRM_MIH_LABEL_TO_KEY = {
   'BASIL PESTO':         'basil_pesto',
   'TIGER SAUCE':         'tiger_sauce',
   'HONEY MUSTARD MAYO':  'honey_mustard_mayo',
+  'PICKLED ONIONS':      'pickled_onions',
+  'FENNEL SLAW':         'fennel_slaw',
 };
 
 // ─── MANUAL OVERRIDES ─────────────────────────────────────────────────────────
@@ -143,9 +146,6 @@ function buildRecipeMap() {
   Logger.log('Sheet size: ' + rowCount + ' rows × ' + colCount + ' cols');
 
   // ── 1. Find all section headers (uppercase-ish strings in col A or E) ──────
-  // Section headers like "CAPONATA SANDWICH" or "TIGER SAUCE" usually sit in
-  // col A. We accept any cell that's mostly uppercase, length>3, with text-only
-  // surroundings. Diagnostic dump shows what we picked up.
   const sections = brmFindSections_(data);
   Logger.log('Sections detected: ' + sections.length);
   sections.forEach(function (s) {
@@ -153,9 +153,7 @@ function buildRecipeMap() {
   });
 
   // ── 2. Parse formulas in each section to find ingredient cell refs ─────────
-  // For each section, scan a row window (from header+1 to next header or +40)
-  // across all columns, extract every A1 reference, match against our cell map.
-  const sectionRecipes = {}; // header (uppercase) → array of ingredient keys (direct refs)
+  const sectionRecipes = {};
   sections.forEach(function (s, idx) {
     const endRow = (idx + 1 < sections.length) ? sections[idx + 1].row : Math.min(s.row + 40, rowCount);
     const ingredients = brmExtractIngredientsForSection_(formulas, s.row, endRow);
@@ -163,11 +161,7 @@ function buildRecipeMap() {
   });
 
   // ── 3. Auto-detect sub-recipes (made-in-house keys → ingredients) ──────────
-  // Trace each L-col formula → its total cell → upward column scan → master
-  // grid refs. No hard-coded headers; works as long as the L-col formulas
-  // follow the "=M47" pattern.
   const subRecipeIngredients = brmAutoDetectSubRecipes_(formulas, data);
-  // Apply manual overrides for any sub-recipe the auto-detector couldn't find
   for (const k in BRM_SUB_RECIPE_OVERRIDES) {
     if (!subRecipeIngredients[k] || subRecipeIngredients[k].length === 0) {
       subRecipeIngredients[k] = BRM_SUB_RECIPE_OVERRIDES[k].slice();
@@ -180,13 +174,9 @@ function buildRecipeMap() {
   }
 
   // ── 4. Build the products map (Notion products → expanded ingredient list) ─
-  // Pull Notion product list, find matching section, expand any made-in-house
-  // ingredient into its sub-recipe components recursively.
   const notionProducts = brmGetNotionProducts_();
   Logger.log('Notion products fetched: ' + notionProducts.length);
 
-  // Parse COFFEE products too — they live in a separate sheet with a simpler
-  // (no sub-recipe) structure, but feed into the same Notion DB.
   const coffeeProductsMap = brmBuildCoffeeProductsMap_();
   Logger.log('Coffee sections parsed: ' + Object.keys(coffeeProductsMap).length);
 
@@ -195,7 +185,6 @@ function buildRecipeMap() {
   notionProducts.forEach(function (p) {
     const sectionHeader = (BRM_NOTION_TO_SHEET[p.name.toLowerCase().trim()] || p.name).toUpperCase();
 
-    // Try FOOD first, then COFFEE
     let direct = sectionRecipes[sectionHeader];
     let source = 'food';
     if (!direct) {
@@ -207,7 +196,6 @@ function buildRecipeMap() {
       return;
     }
 
-    // Apply product direct overrides (additive) — only for food, no overrides for coffee yet
     const directWithOverrides = direct.slice();
     if (BRM_PRODUCT_DIRECT_OVERRIDES[sectionHeader]) {
       BRM_PRODUCT_DIRECT_OVERRIDES[sectionHeader].forEach(function (k) {
@@ -216,7 +204,7 @@ function buildRecipeMap() {
     }
     const expanded = brmExpandIngredients_(directWithOverrides, subRecipeIngredients);
     products[p.name] = {
-      id: p.id,         // Notion page ID — lets the widget fetch directly without semantic search
+      id: p.id,
       section: sectionHeader,
       source: source,
       direct: directWithOverrides,
@@ -265,26 +253,18 @@ function buildRecipeMap() {
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION DETECTION
 // ─────────────────────────────────────────────────────────────────────────────
-// Tuned from dry-run feedback (16 May 2026):
-//   • Col A only (col E had numeric labels like "62.333..." stealing rows)
-//   • Must contain at least one A–Z letter (kills pure-number false positives)
-//   • Skip rows 1–MIN_PRODUCT_ROW (master ingredient grid lives up top)
-//   • Skip headers ending with a cell-ref tag like "(B5)" or "(F9)"
-//     — those are master grid labels, not product sections
-// ─────────────────────────────────────────────────────────────────────────────
-const BRM_MIN_PRODUCT_ROW = 25; // 0-indexed; first real product seen at row 35
+const BRM_MIN_PRODUCT_ROW = 25;
 
 function brmFindSections_(data) {
   const sections = [];
   for (let r = BRM_MIN_PRODUCT_ROW; r < data.length; r++) {
-    const raw = String((data[r][0] || '')).trim(); // col A only
+    const raw = String((data[r][0] || '')).trim();
     if (raw.length < 4) continue;
-    if (!/[A-Z]/.test(raw)) continue;                              // must have a letter
-    if (!/^[A-Z0-9 ()+&'\.\-\/]+$/.test(raw)) continue;           // uppercase-ish only
+    if (!/[A-Z]/.test(raw)) continue;
+    if (!/^[A-Z0-9 ()+&'\.\-\/]+$/.test(raw)) continue;
     if (raw !== raw.toUpperCase()) continue;
-    if (/\([A-Z]+\d+\)\s*$/.test(raw)) continue;                  // ends in (B5)/(F9) → master grid label
+    if (/\([A-Z]+\d+\)\s*$/.test(raw)) continue;
 
-    // Must have content below it (sanity)
     let hasBelow = false;
     for (let rr = r + 1; rr < Math.min(r + 4, data.length) && !hasBelow; rr++) {
       for (let cc = 0; cc < 6; cc++) {
@@ -308,11 +288,8 @@ function brmFindSections_(data) {
 // ─────────────────────────────────────────────────────────────────────────────
 // FORMULA PARSING
 // ─────────────────────────────────────────────────────────────────────────────
-// Main product recipe lives in cols A–D. Sub-recipes (Tiger Sauce, mixes, etc.)
-// live in parallel columns G+ within the same row range, so we scan a narrow
-// slice to avoid attributing their ingredients to the main product.
-const BRM_RECIPE_COL_START = 0; // col A
-const BRM_RECIPE_COL_END   = 4; // exclusive — scan cols A,B,C,D
+const BRM_RECIPE_COL_START = 0;
+const BRM_RECIPE_COL_END   = 4;
 
 function brmExtractIngredientsForSection_(formulas, startRow, endRow) {
   const found = {};
@@ -336,31 +313,22 @@ function brmExtractIngredientsForSection_(formulas, startRow, endRow) {
 // ─────────────────────────────────────────────────────────────────────────────
 // COFFEE SHEET PARSER
 // ─────────────────────────────────────────────────────────────────────────────
-// Coffee recipes are simpler than food — no made-in-house chain. Each section
-// header sits in col A (with col B and col E empty, so we don't catch
-// ingredient rows that have a value in col B). For each section, scan cols
-// A–F formulas and capture refs to coffee master cells.
-// ─────────────────────────────────────────────────────────────────────────────
 function brmBuildCoffeeProductsMap_() {
   const sheet    = SpreadsheetApp.openById(BRM_COFFEE_SHEET_ID).getSheetByName('COFFEE');
   const data     = sheet.getDataRange().getValues();
   const formulas = sheet.getDataRange().getFormulas();
   const products = {};
 
-  // 1. Find coffee section headers (col A non-empty, col B + col E empty,
-  // string is mostly uppercase). No row-number floor — the col-B-empty filter
-  // already excludes master-grid rows (which always have a price in col B).
-  // The first real product (TAKEAWAY FC MILK COFFEE) sits at ~row 13.
   const sections = [];
   for (let r = 0; r < data.length; r++) {
     const a = String(data[r][0] || '').trim();
     const b = String(data[r][1] || '').trim();
     const e = String((data[r][4] || '')).trim();
     if (!a || a.length < 4) continue;
-    if (b || e) continue;                                            // not a header row (master grid has B filled)
-    if (!/[A-Z]/.test(a) || a !== a.toUpperCase()) continue;        // require uppercase letters
+    if (b || e) continue;
+    if (!/[A-Z]/.test(a) || a !== a.toUpperCase()) continue;
     if (!/^[A-Z0-9 ()+&'\.\-\/]+$/.test(a)) continue;
-    if (/\([A-Z]+\d+\)\s*$/.test(a)) continue;                      // skip master grid labels
+    if (/\([A-Z]+\d+\)\s*$/.test(a)) continue;
     const blacklist = ['TOTAL', 'PROFIT', 'PROFIT %', 'RETAIL PRICE', 'WASTAGE',
                        'PRICES', 'COFFEE', 'MILK', 'SUGAR', 'PACKAGING',
                        'MILKS', 'EXTRAS', 'PANTRY', 'MADE IN HOUSE'];
@@ -368,8 +336,6 @@ function brmBuildCoffeeProductsMap_() {
     sections.push({ row: r, header: a });
   }
 
-  // 2. For each section, scan formulas in cols A–F (covers both A/B and E/F
-  // label/value formats). Capture coffee master cell references.
   for (let i = 0; i < sections.length; i++) {
     const s      = sections[i];
     const endRow = (i + 1 < sections.length) ? sections[i + 1].row : Math.min(s.row + 50, data.length);
@@ -396,18 +362,10 @@ function brmBuildCoffeeProductsMap_() {
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB-RECIPE AUTO-DETECTOR
 // ─────────────────────────────────────────────────────────────────────────────
-// Each L-col cell (rows 5–11) has a formula like "=M47" pointing at the TOTAL
-// of its sub-recipe. The total is a SUM range; each row in the range uses an
-// intermediate formula like "=J38/L38" where J38 itself holds the master-grid
-// reference (e.g. "=D8" for tuna). Schnittas is even deeper:
-//   M74 = IF(...,M72/I73)  →  M72 = SUM(M66:M70)  →  M66 = J66*K66/I66  →  I/J/K hold the master refs
-// So we use a transitive walker that follows refs (and range refs) until it
-// hits master-grid cells defined in BRM_FOOD_CELL_TO_KEY.
-// ─────────────────────────────────────────────────────────────────────────────
 function brmAutoDetectSubRecipes_(formulas, values) {
   const subRecipes = {};
-  const kColIdx = 10; // col K (0-indexed)
-  const lColIdx = 11; // col L (0-indexed)
+  const kColIdx = 10;
+  const lColIdx = 11;
 
   for (let r = 0; r < formulas.length; r++) {
     const f = formulas[r][lColIdx];
@@ -416,7 +374,6 @@ function brmAutoDetectSubRecipes_(formulas, values) {
     if (!m) continue;
     const targetCell = m[1] + m[2];
 
-    // Find which MIH key from the K-col label
     const label = String(values[r][kColIdx] || '').toUpperCase();
     let mihKey = null;
     for (const prefix in BRM_MIH_LABEL_TO_KEY) {
@@ -427,21 +384,13 @@ function brmAutoDetectSubRecipes_(formulas, values) {
       continue;
     }
 
-    // Transitive: follow the total cell's formula → each referenced cell's
-    // formula → etc., until we hit master grid cells. Handles SUM ranges,
-    // intermediate cells (M38 = J38/L38 where J38 = =D8), and the deeper
-    // schnittas-style chain (M74 → M72 → M66:M70 → I/J/K refs → master).
     const ingredients = brmCollectIngredientsTransitive_(formulas, [targetCell], 6);
-    // A sub-recipe shouldn't claim itself
     subRecipes[mihKey] = ingredients.filter(function (k) { return k !== mihKey; });
   }
 
   return subRecipes;
 }
 
-// Transitive cell-reference walker. Starts at given cells, follows formula
-// references depth-first, stops when it hits master grid cells or runs out
-// of depth. Range refs like SUM(A1:B5) are expanded to individual cells.
 function brmCollectIngredientsTransitive_(formulas, startCells, maxDepth) {
   const ingredients = {};
   const visited     = {};
@@ -451,11 +400,9 @@ function brmCollectIngredientsTransitive_(formulas, startCells, maxDepth) {
     if (visited[cellRef]) return;
     visited[cellRef] = true;
 
-    // Master grid hit — record and stop traversing this branch.
     const key = BRM_FOOD_CELL_TO_KEY[cellRef];
     if (key) { ingredients[key] = true; return; }
 
-    // Otherwise, read this cell's formula and walk its refs.
     const parsed = cellRef.match(/^([A-Z]+)(\d+)$/);
     if (!parsed) return;
     const colIdx = brmA1ColToIdx_(parsed[1]);
@@ -467,7 +414,6 @@ function brmCollectIngredientsTransitive_(formulas, startCells, maxDepth) {
     const f = row[colIdx];
     if (!f) return;
 
-    // Expand range refs first (SUM(A1:B5) → A1,A2,...,B5), then grab individual refs
     const expanded = brmExpandRanges_(String(f));
     const refs = expanded.match(/\$?[A-Z]{1,2}\$?\d+/g);
     if (!refs) return;
@@ -497,7 +443,6 @@ function brmExpandRanges_(formula) {
 }
 
 function brmA1ColToIdx_(letters) {
-  // 'A' → 0, 'M' → 12, 'T' → 19
   let n = 0;
   for (let i = 0; i < letters.length; i++) {
     n = n * 26 + (letters.charCodeAt(i) - 64);
@@ -512,13 +457,11 @@ function brmExpandIngredients_(direct, subRecipes) {
   const out  = {};
   const seen = {};
   function walk(keys, depth) {
-    if (depth > 4) return; // safety
+    if (depth > 4) return;
     keys.forEach(function (k) {
       if (seen[k]) return;
       seen[k] = true;
       if (BRM_MADE_IN_HOUSE.indexOf(k) !== -1 && subRecipes[k]) {
-        // Expand the sub-recipe AND keep the made-in-house key itself for
-        // the case where you want to track "this product uses caponata mix".
         out[k] = true;
         walk(subRecipes[k], depth + 1);
       } else {
@@ -571,7 +514,6 @@ function brmWriteToNotion_(payload) {
     'Content-Type':   'application/json',
   };
 
-  // Find existing recipe_map block on the page
   let allBlocks = [];
   let cursor = null;
   do {
@@ -626,8 +568,7 @@ function brmColLetter_(col) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DIAGNOSTIC: dump every detected section + its parsed ingredients to the log
-// without writing to Notion. Useful when tuning section headers.
+// DIAGNOSTICS
 // ─────────────────────────────────────────────────────────────────────────────
 function buildRecipeMapDryRun() {
   const sheet    = SpreadsheetApp.openById(BRM_FOOD_SHEET_ID).getSheetByName('FOOD');
@@ -672,7 +613,6 @@ function buildRecipeMapDryRun() {
     sections.forEach(function (s, idx) {
       const endRow = (idx + 1 < sections.length) ? sections[idx + 1].row : Math.min(s.row + 40, data.length);
       const direct = brmExtractIngredientsForSection_(formulas, s.row, endRow);
-      // Apply product direct overrides
       const directWithOverrides = direct.slice();
       if (BRM_PRODUCT_DIRECT_OVERRIDES[s.header.toUpperCase()]) {
         BRM_PRODUCT_DIRECT_OVERRIDES[s.header.toUpperCase()].forEach(function (k) {
@@ -686,17 +626,11 @@ function buildRecipeMapDryRun() {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DIAGNOSTIC: dumps the structure of the Made-In-House column and hunts for
-// pesto. Use to figure out where sub-recipes actually live so we can build
-// the auto-detector against real layout, not guesses.
-// ─────────────────────────────────────────────────────────────────────────────
 function inspectPestoReferences() {
   const sheet    = SpreadsheetApp.openById(BRM_FOOD_SHEET_ID).getSheetByName('FOOD');
   const values   = sheet.getDataRange().getValues();
   const formulas = sheet.getDataRange().getFormulas();
 
-  // 1. Every cell with a FORMULA referencing L9 (so we find products that depend on pesto's price)
   Logger.log('=== Cells with formulas referencing L9 ===');
   let l9hits = 0;
   for (let r = 0; r < formulas.length; r++) {
@@ -711,7 +645,6 @@ function inspectPestoReferences() {
   }
   Logger.log('L9 reference hits: ' + l9hits);
 
-  // 2. Every cell mentioning "pesto" / "basil pesto" (label or text)
   Logger.log('');
   Logger.log('=== Cells mentioning pesto/basil ===');
   let pestohits = 0;
@@ -727,8 +660,6 @@ function inspectPestoReferences() {
   }
   Logger.log('Pesto mention hits: ' + pestohits);
 
-  // 3. Dump the area around O63 (where "BASIL PESTO" header was found) to see
-  // if there's a sub-recipe being built there
   Logger.log('');
   Logger.log('=== Area around O63 (rows 60–90, cols N–T) ===');
   for (let r = 59; r < Math.min(90, values.length); r++) {
@@ -747,8 +678,6 @@ function inspectSubRecipeBlocks() {
   const values   = sheet.getDataRange().getValues();
   const formulas = sheet.getDataRange().getFormulas();
 
-  // Dump K-L-M columns for each known sub-recipe range so we can see what's
-  // actually in there — labels, quantities, formulas.
   const ranges = [
     { name: 'TUNA MIX',           col: 'M', start: 35, end: 48 },
     { name: 'CAPONATA',           col: 'M', start: 48, end: 62 },
@@ -762,9 +691,6 @@ function inspectSubRecipeBlocks() {
     Logger.log('');
     Logger.log('=== ' + r.name + '  (' + r.col + r.start + '–' + r.col + r.end + ') ===');
     const colIdx = brmA1ColToIdx_(r.col);
-    // Dump the value/label/qty cols immediately to the left of the cost col
-    // so we can see context. For M-col sub-recipes that's K (label) + L (qty).
-    // For T-col it's R + S.
     const labelColIdx = colIdx - 2;
     const qtyColIdx   = colIdx - 1;
     for (let row = r.start; row <= r.end; row++) {
@@ -786,17 +712,16 @@ function inspectMadeInHouse() {
 
   Logger.log('=== L-COL (Made In House) dump, rows 1–20 ===');
   for (let r = 0; r < Math.min(20, values.length); r++) {
-    const labelA = String(values[r][0] || '').trim();   // col A label (e.g. "MADE IN HOUSE")
-    const labelK = String(values[r][10] || '').trim();  // col K label
-    const labelL = String(values[r][11] || '').trim();  // col L label
-    const valL   = values[r][11];                       // col L value
-    const fL     = formulas[r][11];                     // col L formula
+    const labelA = String(values[r][0] || '').trim();
+    const labelK = String(values[r][10] || '').trim();
+    const labelL = String(values[r][11] || '').trim();
+    const valL   = values[r][11];
+    const fL     = formulas[r][11];
     if (labelA || labelK || labelL || valL || fL) {
       Logger.log('row ' + (r + 1) + ': A="' + labelA + '" | K="' + labelK + '" | L="' + labelL + '" | L_val=' + valL + ' | L_formula=' + (fL || '(none)'));
     }
   }
 
-  // Scan the whole sheet for any cell containing "pesto" (case-insensitive)
   Logger.log('=== PESTO search ===');
   let hits = 0;
   for (let r = 0; r < values.length; r++) {
@@ -810,9 +735,6 @@ function inspectMadeInHouse() {
   }
   Logger.log('Pesto hits: ' + hits);
 
-  // Also dump the master grid headers in rows 1–20 (any non-empty cell with
-  // a string value) so we can see ALL ingredient slots, not just the ones
-  // SyncIngredientPrices currently maps.
   Logger.log('=== MASTER GRID dump, rows 1–25, any non-empty string cell ===');
   for (let r = 0; r < Math.min(25, values.length); r++) {
     for (let c = 0; c < values[r].length; c++) {
@@ -831,7 +753,6 @@ function createRecipeMapTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'buildRecipeMap') ScriptApp.deleteTrigger(t);
   });
-  // Recipes don't change often; daily run is plenty.
   ScriptApp.newTrigger('buildRecipeMap').timeBased().everyDays(1).atHour(3).create();
   Logger.log('✓ Daily 3am trigger created for buildRecipeMap.');
 }

@@ -26,7 +26,7 @@ function syncCostingsToNotion() {
 
   products.forEach(function (product) {
     const sectionRow = findSectionRow(data, product.name);
-    if (sectionRow === -1) { missed.push('NOT FOUND in sheet: "' + product.name + '"'); return; }
+    if (sectionRow === -1) { if (!isBoughtIn_(product.name)) missed.push('NOT FOUND in sheet: "' + product.name + '"'); return; }
 
     const values = extractSheetValues(data, sectionRow);
     if (values.sellPrice === null) { missed.push('No Retail Price found for: "' + product.name + '"'); return; }
@@ -34,9 +34,10 @@ function syncCostingsToNotion() {
 
     const sellSame = product.currentSell !== null && Math.abs(product.currentSell - values.sellPrice) < 0.005;
     const pctSame  = product.currentPct  !== null && Math.abs(product.currentPct  - values.profitPct) < 0.01;
-    if (sellSame && pctSame) return;
+    const costSame = (values.cost == null) || (product.currentCost != null && Math.abs(product.currentCost - values.cost) < 0.005);
+    if (sellSame && pctSame && costSame) return;
 
-    const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, NOTION_KEY);
+    const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, values.cost, NOTION_KEY);
     Utilities.sleep(300);
     if (result.ok) {
       updated.push('✓ ' + product.name + ' — $' + values.sellPrice.toFixed(2) + ', ' + values.profitPct.toFixed(1) + '%');
@@ -90,7 +91,8 @@ function getFoodNotionProducts(dbId, notionKey) {
         ? page.properties['Sell Price'].number : null;
       const currentPct  = (page.properties['Profit %'] && page.properties['Profit %'].number != null)
         ? page.properties['Profit %'].number : null;
-      products.push({ id: page.id, name: name, currentSell: currentSell, currentPct: currentPct });
+      var currentCost = (page.properties['Cost'] && page.properties['Cost'].number != null) ? page.properties['Cost'].number : null;
+      products.push({ id: page.id, name: name, currentSell: currentSell, currentPct: currentPct, currentCost: currentCost });
     });
 
     hasMore = data.has_more;
@@ -130,12 +132,26 @@ function getNotionProducts(dbId, notionKey) {
 }
 
 var NOTION_TO_SHEET_NAME = {
-  'autogrill (salami panini)':       'SALAMI PANINI',
-  'caponata':                        'CAPONATA SANDWICH',
-  'caponata sandwich (mozzarella)':  'CAPONATA SANDWICH (WITH CHEESE)',
-  'mushroom':                        'MUSHROOM SANDWICH',
-  'filled croissant':                'H+C CROISSANT',
+  'autogrill (salami panini)':  'SALAMI PANINI',
+  'caponata':                   'CAPONATA SANDWICH',
+  'caponata (mozzarella)':      'CAPONATA SANDWICH (WITH CHEESE)',
+  'mushroom':                   'MUSHROOM SANDWICH',
+  'filled croissant':           'H+C CROISSANT',
+  'h+c':                        'H+C SANDWICH',
+  'h+c (tiger style)':          'H+C SANDWICH (TIGER STYLE)',
+  'tuna':                       'TUNA SANDWICH',
+  'beef':                       'BEEF SANDWICH',
 };
+
+// Notion products that are bought-in / priced directly (no recipe section in the
+// sheet). The sync intentionally skips these — they're not errors. Their Sell
+// Price is managed manually in Notion.
+var NOTION_BOUGHT_IN = {
+  'brownie': 1, 'cake (maple pecan slice)': 1, 'cake (carrot)': 1,
+  'cookie (marshy)': 1, 'cookie (pretzel oat)': 1, 'plain croissant': 1,
+  'toast (full serve)': 1, 'toast (half serve)': 1, 'orange juice': 1
+};
+function isBoughtIn_(name) { return !!NOTION_BOUGHT_IN[String(name || '').toLowerCase().trim()]; }
 
 function findSectionRow(data, productName) {
   var mapped = NOTION_TO_SHEET_NAME[productName.toLowerCase().trim()];
@@ -151,21 +167,23 @@ function findSectionRow(data, productName) {
 function extractSheetValues(data, sectionRow) {
   var retailPrices = [];
   var profitPct    = null;
+  var totalWastage = null;
   for (var r = sectionRow + 1; r < Math.min(sectionRow + 45, data.length); r++) {
     var label  = normalise(String(data[r][4] || ''));
     var rawVal = data[r][5];
     var numVal = (rawVal !== '' && rawVal !== null && !isNaN(rawVal)) ? parseFloat(rawVal) : null;
     if (label === 'retail price' && numVal !== null) retailPrices.push(numVal);
+    if (label.indexOf('total') !== -1 && label.indexOf('wastage') !== -1 && numVal !== null) totalWastage = numVal;
     if (label === 'profit %'     && numVal !== null) profitPct = numVal;
     if (label === 'profit %') break;
   }
   var sellPrice = retailPrices.length >= 2 ? retailPrices[1]
                 : retailPrices.length === 1 ? retailPrices[0]
                 : null;
-  return { sellPrice: sellPrice, profitPct: profitPct };
+  return { sellPrice: sellPrice, profitPct: profitPct, cost: totalWastage };
 }
 
-function updateNotionPage(pageId, sellPrice, profitPct, notionKey) {
+function updateNotionPage(pageId, sellPrice, profitPct, cost, notionKey) {
   const res = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + pageId, {
     method: 'patch',
     headers: { 'Authorization': 'Bearer ' + notionKey,
@@ -174,6 +192,7 @@ function updateNotionPage(pageId, sellPrice, profitPct, notionKey) {
       properties: {
         'Sell Price': { number: Math.round(sellPrice * 100) / 100 },
         'Profit %':   { number: Math.round(profitPct * 10)  / 10  },
+        ...(cost != null && isFinite(cost) ? { 'Cost': { number: Math.round(cost * 100) / 100 } } : {}),
       },
     }),
     muteHttpExceptions: true,
@@ -212,7 +231,7 @@ function syncCoffeeToNotion() {
 
   coffeeProducts.forEach(function (product) {
     const sectionRow = findCoffeeSectionRow(data, product.name);
-    if (sectionRow === -1) { missed.push('NOT FOUND in sheet: "' + product.name + '"'); return; }
+    if (sectionRow === -1) { if (!isBoughtIn_(product.name)) missed.push('NOT FOUND in sheet: "' + product.name + '"'); return; }
 
     const values = extractCoffeeSheetValues(data, sectionRow);
     if (values.sellPrice === null) { missed.push('No Retail Price for: "' + product.name + '"'); return; }
@@ -220,9 +239,10 @@ function syncCoffeeToNotion() {
 
     const sellSame = product.currentSell !== null && Math.abs(product.currentSell - values.sellPrice) < 0.005;
     const pctSame  = product.currentPct  !== null && Math.abs(product.currentPct  - values.profitPct) < 0.01;
-    if (sellSame && pctSame) return;
+    const costSame = (values.cost == null) || (product.currentCost != null && Math.abs(product.currentCost - values.cost) < 0.005);
+    if (sellSame && pctSame && costSame) return;
 
-    const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, NOTION_KEY);
+    const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, values.cost, NOTION_KEY);
     Utilities.sleep(300);
     if (result.ok) {
       updated.push('✓ ' + product.name + ' — $' + values.sellPrice.toFixed(2) + ', ' + values.profitPct.toFixed(1) + '%');
@@ -245,85 +265,44 @@ function syncCoffeeToNotion() {
 function syncAllCostingsToNotion() {
   var foodSummary   = syncCostingsToNotion();
   var coffeeSummary = syncCoffeeToNotion();
-
-  // Write costings_sync heartbeat block on OS page so TIGER OS healthcheck
-  // can verify the trigger is alive. Wrapped so heartbeat failures never
-  // break the actual sync.
-  try {
-    writeCostingsSyncHeartbeat_();
-    Logger.log('✓ costings_sync heartbeat written.');
-  } catch (e) {
-    Logger.log('⚠ costings_sync heartbeat failed: ' + e.message);
-  }
-
+  // Heartbeat so the daily health check can confirm this sync is alive (it only
+  // writes product pages when a price changes, so there's otherwise no signal).
+  try { writeCostingsHeartbeat_(); } catch (e) { Logger.log('costings heartbeat error: ' + e.message); }
   Logger.log('\n--- COMBINED RUN COMPLETE ---\n' + foodSummary + '\n\n' + coffeeSummary);
   return foodSummary + '\n\n' + coffeeSummary;
 }
 
-// ─── HEARTBEAT (writes {"type":"costings_sync","updated":...} to OS page) ────
+// Writes/updates a small JSON "costings_sync" code block on the TIGER OS Notion
+// page with the current timestamp, every run. Mirrors the ingredient_prices
+// block pattern so the health check can read an "updated" field. Best-effort.
+var COSTINGS_OS_PAGE_ID = '3403c99c0e858113a941c2118b3cdef9';
+function writeCostingsHeartbeat_() {
+  var key = PropertiesService.getScriptProperties().getProperty('NOTION_API_KEY');
+  if (!key) return;
+  var headers = { 'Authorization': 'Bearer ' + key, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' };
+  var json = JSON.stringify({ type: 'costings_sync', updated: new Date().toISOString() });
 
-var SCN_OS_PAGE_ID = '3403c99c0e858113a941c2118b3cdef9';
-
-function writeCostingsSyncHeartbeat_() {
-  var notionKey = PropertiesService.getScriptProperties().getProperty('NOTION_API_KEY');
-  if (!notionKey) throw new Error('NOTION_API_KEY not set.');
-
-  var headers = {
-    'Authorization': 'Bearer ' + notionKey,
-    'Notion-Version': '2022-06-28',
-    'Content-Type': 'application/json',
-  };
-
-  var payload = JSON.stringify({
-    type: 'costings_sync',
-    updated: new Date().toISOString(),
-  });
-
-  // List children of OS page, find existing costings_sync code block
-  var allBlocks = [];
-  var cursor = null;
+  var allBlocks = [], cursor = null;
   do {
-    var url = 'https://api.notion.com/v1/blocks/' + SCN_OS_PAGE_ID + '/children?page_size=100';
-    if (cursor) url += '&start_cursor=' + cursor;
-    var res  = UrlFetchApp.fetch(url, { headers: headers, muteHttpExceptions: true });
+    var url = 'https://api.notion.com/v1/blocks/' + COSTINGS_OS_PAGE_ID + '/children?page_size=100' + (cursor ? '&start_cursor=' + cursor : '');
+    var res = UrlFetchApp.fetch(url, { headers: headers, muteHttpExceptions: true });
     var data = JSON.parse(res.getContentText());
-    if (data.object === 'error') throw new Error('Notion blocks list: ' + data.message);
     allBlocks = allBlocks.concat(data.results || []);
-    cursor    = data.has_more ? data.next_cursor : null;
+    cursor = data.has_more ? data.next_cursor : null;
   } while (cursor);
 
   var existing = allBlocks.find(function (b) {
     if (b.type !== 'code') return false;
-    var text = ((b.code && b.code.rich_text) || []).map(function (r) { return r.plain_text || ''; }).join('');
-    return text.indexOf('"costings_sync"') !== -1;
+    var t = (b.code && b.code.rich_text || []).map(function (r) { return r.plain_text; }).join('');
+    return t.indexOf('"costings_sync"') !== -1;
   });
 
-  var blockBody = JSON.stringify({
-    type: 'code',
-    code: {
-      language: 'json',
-      rich_text: [{ type: 'text', text: { content: payload } }],
-    },
-  });
+  var blockBody = JSON.stringify({ type: 'code', code: { language: 'json', rich_text: [{ type: 'text', text: { content: json } }] } });
 
   if (existing) {
-    var patchRes = UrlFetchApp.fetch('https://api.notion.com/v1/blocks/' + existing.id, {
-      method: 'PATCH',
-      headers: headers,
-      payload: blockBody,
-      muteHttpExceptions: true,
-    });
-    var patched = JSON.parse(patchRes.getContentText());
-    if (patched.object === 'error') throw new Error('Notion heartbeat patch: ' + patched.message);
+    UrlFetchApp.fetch('https://api.notion.com/v1/blocks/' + existing.id, { method: 'patch', headers: headers, payload: blockBody, muteHttpExceptions: true });
   } else {
-    var appendRes = UrlFetchApp.fetch('https://api.notion.com/v1/blocks/' + SCN_OS_PAGE_ID + '/children', {
-      method: 'PATCH',
-      headers: headers,
-      payload: JSON.stringify({ children: [JSON.parse(blockBody)] }),
-      muteHttpExceptions: true,
-    });
-    var appended = JSON.parse(appendRes.getContentText());
-    if (appended.object === 'error') throw new Error('Notion heartbeat append: ' + appended.message);
+    UrlFetchApp.fetch('https://api.notion.com/v1/blocks/' + COSTINGS_OS_PAGE_ID + '/children', { method: 'patch', headers: headers, payload: JSON.stringify({ children: [JSON.parse(blockBody)] }), muteHttpExceptions: true });
   }
 }
 
@@ -353,7 +332,8 @@ function getCoffeeNotionProducts(dbId, notionKey) {
                         ? page.properties['Sell Price'].number : null;
       var currentPct  = (page.properties['Profit %'] && page.properties['Profit %'].number != null)
                         ? page.properties['Profit %'].number : null;
-      products.push({ id: page.id, name: name, currentSell: currentSell, currentPct: currentPct });
+      var currentCost = (page.properties['Cost'] && page.properties['Cost'].number != null) ? page.properties['Cost'].number : null;
+      products.push({ id: page.id, name: name, currentSell: currentSell, currentPct: currentPct, currentCost: currentCost });
     });
     hasMore = parsed.has_more;
     cursor  = parsed.next_cursor;
@@ -375,6 +355,7 @@ function findCoffeeSectionRow(data, productName) {
 function extractCoffeeSheetValues(data, sectionRow) {
   var sellPrice = null;
   var profitPct = null;
+  var totalWastage = null;
   for (var r = sectionRow + 1; r < Math.min(sectionRow + 60, data.length); r++) {
     var labelEF = normalise(String(data[r][4] || ''));
     var rawEF   = data[r][5];
@@ -385,6 +366,8 @@ function extractCoffeeSheetValues(data, sectionRow) {
     var numAB     = (rawAB !== '' && rawAB !== null && !isNaN(rawAB)) ? parseFloat(rawAB) : null;
     if      (labelEF === 'retail price' && numEF !== null) sellPrice = numEF;
     else if (labelAB === 'retail price' && numAB !== null) sellPrice = numAB;
+    if      (labelEF.indexOf('total') !== -1 && labelEF.indexOf('wastage') !== -1 && numEF !== null) totalWastage = numEF;
+    else if (labelAB.indexOf('total') !== -1 && labelAB.indexOf('wastage') !== -1 && numAB !== null) totalWastage = numAB;
     if      (labelEF === 'profit %' && numEF !== null) { profitPct = numEF; break; }
     else if (labelAB === 'profit %' && numAB !== null) { profitPct = numAB; break; }
     var nextA = String(data[r][0] || '').trim();
@@ -393,7 +376,7 @@ function extractCoffeeSheetValues(data, sectionRow) {
     if (nextA && !nextB && !nextE && r > sectionRow + 4 &&
         nextA === nextA.toUpperCase() && nextA.length > 3) break;
   }
-  return { sellPrice: sellPrice, profitPct: profitPct };
+  return { sellPrice: sellPrice, profitPct: profitPct, cost: totalWastage };
 }
 
 // ─── TRIGGER MANAGEMENT ──────────────────────────────────────────────────────

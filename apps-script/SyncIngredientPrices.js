@@ -11,7 +11,7 @@ const SIP_COFFEE_SHEET_ID = '1M5VwhnaOjL29rUh3LC4JmL_4oriqIviMvUs7vd-2NTI';
 function syncIngredientPrices() {
   const prices = sipCollectPrices_();
   sipWriteToNotion_(prices);
-  Logger.log('Ingredient prices synced: ' + prices.ingredients.length + ' ingredients');
+  Logger.log('Ingredient prices synced: ' + JSON.stringify(prices));
 }
 
 function sipCollectPrices_() {
@@ -19,57 +19,50 @@ function sipCollectPrices_() {
   const seen = {};
 
   // ── COFFEE SHEET ───────────────────────────────────────────────────────────
-  // Read directly from the MASTER price cells (the ones ScanSuppliers writes to),
-  // not from the recipe blocks. The previous approach iterated all rows looking
-  // for "Milk (ml) | 12000 | $X" patterns, which wrongly grouped multiple
-  // products by size and gave incorrect labels (e.g. FC MILK 12L showing the
-  // Alt.Dairy 12L carton price). Cell-based lookup is precise and stable.
-  //
-  // Master price layout (label column → value column):
-  //   A→B  coffee/chai/chocolate/decaf/matcha  (rows 5–10)
-  //   C→D  milks (rows 5–9)
-  //   E→F  sugar (row 5)
-  //   G→H  packaging — cups/lids/straws (rows 5–10)
   const coffeeSheet = SpreadsheetApp.openById(SIP_COFFEE_SHEET_ID).getSheetByName('COFFEE');
+  const coffeeData  = coffeeSheet.getDataRange().getValues();
 
-  // Direct cell reads (rather than getDataRange()) so we don't lose trailing
-  // columns. Slightly more API calls but reliable across all sheet shapes.
-  function cc(col, row) {
-    try {
-      const v = coffeeSheet.getRange(row, col).getValue();
-      return (typeof v === 'number' && v > 0) ? v : null;
-    } catch (e) { return null; }
-  }
+  for (let i = 0; i < coffeeData.length; i++) {
+    const row     = coffeeData[i];
+    const rawName = String(row[0] || '').trim();
+    const name    = rawName.split(' (')[0].trim(); // "Coffee (g)" → "Coffee"
+    const size    = Number(row[1]);
+    const cost = Number(row[2]);
+    if (!name || isNaN(cost) || cost <= 0) continue;
 
-  const coffeeIngredients = [
-    // ── BEANS / CHOCOLATE / TEA ───────────────────────────────────────────────
-    { key: 'coffee_beans',     name: 'Golden Gate Espresso Blend (1kg)', col: 2, row: 5,  unit: '1kg',    supplier: 'Seven Seeds' },
-    { key: 'chocolate',        name: 'Mörk Chocolate (1kg)',             col: 2, row: 6,  unit: '1kg',    supplier: 'Mörk' },
-    { key: 'chai',             name: 'Fly High Chai (1L)',               col: 2, row: 7,  unit: '1L',     supplier: 'Seven Seeds' },
-    { key: 'fbomb',            name: 'F.Bomb Filter Blend (1kg)',        col: 2, row: 8,  unit: '1kg',    supplier: 'Seven Seeds' },
-    { key: 'decaf_beans',      name: 'La Serrania Decaf (1kg)',          col: 2, row: 9,  unit: '1kg',    supplier: 'Seven Seeds' },
-    { key: 'matcha',           name: 'Matsu Matcha (500g)',              col: 2, row: 10, unit: '500g',   supplier: 'Matsu Tea' },
-    // ── MILK ─────────────────────────────────────────────────────────────────
-    { key: 'sungold_jersey_fc',name: 'Sungold Full Cream Milk (2LT)',    col: 4, row: 5,  unit: '2LT',    supplier: 'Redi Milk' },
-    { key: 'sungold_lowfat',   name: 'Sungold Skinny Milk (2LT)',        col: 4, row: 6,  unit: '2LT',    supplier: 'Redi Milk' },
-    { key: 'happy_soy',        name: 'Happy Happy Soy Boy (6LT)',        col: 4, row: 7,  unit: '6LT',    supplier: 'Redi Milk' },
-    { key: 'alt_dairy_oat',    name: 'Alternative Dairy Oat (12LT)',     col: 4, row: 8,  unit: '12LT',   supplier: 'Redi Milk' },
-    { key: 'alt_dairy_almond', name: 'Alternative Dairy Almond (12LT)',  col: 4, row: 9,  unit: '12LT',   supplier: 'Redi Milk' },
-    // ── SUGAR ────────────────────────────────────────────────────────────────
-    { key: 'bundaberg_raw_sugar',name:'Bundaberg Raw Sugar (15KG)',      col: 6, row: 5,  unit: '15KG',   supplier: '5Ways' },
-    // ── PACKAGING ────────────────────────────────────────────────────────────
-    { key: 'cup_small_6oz',    name: 'Compostable Cup 6oz (1000)',       col: 8, row: 5,  unit: '1000pk', supplier: 'Planetware' },
-    { key: 'cup_large_12oz',   name: 'Compostable Cup 12oz Slim (1000)', col: 8, row: 6,  unit: '1000pk', supplier: 'Planetware' },
-    { key: 'lid_hot',          name: 'CPLA Natural Lid 8oz (1000)',      col: 8, row: 7,  unit: '1000pk', supplier: 'Planetware' },
-    { key: 'cup_detpak_16oz',  name: "G'Day Tiger 16oz Detpak Cups (1000)", col: 8, row: 8, unit: '1000pk', supplier: '5Ways' },
-    { key: 'lid_sipper',       name: 'Plastic Sipper Lids (1000)',       col: 8, row: 9,  unit: '1000pk', supplier: 'Trio Supplies' },
-    { key: 'straw',            name: 'Paper Straws (2500)',              col: 8, row: 10, unit: '2500pk', supplier: 'Trio Supplies' },
-  ];
-
-  for (const ing of coffeeIngredients) {
-    const price = cc(ing.col, ing.row);
-    if (price !== null) {
-      ingredients.push({ key: ing.key, name: ing.name, price: price, unit: ing.unit, supplier: ing.supplier });
+    if (name === 'Milk' && size === 12000 && !seen['fc_milk_12l']) {
+      ingredients.push({ key: 'fc_milk_12l', name: 'FC Milk (12L)', price: cost, unit: '12L', supplier: 'Redi Milk' });
+      seen['fc_milk_12l'] = true;
+    } else if (name === 'Milk' && size === 6000 && !seen['soy_milk_6l']) {
+      ingredients.push({ key: 'soy_milk_6l', name: 'Soy Milk (6L)', price: cost, unit: '6L', supplier: 'Redi Milk' });
+      seen['soy_milk_6l'] = true;
+    } else if (name === 'Milk' && size === 2000 && !seen['oat_milk_2l']) {
+      ingredients.push({ key: 'oat_milk_2l', name: 'Oat/Almond Milk (2L)', price: cost, unit: '2L', supplier: 'Redi Milk' });
+      seen['oat_milk_2l'] = true;
+    } else if (name === 'Coffee' && cost > 30 && !seen['coffee_beans']) {
+      ingredients.push({ key: 'coffee_beans', name: 'Coffee Beans (1kg)', price: cost, unit: '1kg', supplier: 'Seven Seeds' });
+      seen['coffee_beans'] = true;
+    } else if (name === 'Coffee' && cost > 5 && cost <= 30 && !seen['decaf_beans']) {
+      ingredients.push({ key: 'decaf_beans', name: 'Decaf Beans (1kg)', price: cost, unit: '1kg', supplier: 'Seven Seeds' });
+      seen['decaf_beans'] = true;
+    } else if (name === 'Chai' && !seen['chai']) {
+      ingredients.push({ key: 'chai', name: 'Chai (1kg)', price: cost, unit: '1kg', supplier: 'Matsu Tea' });
+      seen['chai'] = true;
+    } else if (name === 'Chocolate' && !seen['chocolate']) {
+      ingredients.push({ key: 'chocolate', name: 'Mörk Chocolate (2.1kg)', price: cost, unit: '2.1kg', supplier: 'Mörk' });
+      seen['chocolate'] = true;
+    } else if (name === 'Straw' && !seen['straw']) {
+      ingredients.push({ key: 'straw', name: 'Paper Straws (2500)', price: cost, unit: '2500pk', supplier: 'Abicor' });
+      seen['straw'] = true;
+    } else if (name === 'Cup' && size === 1000 && cost > 120 && !seen['cup_large']) {
+      ingredients.push({ key: 'cup_large', name: 'Cups Large (1000)', price: cost, unit: '1000pk', supplier: 'Abicor' });
+      seen['cup_large'] = true;
+    } else if (name === 'Cup' && size === 1000 && cost > 60 && cost <= 120 && !seen['cup_medium']) {
+      ingredients.push({ key: 'cup_medium', name: 'Cups Med/Small (1000)', price: cost, unit: '1000pk', supplier: 'Abicor' });
+      seen['cup_medium'] = true;
+    } else if (name === 'Lid' && size === 1000 && cost > 60 && !seen['lid_standard']) {
+      ingredients.push({ key: 'lid_standard', name: 'Lids Standard (1000)', price: cost, unit: '1000pk', supplier: 'Abicor' });
+      seen['lid_standard'] = true;
     }
   }
 
@@ -118,7 +111,7 @@ function sipCollectPrices_() {
     // ── VEGETABLES ───────────────────────────────────────────────────────────
     { key: 'tomato',             name: 'Tomato (kg)',                       col: 8,  row: 5,  unit: 'kg',        supplier: 'Sciclunas' },
     { key: 'sauerkraut',         name: 'Sauerkraut (770g tin)',             col: 8,  row: 6,  unit: '770g tin',  supplier: 'PFD Foods' },
-    { key: 'pickles',            name: "McClure's Pickles (19L drum)",      col: 8,  row: 7,  unit: '19L drum',  supplier: 'Product Distribution' },
+    { key: 'pickles',            name: "McClure's Pickles (19L drum)",      col: 8,  row: 7,  unit: '19L drum',  supplier: '5Ways' },
     { key: 'mushrooms_raw',      name: 'Mushrooms (box)',                   col: 8,  row: 8,  unit: 'box',       supplier: 'Sciclunas' },
     { key: 'red_onion',          name: 'Red Onion (kg)',                    col: 8,  row: 9,  unit: 'kg',        supplier: 'Sciclunas' },
     { key: 'fennel',             name: 'Fennel (each)',                     col: 8,  row: 10, unit: 'each',      supplier: 'Sciclunas' },
@@ -131,7 +124,7 @@ function sipCollectPrices_() {
     { key: 'lemon',              name: 'Lemon (kg)',                        col: 8,  row: 17, unit: 'kg',        supplier: 'Sciclunas' },
     { key: 'carrot',             name: 'Carrot (kg)',                       col: 8,  row: 18, unit: 'kg',        supplier: 'Sciclunas' },
     { key: 'cucumber',           name: 'Cucumber (each)',                   col: 8,  row: 19, unit: 'each',      supplier: 'Sciclunas' },
-    { key: 'leni_peppers',       name: 'Leni Peppers (tin)',                col: 8,  row: 20, unit: 'tin',       supplier: '5Ways' },
+    { key: 'leni_peppers',       name: 'Leni Peppers (tin)',                col: 8,  row: 20, unit: 'tin',       supplier: 'Sciclunas' },
     // ── SAUCES ───────────────────────────────────────────────────────────────
     { key: 'dijon_mustard',      name: 'Dijon Mustard (2.5kg jar)',         col: 10, row: 5,  unit: '2.5kg jar', supplier: '5Ways' },
     { key: 'mayo',               name: 'Hellmans Mayo (20kg)',              col: 10, row: 6,  unit: '20kg',      supplier: '5Ways' },
@@ -143,6 +136,8 @@ function sipCollectPrices_() {
     { key: 'schnittas',          name: 'Schnittas (unit)',                  col: 12, row: 8,  unit: 'unit',      supplier: 'GDay Tiger' },
     { key: 'tiger_sauce',        name: 'Tiger Sauce (950g)',                col: 12, row: 10, unit: '950g',      supplier: 'GDay Tiger' },
     { key: 'honey_mustard_mayo', name: 'Honey Mustard Mayo (900g)',         col: 12, row: 11, unit: '900g',      supplier: 'GDay Tiger' },
+    { key: 'pickled_onions',     name: 'Pickled Onions (3200g)',            col: 12, row: 12, unit: '3200g',     supplier: 'GDay Tiger' },
+    { key: 'fennel_slaw',        name: 'Fennel Slaw (1100g)',               col: 12, row: 13, unit: '1100g',     supplier: 'GDay Tiger' },
     // ── EXTRAS ───────────────────────────────────────────────────────────────
     { key: 'butter',             name: 'Butter (1.5kg)',                    col: 14, row: 5,  unit: '1.5kg',     supplier: '5Ways' },
     { key: 'olive_oil',          name: 'Olive Oil (4L)',                    col: 14, row: 6,  unit: '4L',        supplier: '5Ways' },
@@ -150,8 +145,8 @@ function sipCollectPrices_() {
     { key: 'pepper',             name: 'Pepper (1kg)',                      col: 14, row: 8,  unit: '1kg',       supplier: '5Ways' },
     { key: 'eggs',               name: 'Eggs (15doz box)',                  col: 14, row: 9,  unit: '15doz box', supplier: 'Sciclunas' },
     // ── PACKAGING ────────────────────────────────────────────────────────────
-    { key: 'napkins',            name: 'Napkins (2000pk)',                  col: 16, row: 8,  unit: '2000pk',    supplier: 'Trio Supplies' },
-    { key: 'tray',               name: 'Paper Tray (150pk)',                col: 16, row: 9,  unit: '150pk',     supplier: 'Trio Supplies' },
+    { key: 'napkins',            name: 'Napkins (2000pk)',                  col: 16, row: 8,  unit: '2000pk',    supplier: 'Abicor' },
+    { key: 'tray',               name: 'Paper Tray (150pk)',                col: 16, row: 9,  unit: '150pk',     supplier: 'Abicor' },
     // ── PANTRY ───────────────────────────────────────────────────────────────
     { key: 'plain_flour',        name: 'Plain Flour (12.5kg)',              col: 18, row: 5,  unit: '12.5kg',    supplier: '5Ways' },
     { key: 'sr_flour',           name: 'Self-Raising Flour (12.5kg)',       col: 18, row: 6,  unit: '12.5kg',    supplier: '5Ways' },
@@ -160,10 +155,9 @@ function sipCollectPrices_() {
     { key: 'bicarb_soda',        name: 'Bicarb Soda (500g)',                col: 18, row: 9,  unit: '500g',      supplier: '5Ways' },
     { key: 'cinnamon',           name: 'Cinnamon (500g)',                   col: 18, row: 10, unit: '500g',      supplier: '5Ways' },
     { key: 'vegetable_oil',      name: 'Vegetable Oil (20L)',               col: 18, row: 11, unit: '20L',       supplier: '5Ways' },
-    // (sungold_milk removed — Coffee sheet D5 is the canonical Sungold Jersey FC entry)
+    { key: 'sungold_milk',       name: 'Sungold FC Milk (2L)',              col: 18, row: 12, unit: '2L',        supplier: 'Redi Milk' },
     { key: 'breadcrumbs',        name: 'Breadcrumbs Panko (10kg)',          col: 18, row: 13, unit: '10kg',      supplier: '5Ways' },
     { key: 'honey',              name: 'Honey (3kg)',                       col: 18, row: 14, unit: '3kg',       supplier: '5Ways' },
-    { key: 'pinenuts',           name: 'Pinenuts Kernel (1kg)',             col: 18, row: 15, unit: '1kg',       supplier: '5Ways' },
   ];
 
   for (const ing of foodIngredients) {
@@ -172,17 +166,6 @@ function sipCollectPrices_() {
       ingredients.push({ key: ing.key, name: ing.name, price: price, unit: ing.unit, supplier: ing.supplier });
     }
   }
-
-  // ── Custom ingredients (added via the app's Supplier Prices "+") ──────────────
-  // Read from the dynamic CustomIngredients tab (see AddIngredient.js) and merge
-  // any not already present by key, so app-added items appear in Supplier Prices.
-  try {
-    const have = {};
-    ingredients.forEach(function (i) { have[i.key] = true; });
-    sipCustomIngredients_().forEach(function (ci) {
-      if (ci.price > 0 && !have[ci.key]) ingredients.push(ci);
-    });
-  } catch (e) { /* AddIngredient.js helpers unavailable — skip */ }
 
   return {
     type: 'ingredient_prices',

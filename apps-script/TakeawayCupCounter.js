@@ -23,50 +23,38 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 var TA_CUP_THRESHOLD       = 10000;
-var TA_CUP_SHOPPING_PAGE   = '3683c99c0e8581c7b19cc2eec6b27b47'; // same Shopping List Notion page
-var TA_CUP_AUDIT_SS_ID     = '1M5VwhnaOjL29rUh3LC4JmL_4oriqIviMvUs7vd-2NTI'; // Coffee Costings SS (audit lives in CUP_AUDIT tab)
+var TA_CUP_SHOPPING_PAGE   = '3683c99c0e8581c7b19cc2eec6b27b47';
+var TA_CUP_AUDIT_SS_ID     = '1M5VwhnaOjL29rUh3LC4JmL_4oriqIviMvUs7vd-2NTI';
 var TA_CUP_AUDIT_SHEET     = 'CUP_AUDIT';
 
-// Property keys
 var PK_COUNTER       = 'TA_CUP_COUNTER';
-var PK_WATERMARK     = 'TA_CUP_WATERMARK';      // ISO timestamp of last processed order
-var PK_START_DATE    = 'TA_CUP_START_DATE';     // ISO date counter began
-var PK_LOCATION_ID   = 'TA_CUP_LOCATION_ID';    // cached primary Square location
+var PK_WATERMARK     = 'TA_CUP_WATERMARK';
+var PK_START_DATE    = 'TA_CUP_START_DATE';
+var PK_LOCATION_ID   = 'TA_CUP_LOCATION_ID';
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  INSTALL — run once
-// ─────────────────────────────────────────────────────────────────────────────
 function installTakeawayCupCounter() {
   var props = PropertiesService.getScriptProperties();
 
-  // Seed counter + start date if missing
   if (!props.getProperty(PK_COUNTER))    props.setProperty(PK_COUNTER, '0');
   if (!props.getProperty(PK_START_DATE)) props.setProperty(PK_START_DATE, '2026-06-01T00:00:00+10:00');
   if (!props.getProperty(PK_WATERMARK))  props.setProperty(PK_WATERMARK, '2026-06-01T00:00:00+10:00');
 
-  // Cache location ID
   cacheSquareLocation_();
-
-  // Ensure audit sheet exists
   ensureAuditSheet_();
 
-  // Remove any existing trigger for this function, then re-create
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'runTakeawayCupCounter') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('runTakeawayCupCounter')
     .timeBased()
     .everyDays(1)
-    .atHour(3) // 3am AEST — well after close
+    .atHour(3)
     .create();
 
   Logger.log('✓ Installed. Counter at %s, threshold %s, daily trigger set for 3am.',
              props.getProperty(PK_COUNTER), TA_CUP_THRESHOLD);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  RESET — manual
-// ─────────────────────────────────────────────────────────────────────────────
 function resetTakeawayCupCounter() {
   var props = PropertiesService.getScriptProperties();
   var now = new Date().toISOString();
@@ -76,9 +64,6 @@ function resetTakeawayCupCounter() {
   Logger.log('Counter reset. New start: %s', now);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  DAILY POLL
-// ─────────────────────────────────────────────────────────────────────────────
 function runTakeawayCupCounter() {
   var props      = PropertiesService.getScriptProperties();
   var locationId = props.getProperty(PK_LOCATION_ID) || cacheSquareLocation_();
@@ -103,9 +88,6 @@ function runTakeawayCupCounter() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  SQUARE — paginate orders and tally TA/LG line items
-// ─────────────────────────────────────────────────────────────────────────────
 function countTakeawayCupsBetween_(locationId, startIso, endIso) {
   var token = PropertiesService.getScriptProperties().getProperty('SQUARE_ACCESS_TOKEN');
   if (!token) throw new Error('SQUARE_ACCESS_TOKEN not set.');
@@ -164,9 +146,6 @@ function countTakeawayCupsBetween_(locationId, startIso, endIso) {
   return total;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  NOTION — append to Shopping List
-// ─────────────────────────────────────────────────────────────────────────────
 function triggerShoppingNotice_(counter) {
   var key = PropertiesService.getScriptProperties().getProperty('NOTION_API_KEY');
   if (!key) throw new Error('NOTION_API_KEY not set.');
@@ -205,9 +184,6 @@ function triggerShoppingNotice_(counter) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
 function cacheSquareLocation_() {
   var token = PropertiesService.getScriptProperties().getProperty('SQUARE_ACCESS_TOKEN');
   if (!token) throw new Error('SQUARE_ACCESS_TOKEN not set.');
@@ -246,14 +222,10 @@ function appendAudit_(when, counter, text) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  TEST — manual probe; does NOT advance the watermark
-// ─────────────────────────────────────────────────────────────────────────────
 function testTakeawayCupCounter() {
   var props = PropertiesService.getScriptProperties();
   var locationId = props.getProperty(PK_LOCATION_ID) || cacheSquareLocation_();
 
-  // Look at last 7 days as a sanity check
   var end = new Date();
   var start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
   var n = countTakeawayCupsBetween_(locationId, start.toISOString(), end.toISOString());

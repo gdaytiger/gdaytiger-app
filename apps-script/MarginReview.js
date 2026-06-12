@@ -96,6 +96,33 @@ var MR_EXTRA_MAP = (function () {
       recipes: ['TAKEAWAY ' + v.base + ' (LARGE)', 'DINE IN ' + v.base + ' (LARGE)'] });
   });
 
+  // Chai — never wired in COFFEE_SQUARE_MAP (see its TODO). Rings through
+  // the white-coffee items with a 'Chai' modifier; milk modifiers stack
+  // (Chai+Soy etc). Safety entries also cover a standalone 'Chai' item in
+  // case some registers ring it directly.
+  [
+    { milk: [],         base: 'CHAI' },
+    { milk: ['Soy'],    base: 'SOY CHAI' },
+    { milk: ['Oat'],    base: 'OAT CHAI' },
+    { milk: ['Almond'], base: 'ALMOND CHAI' },
+  ].forEach(function (v) {
+    var withChai = ['Chai'].concat(v.milk);
+    entries.push({ squareItem: 'TA White', modifiers: withChai,
+      recipes: ['TAKEAWAY ' + v.base, 'TAKEAWAY ' + v.base + ' (SMALL)', 'DINE IN ' + v.base] });
+    entries.push({ squareItem: 'LG White', modifiers: withChai,
+      recipes: ['TAKEAWAY ' + v.base + ' (LARGE)', 'DINE IN ' + v.base + ' (LARGE)'] });
+    ['Flat White', 'Latte', 'Cappuccino'].forEach(function (item) {
+      entries.push({ squareItem: item, modifiers: withChai,
+        recipes: ['DINE IN ' + v.base, 'DINE IN ' + v.base + ' (SMALL)', 'TAKEAWAY ' + v.base] });
+    });
+    ['Chai', 'Chai Latte'].forEach(function (item) {
+      entries.push({ squareItem: item, modifiers: v.milk,
+        recipes: ['TAKEAWAY ' + v.base, 'DINE IN ' + v.base] });
+      entries.push({ squareItem: item, modifiers: v.milk, variation: 'Large',
+        recipes: ['TAKEAWAY ' + v.base + ' (LARGE)', 'DINE IN ' + v.base + ' (LARGE)'] });
+    });
+  });
+
   return entries;
 })();
 
@@ -113,6 +140,22 @@ function runWeeklyMarginReview() {
 // Preview in the editor without touching Notion.
 function printMarginReview() {
   Logger.log(JSON.stringify(buildMarginReview_(), null, 2));
+}
+
+// Diagnostic: dump EVERY 7-day sales bucket (item|variation|modifiers → qty),
+// sorted by qty. Use to discover how a drink actually rings through Square
+// before adding MR_EXTRA_MAP entries.
+function printAllBuckets() {
+  var end     = new Date();
+  var start   = new Date(end.getTime() - 7 * 86400000);
+  var buckets = mrFetchSquareBuckets_(start.toISOString(), end.toISOString());
+  var list = [];
+  for (var k in buckets) list.push(buckets[k]);
+  list.sort(function (a, b) { return b.qty - a.qty; });
+  list.forEach(function (b) {
+    Logger.log('%s | qty %s | $%s', b.display, b.qty, (b.gross / 100).toFixed(2));
+  });
+  Logger.log('— %s buckets total —', list.length);
 }
 
 function installMarginReview() {
@@ -486,4 +529,48 @@ function mrWriteToNotion_(payload) {
       muteHttpExceptions: true,
     });
   }
+}
+
+
+// TEMP diagnostic: one-line summary of every bucket mentioning CHAI.
+function printChaiBuckets() {
+  var end = new Date(); var start = new Date(end.getTime() - 7 * 86400000);
+  var buckets = mrFetchSquareBuckets_(start.toISOString(), end.toISOString());
+  var out = [];
+  for (var k in buckets) {
+    if (buckets[k].display.toUpperCase().indexOf('CHAI') !== -1) {
+      out.push(buckets[k].display + ' qty ' + buckets[k].qty);
+    }
+  }
+  Logger.log(out.join('  ||  ') || 'NO CHAI BUCKETS FOUND');
+}
+
+
+// TEMP diagnostic: every distinct line-item modifier name in the last 7 days.
+function printAllModifiers() {
+  var token = PropertiesService.getScriptProperties().getProperty('SQUARE_ACCESS_TOKEN');
+  var locationId = PropertiesService.getScriptProperties().getProperty(PK_LOCATION_ID) || cacheSquareLocation_();
+  var end = new Date(); var start = new Date(end.getTime() - 7 * 86400000);
+  var counts = {};
+  var cursor = null; var safety = 0;
+  do {
+    var body = { location_ids: [locationId], query: { filter: { date_time_filter: { created_at: { start_at: start.toISOString(), end_at: end.toISOString() } }, state_filter: { states: ['COMPLETED'] } } }, limit: 500 };
+    if (cursor) body.cursor = cursor;
+    var resp = UrlFetchApp.fetch('https://connect.squareup.com/v2/orders/search', { method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + token, 'Square-Version': '2024-06-04' }, payload: JSON.stringify(body), muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) break;
+    var json = JSON.parse(resp.getContentText());
+    (json.orders || []).forEach(function (o) {
+      (o.line_items || []).forEach(function (li) {
+        (li.modifiers || []).forEach(function (mod) {
+          var n = (mod.name || '').trim();
+          if (n) counts[n] = (counts[n] || 0) + (parseInt(li.quantity || '1', 10) || 1);
+        });
+      });
+    });
+    cursor = json.cursor || null; safety++;
+  } while (cursor && safety < 50);
+  var out = [];
+  for (var k in counts) out.push(k + ':' + counts[k]);
+  out.sort();
+  Logger.log(out.join('  |  ') || 'NO MODIFIERS');
 }
