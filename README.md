@@ -174,7 +174,7 @@ TakeawayCupCounter (daily) → Planetware cup reorder at 10,000 cups
 |---|---|
 | `SaveInvoicesToDrive.js` | Gmail watcher — saves supplier PDF attachments to Drive, labels `invoice-saved` |
 | `ScanSuppliers.js` | Reads Drive/Gmail PDFs → writes ingredient prices to Food + Coffee sheets |
-| `SyncCostingsToNotion.js` | Pushes Sell Price + Profit % to Notion Costings DB (30 min) |
+| `SyncCostingsToNotion.js` | Pushes Sell Price + Profit % + Cost (Total+Wastage) to Notion Costings DB (30 min). Cost added Jun 2026 — food + coffee. |
 | `SyncSquarePrices.js` | Pulls live Square retail prices → Coffee Costings sheet (hourly) |
 | `SyncIngredientPrices.js` | Writes ingredient prices as chunked JSON to Notion OS page (30 min) |
 | `BuildRecipeMap.js` | Parses FOOD sheet formulas → ingredient→product map → `recipe_map` Notion block (daily) |
