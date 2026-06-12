@@ -188,6 +188,13 @@ function buildMarginReview_() {
 
   unmatched.sort(function (a, b) { return b.weeklyQty - a.weeklyQty; });
 
+  // Weekly volume for EVERY matched product (greens included) so the
+  // dashboard can show qty/wk on all tiles, not just flagged ones.
+  var sales = [];
+  for (var sk in acc) {
+    sales.push({ name: acc[sk].product.name, weeklyQty: acc[sk].qty });
+  }
+
   return {
     type:           'margin_review',
     updated:        new Date().toISOString(),
@@ -197,6 +204,7 @@ function buildMarginReview_() {
     items:          top,
     totalShortfall: r2(top.reduce(function (s, i) { return s + i.shortfall; }, 0)),
     greenCount:     greenCount,
+    sales:          sales,
     unmatched:      unmatched.slice(0, MR_MAX_UNMATCHED),
     duplicates:     fetched.duplicates,   // Notion costing entries sharing a name
   };

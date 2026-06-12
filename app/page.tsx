@@ -683,6 +683,7 @@ type MarginReviewData = {
   items: MarginReviewItem[];
   totalShortfall?: number;
   greenCount?: number;
+  sales?: { name: string; weeklyQty: number }[];
   unmatched?: { name: string; weeklyQty: number; weeklyGross: number }[];
 };
 
@@ -1074,7 +1075,7 @@ function supplierIcon(name: string): string {
   return hit ? hit.icon : '📦';
 }
 
-function ProductItem({ p, review }: { p: CostingProduct; review?: MarginReviewItem }) {
+function ProductItem({ p, review, weeklyQty }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number }) {
   const mc = p.margin! >= 70 ? '#16a34a' : p.margin! >= 60 ? '#d97706' : '#dc2626';
   const bar = Math.min(100, Math.max(0, p.margin!));
   return (
@@ -1101,14 +1102,15 @@ function ProductItem({ p, review }: { p: CostingProduct; review?: MarginReviewIt
         <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.07)' }}>
           <div className="h-full rounded-full" style={{ width: `${bar}%`, background: mc, transition: 'width 0.6s ease' }} />
         </div>
-        {review && (
+        {weeklyQty !== undefined && (
           <span className="text-xs text-gray-400 shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}
-            title={`Sold ${review.weeklyQty} in the last 7 days — earning ~$${Math.round(review.shortfall)}/wk less than at the 70% target margin`}>
-            {review.weeklyQty}/wk
+            title={`Sold ${weeklyQty} in the last 7 days (Square)`}>
+            {weeklyQty}/wk
           </span>
         )}
         {review && (
-          <span className="text-xs font-black shrink-0" style={{ color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>
+          <span className="text-xs font-black shrink-0" style={{ color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}
+            title={`Earning ~$${Math.round(review.shortfall)}/wk less than at the 70% target margin`}>
             −${Math.round(review.shortfall)}/wk
           </span>
         )}
@@ -1117,7 +1119,7 @@ function ProductItem({ p, review }: { p: CostingProduct; review?: MarginReviewIt
   );
 }
 
-function ProductColumn({ items, height = 272, reviews }: { items: CostingProduct[]; height?: number; reviews?: Map<string, MarginReviewItem> }) {
+function ProductColumn({ items, height = 272, reviews, sales }: { items: CostingProduct[]; height?: number; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number> }) {
   return (
     <div className="flex-1 min-w-0">
       {items.length === 0 ? (
@@ -1126,7 +1128,10 @@ function ProductColumn({ items, height = 272, reviews }: { items: CostingProduct
         <div className="relative" style={{ height: `${height}px` }}>
           <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
           <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
-            {items.map(p => <ProductItem key={p.id} p={p} review={reviews?.get(p.name.toUpperCase().trim())} />)}
+            {items.map(p => {
+              const key = p.name.toUpperCase().trim();
+              return <ProductItem key={p.id} p={p} review={reviews?.get(key)} weeklyQty={sales?.get(key)} />;
+            })}
           </div>
         </div>
       )}
@@ -1174,6 +1179,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, re
   // the same DB). Rendered inline on each product tile as qty/wk + −$/wk.
   const reviewItems  = marginReview?.items ?? [];
   const reviewMap    = new Map<string, MarginReviewItem>(reviewItems.map(i => [i.name.toUpperCase().trim(), i]));
+  const salesMap     = new Map<string, number>((marginReview?.sales ?? []).map(s => [s.name.toUpperCase().trim(), s.weeklyQty]));
   const coffeeAtRisk = reviewItems.filter(i => i.category === 'Coffee').reduce((s, i) => s + i.shortfall, 0);
   const foodAtRisk   = reviewItems.filter(i => i.category !== 'Coffee').reduce((s, i) => s + i.shortfall, 0);
   const reviewWeek   = marginReview?.weekStart && marginReview?.weekEnd
@@ -1381,7 +1387,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, re
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
           <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} week={reviewWeek} />
-          <ProductColumn items={coffeeItems} height={450} reviews={reviewMap} />
+          <ProductColumn items={coffeeItems} height={450} reviews={reviewMap} sales={salesMap} />
         </Card>
       </div>
 
@@ -1389,7 +1395,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, re
       <div style={{ display: open.food ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
           <MarginBadges items={foodItems} atRisk={foodAtRisk} week={reviewWeek} />
-          <ProductColumn items={foodItems} height={450} reviews={reviewMap} />
+          <ProductColumn items={foodItems} height={450} reviews={reviewMap} sales={salesMap} />
         </Card>
       </div>
 
