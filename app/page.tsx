@@ -1171,7 +1171,11 @@ function MarginBadges({ items, atRisk, week }: { items: CostingProduct[]; atRisk
 }
 
 function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { coffee: boolean; food: boolean; supplier: boolean }; onCollapse: (key: 'coffee' | 'food' | 'supplier') => void }) {
-  const withMargin  = costings.filter(p => p.margin !== null);
+  // Made-in-house components (sub-recipes like Fennel Slaw, Pickled Onions) are
+  // tracked in the Supplier Prices widget, NOT as sellable products. Exclude any
+  // costing row whose Notes flag it as a component so it never renders as a tile.
+  const isComponent = (p: CostingProduct) => /made in house|component of/i.test(p.notes || '');
+  const withMargin  = costings.filter(p => p.margin !== null && !isComponent(p));
   const coffeeItems = [...withMargin].filter(p => p.category === 'Coffee').sort((a, b) => a.margin! - b.margin!);
   const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee').sort((a, b) => a.margin! - b.margin!);
 
