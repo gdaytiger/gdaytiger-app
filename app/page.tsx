@@ -2224,7 +2224,6 @@ export default function Home() {
               );
               const elements = [
                 ...uncheckedGroups.flatMap(group => group.tasks.map(task => renderTask(task, group.category))),
-                ...checkedBucket.map(({ task, category }) => renderTask(task, category)),
               ];
               // 🛒 Shopping List — one collapsible tile with a count badge (like the week-ahead rows).
               // Tap to expand into one tile per item; tick = bought (writes to Notion, won't return).
@@ -2233,7 +2232,8 @@ export default function Home() {
               const shoppingChecked = shoppingItems.filter(t => t.checked);
               const shoppingCount = shoppingUnchecked.length;
               const tileStyle = { minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
-              // Shopping link row — only shown when there are items; opens the shopping widget
+              // Shopping link row — only shown when there are unchecked items; opens the shopping widget.
+              // Placed above the checked-tasks bucket so it stays visible while there's still shopping to do.
               if (!isViewingOtherDay && shoppingBadge > 0) elements.push(
                 <div key="shopping" onClick={openShoppingWidget} role="button"
                   className="rounded-2xl cursor-pointer flex items-center gap-3 px-3"
@@ -2244,6 +2244,7 @@ export default function Home() {
                   <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('shopping') ? '▼' : '▶'}</span>
                 </div>
               );
+              elements.push(...checkedBucket.map(({ task, category }) => renderTask(task, category)));
               return elements;
             })()}
           </div>
