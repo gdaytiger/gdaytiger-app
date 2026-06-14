@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 
 export async function PATCH(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { blockId, checked } = await req.json();
 
   const res = await fetch(`https://api.notion.com/v1/blocks/${blockId}`, {

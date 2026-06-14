@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -246,6 +247,8 @@ function buildContent(recurrence: Recurrence, date: string, d: Date, text: strin
 }
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { date, text, category: rawCategory, context, recurrence: rawRecurrence } = await req.json();
 
   if (!date || !text?.trim()) {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 // Use the main G'DAY TIGER OS page — guaranteed accessible by NOTION_API_KEY
@@ -86,6 +87,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { blockId, date, checked } = await req.json();
   const { id: stateBlockId, state } = await getStateBlock();
   if (!stateBlockId) return NextResponse.json({ success: false, error: 'No state block found' });

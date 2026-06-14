@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
+import { notionFetch } from '@/app/lib/notion';
 
-const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const COSTINGS_DB_ID = '8f16358a47e54062b5fe1ce7a7480754';
 const REVIEW_DAYS = 60;
 
@@ -17,13 +17,7 @@ export async function GET() {
     };
     if (cursor) body.start_cursor = cursor;
 
-    const res = await fetch(`https://api.notion.com/v1/databases/${COSTINGS_DB_ID}/query`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${NOTION_API_KEY}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      cache: 'no-store',
-    });
-    const data = await res.json();
+    const data = await notionFetch(`/databases/${COSTINGS_DB_ID}/query`, 'POST', body);
     allResults.push(...(data.results || []));
     cursor = data.has_more ? data.next_cursor : undefined;
   } while (cursor);

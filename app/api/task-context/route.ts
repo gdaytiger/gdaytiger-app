@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const STATE_PARENT_ID = '3403c99c0e858113a941c2118b3cdef9';
@@ -73,6 +74,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { blockId, text } = await req.json();
   if (!blockId) return NextResponse.json({ error: 'Missing blockId' }, { status: 400 });
 

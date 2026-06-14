@@ -73,31 +73,22 @@ async function getCheckedState(): Promise<Record<string, string[]>> {
   return {};
 }
 
-async function getCarryOverTasks(today: Date, checkedState: Record<string, string[]>) {
-  // todayStr was previously computed here but is no longer used by this function —
-  // formatYMD is invoked in the caller. Kept intentionally lightweight.
-
-  // Check today's page + past 6 days (7 total). Today is included so that [CARRY]
-  // tasks on their home day go through the same checked-state check as any other day.
-  const pastDays = Array.from({ length: 7 }, (_, i) => {
-    const past = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
-    return {
-      pageId: DAY_PAGES[past.getDay()],
-      dateStr: formatYMD(past),
-    };
-  });
-
+// Fetch raw [CARRY] candidates from today + the past 6 days (7 pages). This has
+// no dependency on checked state, so it runs inside the main Promise.all batch
+// rather than as a serial step after it. The checked-state filtering happens in
+// memory in GET() once both this and getCheckedState() have resolved.
+async function fetchCarryCandidates(today: Date) {
   const pages = await Promise.all(
-    pastDays.map(async ({ pageId, dateStr }) => ({
-      dateStr,
-      data: await notionFetch(`/blocks/${pageId}/children?page_size=100`),
-    }))
+    Array.from({ length: 7 }, (_, i) => {
+      const past = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+      return notionFetch(`/blocks/${DAY_PAGES[past.getDay()]}/children?page_size=100`);
+    })
   );
 
-  const carries: { id: string; text: string; header: string }[] = [];
+  const candidates: { id: string; text: string; header: string }[] = [];
   const seenIds = new Set<string>();
 
-  for (const { dateStr, data } of pages) {
+  for (const data of pages) {
     let currentHeader = 'ADMIN';
     for (const block of (data.results || [])) {
       if (block.type === 'heading_2' || block.type === 'heading_3') {
@@ -119,19 +110,11 @@ async function getCarryOverTasks(today: Date, checkedState: Record<string, strin
       }
       if (!raw.startsWith('[CARRY]')) continue;
       if (seenIds.has(block.id)) continue; // deduplicate across pages
-
-      // Carry if the task hasn't been checked on ANY date within the retention window.
-      // No date-range comparison — if the block ID appears anywhere in the checked state
-      // (retained for 8 days by /api/checked-state), suppress the task.
-      const wasChecked = Object.values(checkedState).some(ids => ids.includes(block.id));
-
-      if (!wasChecked) {
-        seenIds.add(block.id);
-        carries.push({ id: block.id, text: raw.replace('[CARRY]', '').trim(), header: currentHeader });
-      }
+      seenIds.add(block.id);
+      candidates.push({ id: block.id, text: raw.replace('[CARRY]', '').trim(), header: currentHeader });
     }
   }
-  return carries;
+  return candidates;
 }
 
 async function getDailyTasks(dayOfWeek: number, today: Date) {
@@ -216,17 +199,23 @@ export async function GET() {
   const today = new Date(new Date().getTime() + 10 * 60 * 60 * 1000);
   const dayOfWeek = today.getDay();
 
-  const [weather, dailyTasks, projects, personalTodos, checkedState, shoppingItems] = await Promise.all([
+  const [weather, dailyTasks, projects, personalTodos, checkedState, shoppingItems, carryCandidates] = await Promise.all([
     getWeather(),
     getDailyTasks(dayOfWeek, today),
     getProjects(),
     getPersonalTodos(),
     getCheckedState(),
     getShoppingTasks(),
+    fetchCarryCandidates(today),
   ]);
 
-  // Inject any [CARRY] tasks from past days that haven't been checked off yet
-  const carries = await getCarryOverTasks(today, checkedState);
+  // Inject any [CARRY] tasks from past days that haven't been checked off yet.
+  // Carry if the task ID hasn't been checked on ANY date in the retention window
+  // (checked state is retained ~8 days by /api/checked-state). Filtered in memory
+  // here so the page fetch above can run in parallel with everything else.
+  const carries = carryCandidates.filter(
+    c => !Object.values(checkedState).some(ids => ids.includes(c.id))
+  );
   for (const carry of carries) {
     const carryTask = { id: carry.id, text: carry.text, checked: false, isRecurring: false };
     const headerIdx = dailyTasks.findIndex((t: { isHeader?: boolean; text: string }) => t.isHeader && t.text === carry.header);

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { projectId, text, texts } = await req.json();
   // Accept either a single `text` or a batch `texts[]` (used by AI capture).
   const list: string[] = (Array.isArray(texts) ? texts : [text])

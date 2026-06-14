@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 
@@ -37,6 +38,8 @@ function blockText(block: any): string {
 }
 
 export async function DELETE(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { blockId } = await req.json();
 
   if (!blockId) {

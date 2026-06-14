@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
@@ -13,6 +14,8 @@ interface ExistingProject {
 // Turns a raw brain-dump into a structured project draft. Decides whether the
 // idea is a brand-new project or another action on one Jonathan already has.
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { ideaText, existingProjects = [] } = (await req.json()) as {
     ideaText: string;
     existingProjects: ExistingProject[];

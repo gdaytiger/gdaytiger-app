@@ -76,6 +76,10 @@ Brain Dump capture at top: free-text idea → `/api/braindump-analyze` (Opus) de
 ### ☕ Coffee Costings / 🥪 Food Costings
 Live margin view from Notion Costings DB. Sorted worst→best margin. MarginBadge summary (avg %, red/amber/green counts). Add-product button → AddProductModal.
 
+**Weekly margin review folded into tiles.** Each product tile shows `N/wk` (units sold in the last 7 days, from Square) and, where the recipe is under the 70% target, `−$X/wk` shortfall. Data from `/api/margin-review` (reads the `margin_review` Notion JSON block written Mondays 6am by `MarginReview.js`). Card header shows total $/wk at risk. Square modifier maps attribute each sales bucket to exactly one costing (no double-count); unmapped sellers surface in `unmatched` for coverage gaps.
+
+**Made-in-house components are hidden from these tiles.** Any Costings row whose **Notes** contains `made in house` or `component of` (case-insensitive) is treated as a sub-recipe (e.g. Fennel Slaw, Pickled Onions) and excluded from both columns — it's tracked in the Supplier Prices widget instead. Convention: when costing a sub-recipe as its own row, put "made in house" or "component of …" in its Notes field. Filter lives in `app/page.tsx` (`isComponent`).
+
 ### 📦 Supplier Prices
 Ingredient-level price tracking, grouped into collapsible supplier tiles with search. Cards show ingredient, supplier, price/unit, affected-product count. 7-day delta shown red/green. "Add ingredient from invoice" via `/api/find-ingredient-price`. Data from `SyncIngredientPrices` → Notion JSON block.
 
@@ -130,6 +134,7 @@ TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e8
 | `/api/ingredient-prices` | GET | Reads chunked `ingredient_prices` JSON block from OS page |
 | `/api/recipe-map` | GET | Reads `recipe_map` JSON block (ingredient→product attribution) |
 | `/api/price-drift` | GET | Reads `price_drift_warnings` JSON block |
+| `/api/margin-review` | GET | Reads `margin_review` JSON block (weekly margin intelligence; powers `N/wk` + `−$/wk` on costing tiles) |
 | `/api/tigeros-tasks` | GET | Fetch Tiger OS backlog tasks + subtasks (Updates widget) |
 | `/api/login` | POST | Password auth → set `gdt_session` cookie |
 
@@ -178,6 +183,7 @@ TakeawayCupCounter (daily) → Planetware cup reorder at 10,000 cups
 | `SyncSquarePrices.js` | Pulls live Square retail prices → Coffee Costings sheet (hourly) |
 | `SyncIngredientPrices.js` | Writes ingredient prices as chunked JSON to Notion OS page (30 min) |
 | `BuildRecipeMap.js` | Parses FOOD sheet formulas → ingredient→product map → `recipe_map` Notion block (daily) |
+| `MarginReview.js` | Joins 7 days of Square item sales against Notion Costings DB, ranks underperforming recipes by weekly $ impact → `margin_review` Notion block (Mondays 6am). Curated modifier maps attribute each sales bucket to one costing. `installMarginReview()` one-off setup; `printMarginReview()` previews. |
 | `TakeawayCupCounter.js` | Polls Square Orders daily, tallies Planetware cups. At 10,000, appends reorder to Shopping List. Counter start: 2026-06-01. |
 | `AddProduct.js` / `AddIngredient.js` | Web-app endpoints backing in-app Add Product / Add Ingredient modals |
 | `BackupCostings.js` | Costings sheet backup |

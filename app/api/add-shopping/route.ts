@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const SHOPPING_PAGE_ID = '3683c99c0e8581c7b19cc2eec6b27b47';
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { text } = await req.json();
   if (!text?.trim()) {
     return NextResponse.json({ error: 'Missing text' }, { status: 400 });

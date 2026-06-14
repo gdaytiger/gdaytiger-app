@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const PROJECTS_DB_ID = 'f7712afe4c7247d7b1690f2e1ecc1a0d';
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { projectName, nextActions, ideaText } = await req.json();
 
   const headers = {

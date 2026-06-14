@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 // Proxies an invoice-price search to the shared AddProduct Apps Script Web App.
 // Apps Script scans recent invoice PDFs across supplier folders for the keyword.
@@ -9,6 +10,8 @@ export const maxDuration = 60; // invoice OCR across folders can be slow
 type Body = { query?: string };
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const url = process.env.ADD_PRODUCT_WEBAPP_URL;
   const secret = process.env.ADD_PRODUCT_SECRET;
   if (!url || !secret) {

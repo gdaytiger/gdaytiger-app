@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 // Calls the AddProduct Apps Script Web App, which writes the new section
 // to the costings sheet + creates a Notion DB row + triggers buildRecipeMap.
@@ -20,6 +21,8 @@ type AddProductBody = {
 };
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const url = process.env.ADD_PRODUCT_WEBAPP_URL;
   const secret = process.env.ADD_PRODUCT_SECRET;
   if (!url || !secret) {

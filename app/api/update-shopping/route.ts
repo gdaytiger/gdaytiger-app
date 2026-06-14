@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 
 // Rewrite a shopping item's text — used to adjust its quantity (e.g. "basil ×2").
 export async function PATCH(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { blockId, text } = await req.json();
   if (!blockId || !text?.trim()) {
     return NextResponse.json({ error: 'Missing blockId or text' }, { status: 400 });

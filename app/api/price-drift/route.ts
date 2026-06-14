@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
+import { notionFetch } from '@/app/lib/notion';
 
 // Reads the `price_drift_warnings` JSON code block from the TIGEROS Notion OS page.
 // The block is written weekly by Apps Script `syncDriftToNotion()`
 // (apps-script/ScanSuppliers.js). Pattern mirrors /api/ingredient-prices.
 
-const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const NOTION_PAGE_ID = '3403c99c0e858113a941c2118b3cdef9';
 
 type DriftWarning = {
@@ -22,18 +22,6 @@ type DriftPayload = {
   updated: string | null;
   warnings: DriftWarning[];
 };
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function notionFetch(path: string): Promise<any> {
-  const res = await fetch(`https://api.notion.com/v1${path}`, {
-    headers: {
-      Authorization: `Bearer ${NOTION_API_KEY}`,
-      'Notion-Version': '2022-06-28',
-    },
-    cache: 'no-store',
-  });
-  return res.json();
-}
 
 export async function GET() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

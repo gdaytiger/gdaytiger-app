@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 // Adds a custom ingredient (chosen from an invoice match) to the dynamic
 // CustomIngredients tab via the shared AddProduct Apps Script Web App, which
@@ -16,6 +17,8 @@ type Body = {
 };
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const url = process.env.ADD_PRODUCT_WEBAPP_URL;
   const secret = process.env.ADD_PRODUCT_SECRET;
   if (!url || !secret) {

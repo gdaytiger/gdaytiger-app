@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 // 🐯 TIGER OS Backlog — manual to-do list powering the Update widget.
@@ -67,6 +68,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { name, order } = await req.json();
   if (!name || typeof name !== 'string' || !name.trim()) {
     return NextResponse.json({ error: 'name required.' }, { status: 400 });
@@ -92,6 +95,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { taskId, done } = await req.json();
   if (!taskId) return NextResponse.json({ error: 'taskId required.' }, { status: 400 });
   const res = await fetch(`https://api.notion.com/v1/pages/${taskId}`, {

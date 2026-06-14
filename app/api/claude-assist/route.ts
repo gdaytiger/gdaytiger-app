@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/app/lib/auth';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
@@ -7,6 +8,8 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
+  const denied = requireSession(req);
+  if (denied) return denied;
   const { messages, projectName, actionText } = await req.json();
 
   const systemPrompt = `You are a sharp, practical business assistant for G'Day Tiger — a busy Melbourne café run by Jonathan. You help him work through business tasks efficiently. Jonathan is an experienced operator who doesn't need hand-holding. Be direct, commercially aware, and keep responses concise and actionable. No fluff.
