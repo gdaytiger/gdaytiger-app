@@ -3,7 +3,10 @@ import type { NextRequest } from 'next/server';
 
 const SESSION_TOKEN = process.env.SESSION_TOKEN;
 
-export function middleware(request: NextRequest) {
+// Next 16 renamed the "middleware" file convention to "proxy". Same behaviour —
+// this gates every route on the gdt_session cookie. The per-route requireSession()
+// guards in app/lib/auth.ts back this up in case a proxy bypass ever lands.
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Always allow login page and login API through
