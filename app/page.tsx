@@ -5,6 +5,12 @@ import AddProductModal from './components/AddProductModal';
 import AddIngredientModal from './components/AddIngredientModal';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
 
+// Blended "True Payment Cost" — Square processing fees as a % of total revenue,
+// from Sales Summary (12mo to 15 Jun 2026): $12,916.54 fees / $1,262,991.94 collected.
+// Update periodically by re-pulling the same report. Cash sales carry no fee, so this
+// is a business-wide blended rate — applied to margin %, not baked into per-item costs.
+const MERCHANT_FEE_PCT = 1.02;
+
 interface Todo {
   id: string;
   text: string;
@@ -687,6 +693,21 @@ type MarginReviewData = {
   unmatched?: { name: string; weeklyQty: number; weeklyGross: number }[];
 };
 
+// Rolling "True Payment Cost" — Square fees as a % of total revenue, computed
+// by apps-script/PaymentFeeTracker.js. Until enough days have backfilled,
+// the dashboard falls back to MERCHANT_FEE_PCT.
+type PaymentFeesData = {
+  type: string;
+  updated: string | null;
+  daysCovered: number;
+  totalCollected: number;
+  totalFees: number;
+  feePct: number | null;
+};
+
+// Minimum days of live data before trusting the live rate over the static fallback.
+const PAYMENT_FEES_MIN_DAYS = 30;
+
 type RecipeMapProduct = {
   id?: string;
   section: string;
@@ -1139,14 +1160,27 @@ function ProductColumn({ items, height = 272, reviews, sales }: { items: Costing
   );
 }
 
-function MarginBadges({ items, atRisk, week }: { items: CostingProduct[]; atRisk?: number; week?: string }) {
+function MarginBadges({ items, atRisk, week, paymentFees }: { items: CostingProduct[]; atRisk?: number; week?: string; paymentFees?: PaymentFeesData | null }) {
   const avg    = items.length > 0 ? items.reduce((s, p) => s + p.margin!, 0) / items.length : null;
+  // Prefer the live rolling rate once enough days have backfilled; otherwise
+  // fall back to the static constant (see MERCHANT_FEE_PCT comment for source).
+  const liveFee = paymentFees && paymentFees.feePct !== null && paymentFees.daysCovered >= PAYMENT_FEES_MIN_DAYS
+    ? paymentFees.feePct : null;
+  const feePct  = liveFee ?? MERCHANT_FEE_PCT;
+  const net     = avg !== null ? avg - feePct : null;
   const red    = items.filter(p => p.margin! < 60).length;
   const yellow = items.filter(p => p.margin! >= 60 && p.margin! < 70).length;
   const green  = items.filter(p => p.margin! >= 70).length;
   return (
     <div className="flex items-center gap-2 flex-wrap pb-3 mb-1 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
       {avg !== null && <span className="text-xs text-gray-500">Avg <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>}
+      {net !== null && (
+        <span className="text-xs text-gray-400" title={liveFee !== null
+          ? `Net of ${feePct.toFixed(2)}% blended Square processing fee (rolling ${paymentFees!.daysCovered}-day Square fees ÷ revenue, updated ${paymentFees!.updated ? new Date(paymentFees!.updated).toLocaleDateString('en-AU') : '—'})`
+          : `Net of ~${feePct}% blended Square processing fee (static estimate — live tracker still backfilling)`}>
+          Net <span className="font-bold text-gray-600">{net.toFixed(1)}%</span>
+        </span>
+      )}
       {[
         { count: red,    label: 'under 60%', bg: 'rgba(220,38,38,0.10)',   border: 'rgba(220,38,38,0.25)',   color: '#991b1b' },
         { count: yellow, label: '60–70%',    bg: 'rgba(217,119,6,0.10)',   border: 'rgba(217,119,6,0.25)',   color: '#78350f' },
@@ -1170,7 +1204,7 @@ function MarginBadges({ items, atRisk, week }: { items: CostingProduct[]; atRisk
   );
 }
 
-function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { coffee: boolean; food: boolean; supplier: boolean }; onCollapse: (key: 'coffee' | 'food' | 'supplier') => void }) {
+function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, paymentFees, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; paymentFees: PaymentFeesData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { coffee: boolean; food: boolean; supplier: boolean }; onCollapse: (key: 'coffee' | 'food' | 'supplier') => void }) {
   // Made-in-house components (sub-recipes like Fennel Slaw, Pickled Onions) are
   // tracked in the Supplier Prices widget, NOT as sellable products. Exclude any
   // costing row whose Notes flag it as a component so it never renders as a tile.
@@ -1390,7 +1424,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, re
       {/* ── Coffee Costings — always in DOM ── */}
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
-          <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} week={reviewWeek} />
+          <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} week={reviewWeek} paymentFees={paymentFees} />
           <ProductColumn items={coffeeItems} height={450} reviews={reviewMap} sales={salesMap} />
         </Card>
       </div>
@@ -1398,7 +1432,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, re
       {/* ── Food Costings — always in DOM ── */}
       <div style={{ display: open.food ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
-          <MarginBadges items={foodItems} atRisk={foodAtRisk} week={reviewWeek} />
+          <MarginBadges items={foodItems} atRisk={foodAtRisk} week={reviewWeek} paymentFees={paymentFees} />
           <ProductColumn items={foodItems} height={450} reviews={reviewMap} sales={salesMap} />
         </Card>
       </div>
@@ -1682,6 +1716,7 @@ export default function Home() {
   const [recipeMap, setRecipeMap] = useState<RecipeMapData | null>(null);
   const [priceDrift, setPriceDrift] = useState<PriceDriftData | null>(null);
   const [marginReview, setMarginReview] = useState<MarginReviewData | null>(null);
+  const [paymentFees, setPaymentFees] = useState<PaymentFeesData | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   // Recurring task IDs moved away from today — suppressed in UI until next refresh/session.
   const [movedRecurringIds, setMovedRecurringIds] = useState<Set<string>>(new Set());
@@ -1806,6 +1841,7 @@ export default function Home() {
     fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
     fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
     fetch('/api/margin-review').then(r => r.json()).then(d => setMarginReview(d)).catch(() => {});
+    fetch('/api/payment-fees').then(r => r.json()).then(d => setPaymentFees(d)).catch(() => {});
     fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
     fetch('/api/tigeros-tasks').then(r => r.json()).then(d => setTigerTasks(d.tasks || [])).catch(() => {});
     fetchTaskContext().catch(() => {});
@@ -2444,7 +2480,7 @@ export default function Home() {
         </div>
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (each renders only when its tile is open) */}
-        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} marginReview={marginReview} recipeMap={recipeMap}
+        <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} marginReview={marginReview} paymentFees={paymentFees} recipeMap={recipeMap}
           open={{ coffee: openWidgets.has('coffee'), food: openWidgets.has('food'), supplier: openWidgets.has('supplier') }}
           onCollapse={(k) => toggleWidget(k)}
           onIngredientsChanged={() => fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {})} />
