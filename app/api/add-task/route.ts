@@ -9,7 +9,7 @@ const STATE_PARENT_ID = '3403c99c0e858113a941c2118b3cdef9';
 
 const VALID_CATEGORIES = ['ORDER', 'ADMIN', 'STAFF', 'MAINTENANCE', 'MERCHANDISE', 'PERSONAL', 'COSTING'];
 
-const VALID_RECURRENCE = ['once', 'daily', 'weekly', 'fortnightly', 'monthly'] as const;
+const VALID_RECURRENCE = ['once', 'daily', 'weekly', 'fortnightly', 'monthly', 'sticky'] as const;
 type Recurrence = (typeof VALID_RECURRENCE)[number];
 
 // ISO week number — used to pick the fortnightly slot ([F] = odd weeks, [F2] = even)
@@ -229,6 +229,8 @@ async function insertTaskBlock(pageId: string, content: string, category: string
 //   fortnightly → [F]/[F2] text       (odd/even ISO week, matching the picked date's week)
 //   daily       → [D] text            (written to all 7 day pages; always shows)
 //   monthly     → [MD:n] text         (written to all 7 day pages; shows only when date-of-month = n)
+//   sticky      → [STICKY] text       (single page; dashboard surfaces it every day until
+//                                       ticked off — no expiry, unlike a plain `once` task)
 function buildContent(recurrence: Recurrence, date: string, d: Date, text: string): string {
   const t = text.trim();
   switch (recurrence) {
@@ -240,6 +242,8 @@ function buildContent(recurrence: Recurrence, date: string, d: Date, text: strin
       return `[D] ${t}`;
     case 'monthly':
       return `[MD:${d.getDate()}] ${t}`;
+    case 'sticky':
+      return `[STICKY] ${t}`;
     case 'once':
     default:
       return `[${date}] ${t}`;

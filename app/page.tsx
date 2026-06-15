@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
 import AddProductModal from './components/AddProductModal';
 import AddIngredientModal from './components/AddIngredientModal';
+import LabourCardBody, { type StaffCostData } from './components/LabourCardBody';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
 
 // Blended "True Payment Cost" — Square processing fees as a % of total revenue,
@@ -17,6 +18,10 @@ interface Todo {
   checked: boolean;
   isHeader?: boolean;
   isRecurring?: boolean;
+  // Persistent task injected by /api/dashboard — stays every day until ticked off,
+  // with no expiry. Ticking it writes to the permanent "_sticky_done" checked-state
+  // key instead of today's date.
+  isSticky?: boolean;
 }
 
 interface Project {
@@ -258,7 +263,7 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, label, context, onContextSave }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, label, context, onContextSave, isSticky }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
@@ -268,6 +273,9 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   label?: string;
   context?: string;
   onContextSave?: (id: string, text: string) => void;
+  // Persistent ("Persistent" recurrence) task — shows a pin badge so Jonathan can
+  // tell at a glance this one won't disappear at midnight, only when ticked off.
+  isSticky?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
@@ -517,6 +525,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           </div>
           {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
         </div>
+        {isSticky && <span className="shrink-0 text-xs mt-0.5 leading-none" title="Persistent — stays until ticked off">📌</span>}
         {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: '#fbcdad' }} title="Has context" />}
         {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
         {!isMobile && onDelete && <button onClick={e => { e.stopPropagation(); onDelete(id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Delete" title="Delete">✕</button>}
@@ -561,6 +570,7 @@ const RECURRENCE_OPTIONS = [
   { value: 'weekly', label: 'Weekly' },
   { value: 'fortnightly', label: 'Fortnightly' },
   { value: 'monthly', label: 'Monthly' },
+  { value: 'sticky', label: 'Persistent' },
 ] as const;
 
 function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDay, onDrop, onDragOver, onDragLeave, isDragOver }: {
@@ -1679,6 +1689,7 @@ export default function Home() {
   const [draft, setDraft] = useState<ProjectDraft | null>(null);
   const [promoting, setPromoting] = useState(false);
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [staffCost, setStaffCost] = useState<StaffCostData>(null);
   const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [addingActionFor, setAddingActionFor] = useState<string | null>(null);
@@ -1844,6 +1855,7 @@ export default function Home() {
     fetch('/api/payment-fees').then(r => r.json()).then(d => setPaymentFees(d)).catch(() => {});
     fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
     fetch('/api/tigeros-tasks').then(r => r.json()).then(d => setTigerTasks(d.tasks || [])).catch(() => {});
+    fetch('/api/staff-cost').then(r => r.json()).then(d => setStaffCost(d)).catch(() => {});
     fetchTaskContext().catch(() => {});
   };
 
@@ -1931,19 +1943,32 @@ export default function Home() {
       return { ...prev, [date]: { ...prev[date], count: prev[date].count + 1 } };
     });
     // Fire-and-forget: API + refresh run in background so the modal closes instantly.
-    const needsDashboard = date === todayStr || recurrence === 'daily' || recurrence === 'monthly';
+    // Sticky tasks surface on the dashboard immediately regardless of which day's
+    // page they're filed under, so they also need a dashboard refresh.
+    const needsDashboard = date === todayStr || recurrence === 'daily' || recurrence === 'monthly' || recurrence === 'sticky';
     fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, text, recurrence }) })
       .then(() => refreshAfterMutation({ dashboard: needsDashboard }))
       .catch(() => {});
   };
 
-  const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean, fromDate?: string, category?: string) => {
+  const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean, fromDate?: string, category?: string, isSticky?: boolean) => {
     const sourceDate = fromDate ?? todayStr;
     if (sourceDate === todayStr) {
       setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(task => task.id !== blockId) } : prev);
     } else {
       setWeekTasks(prev => ({ ...prev, [sourceDate]: { ...prev[sourceDate], count: prev[sourceDate].count - 1, tasks: prev[sourceDate].tasks.filter(t => t.id !== blockId) } }));
     }
+
+    // Persistent ([STICKY]) tasks already show every day, so "move to <day>" just
+    // hides today's instance — no duplicate one-off task, and the [STICKY] block
+    // is never touched. It resurfaces on its own tomorrow via the dashboard's
+    // sticky scan (still unchecked, not yet in "_sticky_done").
+    if (isSticky) {
+      setMovedRecurringIds(prev => new Set(prev).add(blockId));
+      fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, date: `${sourceDate}:moved`, checked: true }) }).catch(() => {});
+      return;
+    }
+
     const ops: Promise<Response>[] = [
       fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: targetDate, text, category }) }),
     ];
@@ -2067,11 +2092,13 @@ export default function Home() {
     setNewActionText('');
   };
 
-  const toggleTodo = async (blockId: string, checked: boolean, section: 'daily' | 'project' | 'personal' | 'week', projectId?: string, date?: string) => {
+  const toggleTodo = async (blockId: string, checked: boolean, section: 'daily' | 'project' | 'personal' | 'week', projectId?: string, date?: string, isSticky?: boolean) => {
     if (blockId.startsWith('header-')) return;
     if (section === 'daily') {
       setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
-      syncCheckedState(blockId, todayStr, checked);
+      // Persistent tasks: record completion permanently under "_sticky_done" instead
+      // of today's date, so it never resurfaces (no 8-day expiry, unlike a normal tick).
+      syncCheckedState(blockId, isSticky ? '_sticky_done' : todayStr, checked);
     } else if (section === 'week' && date) {
       setWeekTasks(prev => ({ ...prev, [date]: { ...prev[date], tasks: prev[date].tasks.map(t => t.id === blockId ? { ...t, checked } : t) } }));
       syncCheckedState(blockId, date, checked);
@@ -2252,11 +2279,11 @@ export default function Home() {
                 tasks: g.tasks.filter(t => { if (t.checked) { checkedBucket.push({ task: t, category: g.category }); return false; } return true; }),
               })).filter(g => g.tasks.length > 0);
               const renderTask = (task: typeof displayedTasks[0], category: string) => (
-                <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave}
-                  onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined)}
+                <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave} isSticky={task.isSticky}
+                  onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined, task.isSticky)}
                   onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring)}
-                  onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined)}
-                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined })); e.dataTransfer.effectAllowed = 'move'; }} />
+                  onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky)}
+                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined, isSticky: task.isSticky })); e.dataTransfer.effectAllowed = 'move'; }} />
               );
               const elements = [
                 ...uncheckedGroups.flatMap(group => group.tasks.map(task => renderTask(task, group.category))),
@@ -2295,7 +2322,7 @@ export default function Home() {
                   isDragOver={dragOverDate === shift.date}
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverDate(shift.date); }}
                   onDragLeave={() => setDragOverDate(null)}
-                  onDrop={(e) => { e.preventDefault(); setDragOverDate(null); try { const d = JSON.parse(e.dataTransfer.getData('application/json')); handleMoveToDay(d.id, d.text, shift.date, d.isRecurring, d.fromDate, d.category); } catch { /* ignore */ } }}
+                  onDrop={(e) => { e.preventDefault(); setDragOverDate(null); try { const d = JSON.parse(e.dataTransfer.getData('application/json')); handleMoveToDay(d.id, d.text, shift.date, d.isRecurring, d.fromDate, d.category, d.isSticky); } catch { /* ignore */ } }}
                 />
               ))
             )}
@@ -2478,6 +2505,11 @@ export default function Home() {
             />
           </Card>
         </div>
+
+        {/* LABOUR — Staff cost % (Deputy hours ÷ Square sales), last-14-day trend, roster shape */}
+        <Card emoji="📊" title="Labour">
+          <LabourCardBody data={staffCost} />
+        </Card>
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (each renders only when its tile is open) */}
         <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} marginReview={marginReview} paymentFees={paymentFees} recipeMap={recipeMap}

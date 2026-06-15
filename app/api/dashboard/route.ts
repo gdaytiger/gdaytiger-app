@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
-import { DAY_PAGES, parseDayTaskBlocks, formatYMD } from '@/app/lib/dayTasks';
+import { DAY_PAGES, parseDayTaskBlocks, formatYMD, STICKY_PREFIX } from '@/app/lib/dayTasks';
+
+// Permanent (never-expiring) key in the checked-state JSON for completed [STICKY]
+// tasks. cleanOldDates() in /api/checked-state only strips keys that sort below
+// today's date string — "_sticky_done" starts with "_" (charCode 95), which is
+// greater than any digit (charCodes 48-57), so it always survives the cutoff
+// comparison. No changes needed to the cleanup routine.
+const STICKY_DONE_KEY = '_sticky_done';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const PROJECTS_DB_ID = 'f7712afe4c7247d7b1690f2e1ecc1a0d';
@@ -73,11 +80,16 @@ async function getCheckedState(): Promise<Record<string, string[]>> {
   return {};
 }
 
-// Fetch raw [CARRY] candidates from today + the past 6 days (7 pages). This has
-// no dependency on checked state, so it runs inside the main Promise.all batch
-// rather than as a serial step after it. The checked-state filtering happens in
-// memory in GET() once both this and getCheckedState() have resolved.
-async function fetchCarryCandidates(today: Date) {
+// Fetch raw [CARRY] and [STICKY] candidates from today + the past 6 days (7 pages,
+// which between them cover all 7 DAY_PAGES regardless of which day "today" is).
+// This has no dependency on checked state, so it runs inside the main Promise.all
+// batch rather than as a serial step after it. The checked-state filtering happens
+// in memory in GET() once both this and getCheckedState() have resolved.
+//
+// [CARRY] — resurfaces if unchecked within the ~8-day checked-state retention window.
+// [STICKY] — persistent task; resurfaces every day until ticked off, with no expiry
+// (completion is recorded permanently under the "_sticky_done" key, exempt from cleanup).
+async function fetchCarryAndStickyCandidates(today: Date) {
   const pages = await Promise.all(
     Array.from({ length: 7 }, (_, i) => {
       const past = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
@@ -85,7 +97,8 @@ async function fetchCarryCandidates(today: Date) {
     })
   );
 
-  const candidates: { id: string; text: string; header: string }[] = [];
+  const carry: { id: string; text: string; header: string }[] = [];
+  const sticky: { id: string; text: string; header: string }[] = [];
   const seenIds = new Set<string>();
 
   for (const data of pages) {
@@ -108,13 +121,17 @@ async function fetchCarryCandidates(today: Date) {
       } else {
         continue;
       }
-      if (!raw.startsWith('[CARRY]')) continue;
       if (seenIds.has(block.id)) continue; // deduplicate across pages
-      seenIds.add(block.id);
-      candidates.push({ id: block.id, text: raw.replace('[CARRY]', '').trim(), header: currentHeader });
+      if (raw.startsWith('[CARRY]')) {
+        seenIds.add(block.id);
+        carry.push({ id: block.id, text: raw.replace('[CARRY]', '').trim(), header: currentHeader });
+      } else if (raw.startsWith(STICKY_PREFIX)) {
+        seenIds.add(block.id);
+        sticky.push({ id: block.id, text: raw.replace(STICKY_PREFIX, '').trim(), header: currentHeader });
+      }
     }
   }
-  return candidates;
+  return { carry, sticky };
 }
 
 async function getDailyTasks(dayOfWeek: number, today: Date) {
@@ -199,14 +216,14 @@ export async function GET() {
   const today = new Date(new Date().getTime() + 10 * 60 * 60 * 1000);
   const dayOfWeek = today.getDay();
 
-  const [weather, dailyTasks, projects, personalTodos, checkedState, shoppingItems, carryCandidates] = await Promise.all([
+  const [weather, dailyTasks, projects, personalTodos, checkedState, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates }] = await Promise.all([
     getWeather(),
     getDailyTasks(dayOfWeek, today),
     getProjects(),
     getPersonalTodos(),
     getCheckedState(),
     getShoppingTasks(),
-    fetchCarryCandidates(today),
+    fetchCarryAndStickyCandidates(today),
   ]);
 
   // Inject any [CARRY] tasks from past days that haven't been checked off yet.
@@ -227,6 +244,24 @@ export async function GET() {
       dailyTasks.unshift(
         { id: `header-carry-${carry.header}`, text: carry.header, checked: false, isHeader: true },
         carryTask,
+      );
+    }
+  }
+
+  // Inject any [STICKY] (persistent) tasks that haven't been permanently ticked off.
+  // Unlike [CARRY], there's no retention window — once a sticky task's ID is recorded
+  // in checkedState["_sticky_done"] it never resurfaces again.
+  const stickyDone: string[] = checkedState[STICKY_DONE_KEY] || [];
+  const stickies = stickyCandidates.filter(c => !stickyDone.includes(c.id));
+  for (const sticky of stickies) {
+    const stickyTask = { id: sticky.id, text: sticky.text, checked: false, isRecurring: false, isSticky: true };
+    const headerIdx = dailyTasks.findIndex((t: { isHeader?: boolean; text: string }) => t.isHeader && t.text === sticky.header);
+    if (headerIdx !== -1) {
+      dailyTasks.splice(headerIdx + 1, 0, stickyTask);
+    } else {
+      dailyTasks.unshift(
+        { id: `header-sticky-${sticky.header}`, text: sticky.header, checked: false, isHeader: true },
+        stickyTask,
       );
     }
   }

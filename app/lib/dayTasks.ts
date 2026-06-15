@@ -49,7 +49,17 @@ export type ParsedTask = {
   checked: boolean;
   isHeader?: boolean;
   isRecurring?: boolean;
+  // Persistent task — injected by /api/dashboard's sticky-candidate scan, not
+  // by this parser. Stays on the Daily To Do every day until ticked off, with
+  // no expiry (unlike [CARRY]). See STICKY_PREFIX.
+  isSticky?: boolean;
 };
+
+// [STICKY] text — persistent one-off task. Skipped here (handled by /api/dashboard's
+// cross-page scan, same approach as [CARRY] but with no retention window: once ticked
+// off it's recorded permanently in the checked-state JSON under "_sticky_done" and
+// never resurfaces).
+export const STICKY_PREFIX = '[STICKY]';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Block = { id: string; type: string; [key: string]: any };
@@ -133,6 +143,8 @@ export function parseDayTaskBlocks(blocks: Block[], opts: ParseOpts): ParsedTask
     }
     // [CARRY] — handled separately by dashboard carry-over logic; skip here.
     if (raw.startsWith('[CARRY]')) continue;
+    // [STICKY] — handled separately by dashboard sticky-task logic; skip here.
+    if (raw.startsWith(STICKY_PREFIX)) continue;
     // Plain task with no prefix — always shows on its home day.
     rawItems.push({ type: 'task', id: block.id, text: raw.trim(), isRecurring: true });
   }
