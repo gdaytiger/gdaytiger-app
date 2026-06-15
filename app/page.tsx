@@ -732,6 +732,23 @@ type MarginReviewData = {
   unmatched?: { name: string; weeklyQty: number; weeklyGross: number }[];
 };
 
+// "Review pricing – <Item> (NN.N%)" to-dos are a frozen text snapshot from
+// whenever the task was created (see isReviewPricingTask in dayTasks.ts) — the
+// percentage drifts out of sync with Notion/Costings/TigerOS as new invoices
+// land. Swap the trailing (NN.N%) for the current live margin from
+// marginReview.items at render time so the Daily To Do always matches the
+// live figure. The underlying Notion block text (task.text) is left
+// untouched — only the on-screen label is rewritten.
+const REVIEW_PRICING_PCT_RE = /^(review pricing\b[\s\-–—:]*)(.+?)\s*\([\d.]+%\)\s*$/i;
+function withLiveReviewMargin(text: string, reviewMap: Map<string, MarginReviewItem>): string {
+  const m = text.match(REVIEW_PRICING_PCT_RE);
+  if (!m) return text;
+  const [, prefix, itemName] = m;
+  const review = reviewMap.get(itemName.trim().toUpperCase());
+  if (!review) return text;
+  return `${prefix}${itemName.trim()} (${review.margin.toFixed(1)}%)`;
+}
+
 // Rolling "True Payment Cost" — Square fees as a % of total revenue, computed
 // by apps-script/PaymentFeeTracker.js. Until enough days have backfilled,
 // the dashboard falls back to MERCHANT_FEE_PCT.
@@ -2233,6 +2250,11 @@ export default function Home() {
   const projectsDone = data.projects.flatMap(p => p.todos).filter(t => t.checked).length;
   const projectsTotal = data.projects.flatMap(p => p.todos).length;
 
+  // Live margin lookup for "Review pricing" to-dos — see withLiveReviewMargin.
+  const reviewMarginMap = new Map<string, MarginReviewItem>(
+    (marginReview?.items ?? []).map(i => [i.name.toUpperCase().trim(), i])
+  );
+
   // ── Launcher tile metadata (counts + attention dots) ──
   const costMargin   = costings.filter(p => p.margin !== null);
   const coffeeCount  = costMargin.filter(p => p.category === 'Coffee').length;
@@ -2312,7 +2334,7 @@ export default function Home() {
                 tasks: g.tasks.filter(t => { if (t.checked) { checkedBucket.push({ task: t, category: g.category }); return false; } return true; }),
               })).filter(g => g.tasks.length > 0);
               const renderTask = (task: typeof displayedTasks[0], category: string) => (
-                <CheckItem key={task.id} id={task.id} text={task.text} checked={task.checked} label={category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave} isSticky={task.isSticky}
+                <CheckItem key={task.id} id={task.id} text={withLiveReviewMargin(task.text, reviewMarginMap)} checked={task.checked} label={category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave} isSticky={task.isSticky}
                   onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined, task.isSticky)}
                   onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring)}
                   onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky)}
