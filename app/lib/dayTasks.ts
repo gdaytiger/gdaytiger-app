@@ -55,11 +55,25 @@ export type ParsedTask = {
   isSticky?: boolean;
 };
 
-// [STICKY] text — persistent one-off task. Skipped here (handled by /api/dashboard's
-// cross-page scan, same approach as [CARRY] but with no retention window: once ticked
-// off it's recorded permanently in the checked-state JSON under "_sticky_done" and
-// never resurfaces).
+// [STICKY] or [STICKY:YYYY-MM-DD] text — persistent one-off task. Skipped here
+// (handled by /api/dashboard's cross-page scan, same approach as [CARRY] but with
+// no retention window: once ticked off it's recorded permanently in the checked-state
+// JSON under "_sticky_done" and never resurfaces). The optional date is the day the
+// task was added from — it "starts showing" from that date onward (today < date
+// means not visible yet). Older [STICKY] blocks with no date show immediately, same
+// as before.
 export const STICKY_PREFIX = '[STICKY]';
+export const STICKY_PREFIX_RE = /^\[STICKY(?::(\d{4}-\d{2}-\d{2}))?\]\s*/;
+
+// Tasks whose text starts with "Review pricing" are margin-review follow-ups
+// surfaced by the Coffee/Food Costings card (e.g. "Review pricing – Beef Sandwich
+// (57.1%)"). Pin them with the same 📌 badge as [STICKY] tasks so they stand out
+// in the Daily To Do until actioned — regardless of how they got onto the page
+// (manual entry, [CARRY], or plain recurring).
+const REVIEW_PRICING_RE = /^review pricing\b/i;
+export function isReviewPricingTask(text: string): boolean {
+  return REVIEW_PRICING_RE.test(text.trim());
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Block = { id: string; type: string; [key: string]: any };
@@ -83,8 +97,12 @@ export function parseDayTaskBlocks(blocks: Block[], opts: ParseOpts): ParsedTask
   const weekNum = getISOWeek(renderDate);
   const isOddWeek = weekNum % 2 === 1;
 
-  type RawItem = { type: 'header' | 'task'; id: string; text: string; isRecurring?: boolean };
+  type RawItem = { type: 'header' | 'task'; id: string; text: string; isRecurring?: boolean; isSticky?: boolean };
   const rawItems: RawItem[] = [];
+
+  const pushTask = (id: string, text: string, isRecurring: boolean) => {
+    rawItems.push({ type: 'task', id, text, isRecurring, isSticky: isReviewPricingTask(text) || undefined });
+  };
 
   for (const block of blocks) {
     if (block.type === 'heading_2' || block.type === 'heading_3') {
@@ -107,46 +125,47 @@ export function parseDayTaskBlocks(blocks: Block[], opts: ParseOpts): ParsedTask
       const taskDate = dateMatch[1];
       if (taskDate < todayStr) { deleteBlock(block.id); continue; }
       if (taskDate === renderDateStr) {
-        rawItems.push({ type: 'task', id: block.id, text: raw.replace(DATE_PREFIX_RE, '').trim(), isRecurring: false });
+        pushTask(block.id, raw.replace(DATE_PREFIX_RE, '').trim(), false);
       }
       continue;
     }
     // [F] — fortnightly on odd ISO weeks
     if (raw.startsWith('[F]')) {
       if (!isOddWeek) continue;
-      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F]', '').trim(), isRecurring: true });
+      pushTask(block.id, raw.replace('[F]', '').trim(), true);
       continue;
     }
     // [F2] — fortnightly on even ISO weeks (alternates with [F])
     if (raw.startsWith('[F2]')) {
       if (isOddWeek) continue;
-      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[F2]', '').trim(), isRecurring: true });
+      pushTask(block.id, raw.replace('[F2]', '').trim(), true);
       continue;
     }
-    // [D] — daily, always shows
+    // [D] — daily, always shows. Legacy: 'Daily' was dropped from the add-task
+    // picker 16 Jun 2026, but existing [D] blocks still parse and display.
     if (raw.startsWith('[D]')) {
-      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[D]', '').trim(), isRecurring: true });
+      pushTask(block.id, raw.replace('[D]', '').trim(), true);
       continue;
     }
     // [MD:n] — monthly on calendar day n. Checked before [M] since "[MD:" also starts with "[M".
     const mdMatch = raw.match(/^\[MD:(\d{1,2})\]\s*/);
     if (mdMatch) {
       if (renderDate.getDate() !== Number(mdMatch[1])) continue;
-      rawItems.push({ type: 'task', id: block.id, text: raw.replace(/^\[MD:\d{1,2}\]\s*/, '').trim(), isRecurring: true });
+      pushTask(block.id, raw.replace(/^\[MD:\d{1,2}\]\s*/, '').trim(), true);
       continue;
     }
     // [M] — monthly, shows in first 7 days of the month
     if (raw.startsWith('[M]')) {
       if (renderDate.getDate() > 7) continue;
-      rawItems.push({ type: 'task', id: block.id, text: raw.replace('[M]', '').trim(), isRecurring: true });
+      pushTask(block.id, raw.replace('[M]', '').trim(), true);
       continue;
     }
     // [CARRY] — handled separately by dashboard carry-over logic; skip here.
     if (raw.startsWith('[CARRY]')) continue;
-    // [STICKY] — handled separately by dashboard sticky-task logic; skip here.
-    if (raw.startsWith(STICKY_PREFIX)) continue;
+    // [STICKY] / [STICKY:YYYY-MM-DD] — handled separately by dashboard sticky-task logic; skip here.
+    if (STICKY_PREFIX_RE.test(raw)) continue;
     // Plain task with no prefix — always shows on its home day.
-    rawItems.push({ type: 'task', id: block.id, text: raw.trim(), isRecurring: true });
+    pushTask(block.id, raw.trim(), true);
   }
 
   // Build final list — skip headers that have no tasks beneath them.
@@ -161,7 +180,7 @@ export function parseDayTaskBlocks(blocks: Block[], opts: ParseOpts): ParsedTask
       }
       if (hasTask) tasks.push({ id: `header-${item.id}`, text: item.text, checked: false, isHeader: true });
     } else {
-      tasks.push({ id: item.id, text: item.text, checked: false, isRecurring: item.isRecurring });
+      tasks.push({ id: item.id, text: item.text, checked: false, isRecurring: item.isRecurring, isSticky: item.isSticky });
     }
   }
   return tasks;

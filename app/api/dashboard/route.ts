@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { DAY_PAGES, parseDayTaskBlocks, formatYMD, STICKY_PREFIX } from '@/app/lib/dayTasks';
+import { DAY_PAGES, parseDayTaskBlocks, formatYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
 
 // Permanent (never-expiring) key in the checked-state JSON for completed [STICKY]
 // tasks. cleanOldDates() in /api/checked-state only strips keys that sort below
@@ -98,7 +98,7 @@ async function fetchCarryAndStickyCandidates(today: Date) {
   );
 
   const carry: { id: string; text: string; header: string }[] = [];
-  const sticky: { id: string; text: string; header: string }[] = [];
+  const sticky: { id: string; text: string; header: string; startDate: string | null }[] = [];
   const seenIds = new Set<string>();
 
   for (const data of pages) {
@@ -125,9 +125,12 @@ async function fetchCarryAndStickyCandidates(today: Date) {
       if (raw.startsWith('[CARRY]')) {
         seenIds.add(block.id);
         carry.push({ id: block.id, text: raw.replace('[CARRY]', '').trim(), header: currentHeader });
-      } else if (raw.startsWith(STICKY_PREFIX)) {
+        continue;
+      }
+      const stickyMatch = raw.match(STICKY_PREFIX_RE);
+      if (stickyMatch) {
         seenIds.add(block.id);
-        sticky.push({ id: block.id, text: raw.replace(STICKY_PREFIX, '').trim(), header: currentHeader });
+        sticky.push({ id: block.id, text: raw.replace(STICKY_PREFIX_RE, '').trim(), header: currentHeader, startDate: stickyMatch[1] || null });
       }
     }
   }
@@ -215,6 +218,7 @@ async function getPersonalTodos() {
 export async function GET() {
   const today = new Date(new Date().getTime() + 10 * 60 * 60 * 1000);
   const dayOfWeek = today.getDay();
+  const todayStr = formatYMD(today);
 
   const [weather, dailyTasks, projects, personalTodos, checkedState, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates }] = await Promise.all([
     getWeather(),
@@ -234,7 +238,7 @@ export async function GET() {
     c => !Object.values(checkedState).some(ids => ids.includes(c.id))
   );
   for (const carry of carries) {
-    const carryTask = { id: carry.id, text: carry.text, checked: false, isRecurring: false };
+    const carryTask = { id: carry.id, text: carry.text, checked: false, isRecurring: false, isSticky: isReviewPricingTask(carry.text) || undefined };
     const headerIdx = dailyTasks.findIndex((t: { isHeader?: boolean; text: string }) => t.isHeader && t.text === carry.header);
     if (headerIdx !== -1) {
       // Insert right after the existing header
@@ -248,11 +252,15 @@ export async function GET() {
     }
   }
 
-  // Inject any [STICKY] (persistent) tasks that haven't been permanently ticked off.
+  // Inject any [STICKY] (persistent) tasks that haven't been permanently ticked off
+  // AND whose "starts showing" date (the day they were added from) has arrived.
   // Unlike [CARRY], there's no retention window — once a sticky task's ID is recorded
-  // in checkedState["_sticky_done"] it never resurfaces again.
+  // in checkedState["_sticky_done"] it never resurfaces again. Stickies with no
+  // encoded date (older [STICKY] blocks) show immediately, as before.
   const stickyDone: string[] = checkedState[STICKY_DONE_KEY] || [];
-  const stickies = stickyCandidates.filter(c => !stickyDone.includes(c.id));
+  const stickies = stickyCandidates.filter(c =>
+    !stickyDone.includes(c.id) && (!c.startDate || c.startDate <= todayStr)
+  );
   for (const sticky of stickies) {
     const stickyTask = { id: sticky.id, text: sticky.text, checked: false, isRecurring: false, isSticky: true };
     const headerIdx = dailyTasks.findIndex((t: { isHeader?: boolean; text: string }) => t.isHeader && t.text === sticky.header);
@@ -277,8 +285,6 @@ export async function GET() {
   const d = today.getDate();
   const ordinal = d + (['th', 'st', 'nd', 'rd'][(d % 100 > 10 && d % 100 < 14) ? 0 : (d % 10 < 4 ? d % 10 : 0)] || 'th');
   const dateStr = `${dayNames[dayOfWeek]} ${ordinal} ${monthNames[today.getMonth()]}`;
-
-  const todayStr = formatYMD(today);
 
   // Short edge cache + SWR — halves Notion API calls during pull-to-refresh
   // spam on a busy Saturday. Up to 30s stale is acceptable: client checkboxes

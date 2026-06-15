@@ -564,12 +564,20 @@ function buildShoppingText(name: string, qty: number): string {
   return qty > 1 ? `${n} ×${qty}` : n;
 }
 
+// Row 1 — schedule type. Row 2 (MODIFIER_OPTIONS) slides in once a Row 1 pill is
+// picked, letting "Persistent" be layered onto any of the 5 schedule types.
 const RECURRENCE_OPTIONS = [
-  { value: 'once', label: 'Once' },
-  { value: 'daily', label: 'Daily' },
+  { value: 'once', label: 'Today' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'fortnightly', label: 'Fortnightly' },
   { value: 'monthly', label: 'Monthly' },
+] as const;
+
+// Row 2 — "Once off" (default) keeps the schedule type's normal behaviour.
+// "Persistent" collapses to [STICKY:date] regardless of which Row 1 pill is
+// selected — see buildContent in /api/add-task for what that produces.
+const MODIFIER_OPTIONS = [
+  { value: 'oneoff', label: 'Once off' },
   { value: 'sticky', label: 'Persistent' },
 ] as const;
 
@@ -585,11 +593,18 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   const [isAdding, setIsAdding] = useState(false);
   const [taskText, setTaskText] = useState('');
   const [recurrence, setRecurrence] = useState<string>('once');
+  const [modifier, setModifier] = useState<string>('oneoff');
+  const [showModifier, setShowModifier] = useState(false);
   const [saving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const openInput = (e: React.MouseEvent) => { e.stopPropagation(); setIsAdding(true); setTimeout(() => inputRef.current?.focus(), 320); };
-  const close = () => { setIsAdding(false); setTaskText(''); setRecurrence('once'); };
-  const submit = () => { if (!taskText.trim()) return; onAdd(shift.date, taskText.trim().toUpperCase(), recurrence); close(); };
+  const close = () => { setIsAdding(false); setTaskText(''); setRecurrence('once'); setModifier('oneoff'); setShowModifier(false); };
+  const submit = () => {
+    if (!taskText.trim()) return;
+    const combined = modifier === 'sticky' ? `${recurrence}-sticky` : recurrence;
+    onAdd(shift.date, taskText.trim().toUpperCase(), combined);
+    close();
+  };
 
   const baseStyle = isDragOver
     ? { background: 'rgba(22,163,74,0.10)', borderColor: 'rgba(22,163,74,0.25)', boxShadow: '0 0 0 2px rgba(22,163,74,0.15)' }
@@ -600,7 +615,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   return (
     <div
       className={`relative overflow-hidden rounded-2xl transition-all ${isDragOver ? 'border' : isHighlighted ? 'border' : ''}`}
-      style={{ minHeight: isAdding ? '104px' : '62px', ...baseStyle }}
+      style={{ minHeight: isAdding ? (showModifier ? '140px' : '104px') : '62px', ...baseStyle }}
       onDrop={onDrop}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -628,7 +643,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
           {RECURRENCE_OPTIONS.map(opt => (
             <button
               key={opt.value}
-              onClick={() => setRecurrence(opt.value)}
+              onClick={() => { setRecurrence(opt.value); setShowModifier(true); }}
               className="text-[10px] uppercase font-semibold px-2 py-1 rounded-full transition-colors shrink-0 tracking-wide"
               style={{ background: recurrence === opt.value ? '#fbcdad' : 'rgba(0,0,0,0.05)', color: recurrence === opt.value ? '#333' : '#999' }}
             >
@@ -636,6 +651,20 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
             </button>
           ))}
         </div>
+        {showModifier && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pl-7 animate-in fade-in slide-in-from-top-1 duration-200" style={{ scrollbarWidth: 'none' }}>
+            {MODIFIER_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setModifier(opt.value)}
+                className="text-[10px] uppercase font-semibold px-2 py-1 rounded-full transition-colors shrink-0 tracking-wide"
+                style={{ background: modifier === opt.value ? '#fbcdad' : 'rgba(0,0,0,0.05)', color: modifier === opt.value ? '#333' : '#999' }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1943,9 +1972,13 @@ export default function Home() {
       return { ...prev, [date]: { ...prev[date], count: prev[date].count + 1 } };
     });
     // Fire-and-forget: API + refresh run in background so the modal closes instantly.
-    // Sticky tasks surface on the dashboard immediately regardless of which day's
-    // page they're filed under, so they also need a dashboard refresh.
-    const needsDashboard = date === todayStr || recurrence === 'daily' || recurrence === 'monthly' || recurrence === 'sticky';
+    // recurrence is one of 10 values: <schedule>[-sticky]. Persistent (sticky) tasks
+    // surface on the dashboard from their "starts showing" date (= date picked here)
+    // onward, so also refresh the dashboard when one is added — harmless no-op if
+    // that date is still in the future.
+    const base = recurrence.replace('-sticky', '');
+    const isSticky = recurrence.endsWith('-sticky');
+    const needsDashboard = date === todayStr || base === 'monthly' || isSticky;
     fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, text, recurrence }) })
       .then(() => refreshAfterMutation({ dashboard: needsDashboard }))
       .catch(() => {});
