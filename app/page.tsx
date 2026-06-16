@@ -105,10 +105,10 @@ const TILE_STYLE: React.CSSProperties = {
 // ── Widget icons (emoji) ─────────────────────────────────────────────────────
 // One place mapping each widget to its emoji, rendered at a size derived from
 // the caller's chip value. Kept as a component so the set can be swapped later.
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'labour';
 
 const WIDGET_ICON_EMOJI: Record<WidgetIconName, string> = {
-  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒',
+  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒', labour: '📊',
 };
 
 function WidgetIcon({ name, chip = 28 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -2415,6 +2415,7 @@ export default function Home() {
           <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
           <LauncherTile icon={<WidgetIcon name="food" chip={48} glyph={26} />} title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Tiger OS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
+          <LauncherTile icon={<WidgetIcon name="labour" chip={48} glyph={26} />} title="Labour" badgeText={staffCost?.thisWeek?.staffPct != null ? `${Math.round(staffCost.thisWeek.staffPct)}%` : undefined} alert={staffCost?.thisWeek?.staffPct != null && staffCost.thisWeek.staffPct > staffCost.target} active={openWidgets.has('labour')} onClick={() => toggleWidget('labour')} />
         </div>
 
         </div>{/* end stable grid */}
@@ -2585,9 +2586,11 @@ export default function Home() {
         </div>
 
         {/* LABOUR — Staff cost % (Deputy hours ÷ Square sales), last-14-day trend, roster shape */}
-        <Card emoji="📊" title="Labour">
-          <LabourCardBody data={staffCost} />
-        </Card>
+        <div style={{ display: openWidgets.has('labour') ? 'block' : 'none' }}>
+          <Card icon={<WidgetIcon name="labour" chip={28} glyph={17} />} title="Labour" onCollapse={() => toggleWidget('labour')}>
+            <LabourCardBody data={staffCost} />
+          </Card>
+        </div>
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (each renders only when its tile is open) */}
         <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} marginReview={marginReview} paymentFees={paymentFees} recipeMap={recipeMap}
