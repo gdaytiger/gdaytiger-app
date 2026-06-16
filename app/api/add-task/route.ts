@@ -9,16 +9,14 @@ const STATE_PARENT_ID = '3403c99c0e858113a941c2118b3cdef9';
 
 const VALID_CATEGORIES = ['ORDER', 'ADMIN', 'STAFF', 'MAINTENANCE', 'MERCHANDISE', 'PERSONAL', 'COSTING'];
 
-// 4 schedule types (Today/Weekly/Fortnightly/Monthly), each with a
-// "Once off" (default, no suffix) or "Persistent" (-sticky suffix) modifier —
-// 8 combinations total. See buildContent for what each produces.
-// Note: 'daily'/'daily-sticky' (writing [D] to all 7 pages) were dropped from
-// the picker 16 Jun 2026 — dayTasks.ts still parses pre-existing [D] blocks.
+// 4 schedule types for the add-task recurrence picker (Today/Weekly/Fortnightly/Monthly).
+// Persistent tasks are created by pinning in the Daily To Do — see /api/pin-task.
+// Note: 'daily' ([D] to all 7 pages) was dropped 16 Jun 2026 — dayTasks.ts still parses existing [D] blocks.
 const VALID_RECURRENCE = [
-  'once', 'once-sticky',
-  'weekly', 'weekly-sticky',
-  'fortnightly', 'fortnightly-sticky',
-  'monthly', 'monthly-sticky',
+  'once',
+  'weekly',
+  'fortnightly',
+  'monthly',
 ] as const;
 type Recurrence = (typeof VALID_RECURRENCE)[number];
 
@@ -239,21 +237,9 @@ async function insertTaskBlock(pageId: string, content: string, category: string
 //   fortnightly → [F]/[F2] text       (odd/even ISO week, matching the picked date's week)
 //   monthly     → [MD:n] text         (written to all 7 day pages; shows only when date-of-month = n)
 //
-//   *-sticky (Persistent, any of the 4 schedule types above)
-//               → [STICKY:YYYY-MM-DD] text   (single page — the picked date's weekday)
-//                 The dashboard's cross-page scan surfaces it every day from that date
-//                 onward (date = "when it starts showing"), pinned with 📌, until ticked
-//                 off — no expiry, recorded permanently in "_sticky_done". The schedule
-//                 pill only sets the date; Persistent collapses to one mechanism
-//                 regardless of which of the 4 was picked.
-//
-// Note: 'daily' ([D] text, written to all 7 pages, always shows) was dropped from
-// the picker 16 Jun 2026. dayTasks.ts still parses pre-existing [D] blocks.
+// Persistent tasks are written by /api/pin-task as [STICKY:YYYY-MM-DD] instead.
 function buildContent(recurrence: Recurrence, date: string, d: Date, text: string): string {
   const t = text.trim();
-  if (recurrence.endsWith('-sticky')) {
-    return `[STICKY:${date}] ${t}`;
-  }
   switch (recurrence) {
     case 'weekly':
       return t;

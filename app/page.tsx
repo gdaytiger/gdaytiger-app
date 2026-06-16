@@ -263,18 +263,21 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, label, context, onContextSave, isSticky }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, onPin, label, context, onContextSave, isSticky }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
   onDelegate?: () => void;
   onSwipeRight?: () => void;
   onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+  // Tapping the 📌 button converts this task to a [STICKY:date] persistent task
+  // via /api/pin-task. Only offered when !isSticky (already-persistent tasks skip it).
+  onPin?: () => void;
   label?: string;
   context?: string;
   onContextSave?: (id: string, text: string) => void;
-  // Persistent ("Persistent" recurrence) task — shows a pin badge so Jonathan can
-  // tell at a glance this one won't disappear at midnight, only when ticked off.
+  // True when task is a [STICKY] block or auto-pinned (e.g. "Review pricing" text).
+  // Shows a static 📌 badge instead of the tappable pin button.
   isSticky?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -526,6 +529,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
         </div>
         {isSticky && <span className="shrink-0 text-xs mt-0.5 leading-none" title="Persistent — stays until ticked off">📌</span>}
+        {!isSticky && !checked && onPin && <button onClick={e => { e.stopPropagation(); onPin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-60 hover:!opacity-100 mt-0.5" aria-label="Pin task" title="Make persistent — stays until ticked off" style={{ fontSize: '13px' }}>📌</button>}
         {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: '#fbcdad' }} title="Has context" />}
         {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
         {!isMobile && onDelete && <button onClick={e => { e.stopPropagation(); onDelete(id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Delete" title="Delete">✕</button>}
@@ -1982,15 +1986,19 @@ export default function Home() {
       return { ...prev, [date]: { ...prev[date], count: prev[date].count + 1 } };
     });
     // Fire-and-forget: API + refresh run in background so the modal closes instantly.
-    // recurrence is one of 10 values: <schedule>[-sticky]. Persistent (sticky) tasks
-    // surface on the dashboard from their "starts showing" date (= date picked here)
-    // onward, so also refresh the dashboard when one is added — harmless no-op if
-    // that date is still in the future.
-    const base = recurrence.replace('-sticky', '');
-    const isSticky = recurrence.endsWith('-sticky');
-    const needsDashboard = date === todayStr || base === 'monthly' || isSticky;
+    const needsDashboard = date === todayStr || recurrence === 'monthly';
     fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, text, recurrence }) })
       .then(() => refreshAfterMutation({ dashboard: needsDashboard }))
+      .catch(() => {});
+  };
+
+  // Convert an existing task to a persistent [STICKY:today] task by rewriting its
+  // Notion block. The dashboard's cross-page scan will surface it every day from
+  // today onward until ticked off. Optimistic update shows the 📌 badge immediately.
+  const handlePinTask = (blockId: string, text: string) => {
+    setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, isSticky: true } : t) } : prev);
+    fetch('/api/pin-task', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, text }) })
+      .then(() => refreshAfterMutation({ dashboard: true }))
       .catch(() => {});
   };
 
@@ -2331,7 +2339,8 @@ export default function Home() {
                   onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined, task.isSticky)}
                   onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring)}
                   onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky)}
-                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined, isSticky: task.isSticky })); e.dataTransfer.effectAllowed = 'move'; }} />
+                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined, isSticky: task.isSticky })); e.dataTransfer.effectAllowed = 'move'; }}
+                  onPin={!isViewingOtherDay && !task.isSticky ? () => handlePinTask(task.id, task.text) : undefined} />
               );
               const elements = [
                 ...uncheckedGroups.flatMap(group => group.tasks.map(task => renderTask(task, group.category))),
