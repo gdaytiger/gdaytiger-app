@@ -564,21 +564,13 @@ function buildShoppingText(name: string, qty: number): string {
   return qty > 1 ? `${n} ×${qty}` : n;
 }
 
-// Row 1 — schedule type. Row 2 (MODIFIER_OPTIONS) slides in once a Row 1 pill is
-// picked, letting "Persistent" be layered onto any of the 5 schedule types.
+// Schedule type options for the add-task recurrence picker.
+// Persistent tasks are created by pinning (📌) in the Daily To Do — see handlePinTask.
 const RECURRENCE_OPTIONS = [
   { value: 'once', label: 'Today' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'fortnightly', label: 'Fortnightly' },
   { value: 'monthly', label: 'Monthly' },
-] as const;
-
-// Row 2 — "Once off" (default) keeps the schedule type's normal behaviour.
-// "Persistent" collapses to [STICKY:date] regardless of which Row 1 pill is
-// selected — see buildContent in /api/add-task for what that produces.
-const MODIFIER_OPTIONS = [
-  { value: 'oneoff', label: 'Once off' },
-  { value: 'sticky', label: 'Persistent' },
 ] as const;
 
 function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDay, onDrop, onDragOver, onDragLeave, isDragOver }: {
@@ -593,16 +585,13 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   const [isAdding, setIsAdding] = useState(false);
   const [taskText, setTaskText] = useState('');
   const [recurrence, setRecurrence] = useState<string>('once');
-  const [modifier, setModifier] = useState<string>('oneoff');
-  const [showModifier, setShowModifier] = useState(false);
   const [saving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const openInput = (e: React.MouseEvent) => { e.stopPropagation(); setIsAdding(true); setTimeout(() => inputRef.current?.focus(), 320); };
-  const close = () => { setIsAdding(false); setTaskText(''); setRecurrence('once'); setModifier('oneoff'); setShowModifier(false); };
+  const close = () => { setIsAdding(false); setTaskText(''); setRecurrence('once'); };
   const submit = () => {
     if (!taskText.trim()) return;
-    const combined = modifier === 'sticky' ? `${recurrence}-sticky` : recurrence;
-    onAdd(shift.date, taskText.trim().toUpperCase(), combined);
+    onAdd(shift.date, taskText.trim().toUpperCase(), recurrence);
     close();
   };
 
@@ -615,7 +604,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   return (
     <div
       className={`relative overflow-hidden rounded-2xl transition-all ${isDragOver ? 'border' : isHighlighted ? 'border' : ''}`}
-      style={{ minHeight: isAdding ? (showModifier ? '140px' : '104px') : '62px', ...baseStyle }}
+      style={{ minHeight: isAdding ? '104px' : '62px', ...baseStyle }}
       onDrop={onDrop}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -643,7 +632,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
           {RECURRENCE_OPTIONS.map(opt => (
             <button
               key={opt.value}
-              onClick={() => { setRecurrence(opt.value); setShowModifier(true); }}
+              onClick={() => setRecurrence(opt.value)}
               className="text-[10px] uppercase font-semibold px-2 py-1 rounded-full transition-colors shrink-0 tracking-wide"
               style={{ background: recurrence === opt.value ? '#fbcdad' : 'rgba(0,0,0,0.05)', color: recurrence === opt.value ? '#333' : '#999' }}
             >
@@ -651,20 +640,6 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
             </button>
           ))}
         </div>
-        {showModifier && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pl-7 animate-in fade-in slide-in-from-top-1 duration-200" style={{ scrollbarWidth: 'none' }}>
-            {MODIFIER_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => setModifier(opt.value)}
-                className="text-[10px] uppercase font-semibold px-2 py-1 rounded-full transition-colors shrink-0 tracking-wide"
-                style={{ background: modifier === opt.value ? '#fbcdad' : 'rgba(0,0,0,0.05)', color: modifier === opt.value ? '#333' : '#999' }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1227,14 +1202,31 @@ function MarginBadges({ items, atRisk, week, paymentFees }: { items: CostingProd
   const red    = items.filter(p => p.margin! < 60).length;
   const yellow = items.filter(p => p.margin! >= 60 && p.margin! < 70).length;
   const green  = items.filter(p => p.margin! >= 70).length;
+  const netColor = net !== null ? (net >= 70 ? '#16a34a' : net >= 60 ? '#d97706' : '#dc2626') : '#6b7280';
   return (
     <div className="flex items-center gap-2 flex-wrap pb-3 mb-1 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-      {avg !== null && <span className="text-xs text-gray-500">Avg <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>}
-      {net !== null && (
-        <span className="text-xs text-gray-400" title={liveFee !== null
-          ? `Net of ${feePct.toFixed(2)}% blended Square processing fee (rolling ${paymentFees!.daysCovered}-day Square fees ÷ revenue, updated ${paymentFees!.updated ? new Date(paymentFees!.updated).toLocaleDateString('en-AU') : '—'})`
-          : `Net of ~${feePct}% blended Square processing fee (static estimate — live tracker still backfilling)`}>
-          Net <span className="font-bold text-gray-600">{net.toFixed(1)}%</span>
+      {avg !== null && (
+        <span className="flex items-center gap-1.5 text-xs">
+          <span className="text-gray-500">Avg <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>
+          {net !== null && (
+            <>
+              <span className="text-gray-300" aria-hidden>→</span>
+              <span className="font-bold" style={{ color: netColor, fontVariantNumeric: 'tabular-nums' }}
+                title={liveFee !== null
+                  ? `Net of ${feePct.toFixed(2)}% blended Square processing fee (rolling ${paymentFees!.daysCovered}-day Square fees ÷ revenue, updated ${paymentFees!.updated ? new Date(paymentFees!.updated).toLocaleDateString('en-AU') : '—'})`
+                  : `Net of ~${feePct}% blended Square processing fee (static estimate — live tracker still backfilling)`}>
+                {net.toFixed(1)}%
+              </span>
+              <span className="px-1.5 py-0.5 rounded-md"
+                style={{
+                  fontSize: '9px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+                  background: liveFee !== null ? 'rgba(22,163,74,0.10)' : 'rgba(0,0,0,0.06)',
+                  color: liveFee !== null ? '#15803d' : '#9ca3af',
+                }}>
+                after {feePct.toFixed(2)}% card
+              </span>
+            </>
+          )}
         </span>
       )}
       {[
