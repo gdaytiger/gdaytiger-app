@@ -1808,12 +1808,13 @@ export default function Home() {
     } catch { return {}; }
   };
 
-  // Shopping items use the same date-based checked state as daily tasks.
-  // Checked items sink to the bottom and are cleared at end of day — not permanently
-  // marked in Notion. This keeps the list reusable across days.
+  // Update Notion's to_do.checked directly so items stay checked between dashboard
+  // loads. getShoppingTasks() in /api/dashboard filters !block.to_do?.checked, so
+  // a Notion-level check is the only way to prevent reappearance the next day.
+  // Local state update is optimistic; Notion call is fire-and-forget.
   const toggleShopping = (blockId: string, checked: boolean) => {
     setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
-    syncCheckedState(blockId, todayStr, checked);
+    fetch('/api/check-shopping', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) }).catch(() => {});
   };
 
   const deleteShopping = (blockId: string) => {
