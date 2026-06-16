@@ -1131,9 +1131,11 @@ function supplierIcon(name: string): string {
   return hit ? hit.icon : '📦';
 }
 
-function ProductItem({ p, review, weeklyQty }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number }) {
+function ProductItem({ p, review, weeklyQty, feePct }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number; feePct?: number }) {
   const mc = p.margin! >= 70 ? '#16a34a' : p.margin! >= 60 ? '#d97706' : '#dc2626';
   const bar = Math.min(100, Math.max(0, p.margin!));
+  const netMargin = feePct !== undefined ? p.margin! - feePct : null;
+  const netColor  = netMargin !== null ? (netMargin >= 70 ? '#16a34a' : netMargin >= 60 ? '#d97706' : '#dc2626') : mc;
   return (
     <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0" style={{
       background: 'rgba(255,255,255,0.45)',
@@ -1147,9 +1149,23 @@ function ProductItem({ p, review, weeklyQty }: { p: CostingProduct; review?: Mar
           style={{ fontFamily: '"stolzl", sans-serif', textTransform: 'uppercase' }}>
           {p.name.toUpperCase()}
         </p>
-        <span className="text-base font-black shrink-0 leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
-          {p.margin!.toFixed(1)}%
-        </span>
+        {netMargin !== null ? (
+          <div className="flex flex-col items-end shrink-0 gap-px">
+            <span className="text-xs text-gray-400 leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}
+              title="Gross margin (before card fees)">
+              {p.margin!.toFixed(1)}%
+            </span>
+            <span className="text-base font-black leading-tight" style={{ color: netColor, fontVariantNumeric: 'tabular-nums' }}
+              title="Net margin after Square card processing fees">
+              {netMargin.toFixed(1)}%
+            </span>
+            <span style={{ fontSize: '8px', color: '#9ca3af', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1 }}>net</span>
+          </div>
+        ) : (
+          <span className="text-base font-black shrink-0 leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
+            {p.margin!.toFixed(1)}%
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {p.sellPrice !== null && (
@@ -1175,7 +1191,7 @@ function ProductItem({ p, review, weeklyQty }: { p: CostingProduct; review?: Mar
   );
 }
 
-function ProductColumn({ items, height = 272, reviews, sales }: { items: CostingProduct[]; height?: number; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number> }) {
+function ProductColumn({ items, height = 272, reviews, sales, feePct }: { items: CostingProduct[]; height?: number; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number>; feePct?: number }) {
   return (
     <div className="flex-1 min-w-0">
       {items.length === 0 ? (
@@ -1186,7 +1202,7 @@ function ProductColumn({ items, height = 272, reviews, sales }: { items: Costing
           <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
             {items.map(p => {
               const key = p.name.toUpperCase().trim();
-              return <ProductItem key={p.id} p={p} review={reviews?.get(key)} weeklyQty={sales?.get(key)} />;
+              return <ProductItem key={p.id} p={p} review={reviews?.get(key)} weeklyQty={sales?.get(key)} feePct={feePct} />;
             })}
           </div>
         </div>
@@ -1459,6 +1475,11 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
     return next;
   });
 
+  // Same fee logic as MarginBadges — prefer live rolling rate, fall back to static.
+  const liveFeeCard = paymentFees && paymentFees.feePct !== null && paymentFees.daysCovered >= PAYMENT_FEES_MIN_DAYS
+    ? paymentFees.feePct : null;
+  const feePct = liveFeeCard ?? MERCHANT_FEE_PCT;
+
   const addButton = (cat: 'food' | 'coffee') => (
     <button
       onClick={() => setAddProductOpen(cat)}
@@ -1477,7 +1498,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
           <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} week={reviewWeek} paymentFees={paymentFees} />
-          <ProductColumn items={coffeeItems} height={450} reviews={reviewMap} sales={salesMap} />
+          <ProductColumn items={coffeeItems} height={450} reviews={reviewMap} sales={salesMap} feePct={feePct} />
         </Card>
       </div>
 
@@ -1485,7 +1506,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       <div style={{ display: open.food ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
           <MarginBadges items={foodItems} atRisk={foodAtRisk} week={reviewWeek} paymentFees={paymentFees} />
-          <ProductColumn items={foodItems} height={450} reviews={reviewMap} sales={salesMap} />
+          <ProductColumn items={foodItems} height={450} reviews={reviewMap} sales={salesMap} feePct={feePct} />
         </Card>
       </div>
 
