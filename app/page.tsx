@@ -22,6 +22,10 @@ interface Todo {
   // with no expiry. Ticking it writes to the permanent "_sticky_done" checked-state
   // key instead of today's date.
   isSticky?: boolean;
+  // Shopping list item — checked state comes from Notion to_do.checked (via
+  // /api/check-shopping), NOT from the date-keyed server state. applyServerChecked
+  // must skip these so it doesn't reset them to unchecked on every refresh.
+  isShopping?: boolean;
 }
 
 interface Project {
@@ -130,7 +134,10 @@ const applyServerChecked = (todos: Todo[], date: string, state: Record<string, s
   const movedIds = new Set(state[`${date}:moved`] || []);
   return todos
     .filter(t => t.isHeader || !movedIds.has(t.id))
-    .map(t => t.isHeader ? t : { ...t, checked: checkedIds.has(t.id) });
+    // Shopping items: checked state is owned by Notion to_do.checked (written by
+    // /api/check-shopping). Skip them here — the date-keyed state doesn't track them
+    // and would reset them to unchecked on every refresh.
+    .map(t => (t.isHeader || t.isShopping) ? t : { ...t, checked: checkedIds.has(t.id) });
 };
 
 function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onCollapse }: {
@@ -1877,7 +1884,20 @@ export default function Home() {
     const res = await fetch(url);
     if (res.status === 401) { window.location.assign('/login'); return; }
     const d = await res.json();
-    setData({ ...d, dailyTasks: applyServerChecked(d.dailyTasks, d.todayStr, state) });
+    const freshTasks = applyServerChecked(d.dailyTasks, d.todayStr, state);
+    setData(prev => {
+      // getShoppingTasks() only returns unchecked items from Notion — re-inject any
+      // shopping items that were checked in this session so they stay visible in the
+      // widget with strikethrough across soft refreshes (tab focus, mutation refetches).
+      const prevChecked = prev?.dailyTasks.filter(t => t.isShopping && t.checked) ?? [];
+      if (prevChecked.length === 0) return { ...d, dailyTasks: freshTasks };
+      const freshIds = new Set(freshTasks.map(t => t.id));
+      const toInject = prevChecked.filter(t => !freshIds.has(t.id));
+      if (toInject.length === 0) return { ...d, dailyTasks: freshTasks };
+      const headerIdx = freshTasks.findIndex(t => t.isHeader && t.text.toUpperCase().includes('SHOPPING'));
+      if (headerIdx === -1) return { ...d, dailyTasks: freshTasks };
+      return { ...d, dailyTasks: [...freshTasks.slice(0, headerIdx + 1), ...toInject, ...freshTasks.slice(headerIdx + 1)] };
+    });
   };
 
   const fetchWeekTasks = async (state: Record<string, string[]>, bustCache = false) => {
