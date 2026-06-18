@@ -144,15 +144,17 @@ async function getDailyTasks(dayOfWeek: number, today: Date) {
 }
 
 async function getShoppingTasks() {
-  // Unchecked items from the 🛒 Shopping List page. Bought items (checked there
-  // or via the widget) are skipped, so the list self-clears.
+  // All items from the 🛒 Shopping List page — both checked and unchecked.
+  // Returning checked items lets the widget keep showing them with strikethrough
+  // after a tab-focus refresh (visibilitychange triggers refreshData which re-fetches
+  // this). Items are removed by deleting them (swipe to delete), not by checking them.
   const data = await notionFetch(`/blocks/${SHOPPING_PAGE_ID}/children?page_size=100`);
   const items: { id: string; text: string; checked: boolean; isRecurring: boolean }[] = [];
   for (const block of (data.results || [])) {
-    if (block.type === 'to_do' && !block.to_do?.checked) {
+    if (block.type === 'to_do') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const raw = (block.to_do?.rich_text || []).map((r: any) => r.plain_text).join('');
-      if (raw.trim()) items.push({ id: block.id, text: raw.trim(), checked: false, isRecurring: false });
+      if (raw.trim()) items.push({ id: block.id, text: raw.trim(), checked: !!block.to_do?.checked, isRecurring: false });
     }
   }
   return items;
