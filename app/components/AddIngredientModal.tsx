@@ -20,6 +20,20 @@ function titleCase(s: string) {
   return s.trim().replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Keep only the most recent invoice per supplier. Matches arrive newest-first
+// from the API, so the first time we see a supplier is its latest invoice.
+function newestPerSupplier(ms: Match[]) {
+  const seen = new Set<string>();
+  const out: Match[] = [];
+  for (const m of ms) {
+    const key = m.supplier.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+  }
+  return out;
+}
+
 // Category columns per costing sheet (must match the sheet headers).
 const CATEGORIES: Record<'food' | 'coffee', string[]> = {
   food: ['Bread', 'Meats', 'Cheese', 'Vegetables', 'Sauces', 'Made in House', 'Extras', 'Packaging', 'Pantry'],
@@ -83,11 +97,12 @@ export default function AddIngredientModal({
       }
       if (!res.ok || !data.ok) { setSearchError(data.error || `HTTP ${res.status}`); }
       else {
-        const ms = data.matches || [];
+        // One card per supplier — the most recent invoice from each.
+        const ms = newestPerSupplier(data.matches || []);
         setMatches(ms);
         setNote(data.note || null);
-        // Auto-fill from the best (newest) match so cost + weight + supplier
-        // populate without a click. User can still pick a different match/price.
+        // Auto-fill from the newest match so cost + weight + supplier populate
+        // with no click. User can switch supplier (if several) or edit the price.
         if (ms.length > 0) {
           const m0 = ms[0];
           setSelectedIdx(0);
@@ -216,12 +231,15 @@ export default function AddIngredientModal({
                 </p>
               ) : (
                 <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Invoice matches — pick one</label>
+                  <label className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                    {matches.length === 1 ? 'Most recent invoice' : 'Most recent invoice — pick a supplier'}
+                  </label>
                   {matches.map((m, idx) => (
                     <div
                       key={idx}
                       onClick={() => pickMatch(idx)}
-                      className="rounded-lg px-3 py-2 cursor-pointer transition-colors"
+                      title={m.line}
+                      className={`rounded-lg px-3 py-2 transition-colors ${matches.length > 1 ? 'cursor-pointer' : ''}`}
                       style={{
                         background: selectedIdx === idx ? 'rgba(251,205,173,0.35)' : 'rgba(0,0,0,0.03)',
                         border: selectedIdx === idx ? '1px solid #fbcdad' : '1px solid rgba(0,0,0,0.08)',
@@ -231,22 +249,15 @@ export default function AddIngredientModal({
                         <span className="text-xs font-bold text-gray-700 uppercase">{m.supplier}</span>
                         <span className="text-[10px] text-gray-400">{m.date}</span>
                       </div>
-                      <p className="text-xs text-gray-600 mt-0.5 leading-snug">{m.line}</p>
-                      <div className="flex flex-wrap gap-1.5 mt-1.5">
-                        {m.prices.map((p, pi) => (
-                          <button
-                            key={pi}
-                            onClick={e => { e.stopPropagation(); pickMatch(idx, p); }}
-                            className="text-xs font-semibold px-2 py-0.5 rounded-md transition-colors"
-                            style={{
-                              background: selectedIdx === idx && Number(price) === p ? '#fbcdad' : 'rgba(0,0,0,0.06)',
-                              color: '#333',
-                            }}
-                          >${p.toFixed(2)}</button>
-                        ))}
+                      <div className="flex items-baseline justify-between gap-2 mt-0.5">
+                        <span className="text-xs text-gray-600 truncate">{titleCase(query.trim())}</span>
+                        <span className="text-sm font-bold shrink-0" style={{ color: '#7c4a2d', fontVariantNumeric: 'tabular-nums' }}>
+                          ${m.suggestedPrice.toFixed(2)}{m.suggestedUnit ? ` /${m.suggestedUnit}` : ''}
+                        </span>
                       </div>
                     </div>
                   ))}
+                  <p className="text-[10px] text-gray-400 leading-snug">Price auto-detected from the invoice. Adjust it below if the line read wrong.</p>
                 </div>
               )
             )}
