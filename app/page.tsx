@@ -713,7 +713,17 @@ type MarginReviewData = {
   targetMargin?: number;
   items: MarginReviewItem[];
   totalShortfall?: number;
+  coffeeShortfall?: number;
+  foodShortfall?: number;
+  coffeeShortfallPct?: number;
+  foodShortfallPct?: number;
+  coffeeRevenue?: number;
+  foodRevenue?: number;
+  coffeeFlagged?: number;
+  foodFlagged?: number;
   greenCount?: number;
+  unmatchedCoffeeCount?: number;
+  unmatchedCoffeeQty?: number;
   sales?: { name: string; weeklyQty: number }[];
   unmatched?: { name: string; weeklyQty: number; weeklyGross: number }[];
 };
@@ -1227,7 +1237,7 @@ function ProductColumn({ items, height = 272, reviews, sales, feePct }: { items:
   );
 }
 
-function MarginBadges({ items, atRisk, week, paymentFees }: { items: CostingProduct[]; atRisk?: number; week?: string; paymentFees?: PaymentFeesData | null }) {
+function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees }: { items: CostingProduct[]; atRisk?: number; atRiskPct?: number; uncosted?: number; week?: string; paymentFees?: PaymentFeesData | null }) {
   const avg    = items.length > 0 ? items.reduce((s, p) => s + p.margin!, 0) / items.length : null;
   // Prefer the live rolling rate once enough days have backfilled; otherwise
   // fall back to the static constant (see MERCHANT_FEE_PCT comment for source).
@@ -1279,8 +1289,15 @@ function MarginBadges({ items, atRisk, week, paymentFees }: { items: CostingProd
       {atRisk !== undefined && atRisk > 0 && (
         <span className="text-xs font-bold px-2 py-0.5 rounded-lg uppercase"
           style={{ background: 'rgba(220,38,38,0.10)', border: '1px solid rgba(220,38,38,0.25)', color: '#991b1b', fontVariantNumeric: 'tabular-nums' }}
-          title={`Weekly profit below the 70% target margin across flagged items${week ? ` — sales week ${week}` : ''}`}>
-          ~${Math.round(atRisk)}/wk at risk
+          title={`Weekly profit below the 70% target margin, summed across every under-target product in this category${week ? ` — sales week ${week}` : ''}`}>
+          ~${Math.round(atRisk)}/wk at risk{atRiskPct !== undefined && atRiskPct > 0 ? ` · ${atRiskPct.toFixed(1)}% of sales` : ''}
+        </span>
+      )}
+      {uncosted !== undefined && uncosted > 0 && (
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-lg uppercase"
+          style={{ background: 'rgba(217,119,6,0.10)', border: '1px solid rgba(217,119,6,0.25)', color: '#78350f' }}
+          title="Drinks selling on Square with no costing match yet — their margin isn't counted in the at-risk figure above. Add a costing to bring them in.">
+          +{uncosted} not costed
         </span>
       )}
       <span className="text-xs text-gray-400 ml-auto uppercase">{items.length} products</span>
@@ -1302,8 +1319,17 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   const reviewItems  = marginReview?.items ?? [];
   const reviewMap    = new Map<string, MarginReviewItem>(reviewItems.map(i => [i.name.toUpperCase().trim(), i]));
   const salesMap     = new Map<string, number>((marginReview?.sales ?? []).map(s => [s.name.toUpperCase().trim(), s.weeklyQty]));
-  const coffeeAtRisk = reviewItems.filter(i => i.category === 'Coffee').reduce((s, i) => s + i.shortfall, 0);
-  const foodAtRisk   = reviewItems.filter(i => i.category !== 'Coffee').reduce((s, i) => s + i.shortfall, 0);
+  // At-risk $ = category-complete total from the payload (summed over ALL
+  // underperformers before the display cap). Fall back to summing the visible
+  // items only for older payloads that predate coffee/foodShortfall — those
+  // under-report because the list is capped (see MarginReview.js).
+  const coffeeAtRisk = marginReview?.coffeeShortfall
+    ?? reviewItems.filter(i => i.category === 'Coffee').reduce((s, i) => s + i.shortfall, 0);
+  const foodAtRisk   = marginReview?.foodShortfall
+    ?? reviewItems.filter(i => i.category !== 'Coffee').reduce((s, i) => s + i.shortfall, 0);
+  const coffeeAtRiskPct  = marginReview?.coffeeShortfallPct;
+  const foodAtRiskPct    = marginReview?.foodShortfallPct;
+  const coffeeUncosted   = marginReview?.unmatchedCoffeeCount ?? 0;
   const reviewWeek   = marginReview?.weekStart && marginReview?.weekEnd
     ? `${marginReview.weekStart.slice(5)} – ${marginReview.weekEnd.slice(5)}` : undefined;
 
@@ -1519,7 +1545,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       {/* ── Coffee Costings — always in DOM ── */}
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
-          <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} week={reviewWeek} paymentFees={paymentFees} />
+          <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} uncosted={coffeeUncosted} week={reviewWeek} paymentFees={paymentFees} />
           <ProductColumn items={coffeeItems} height={450} reviews={reviewMap} sales={salesMap} feePct={feePct} />
         </Card>
       </div>
@@ -1527,7 +1553,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       {/* ── Food Costings — always in DOM ── */}
       <div style={{ display: open.food ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
-          <MarginBadges items={foodItems} atRisk={foodAtRisk} week={reviewWeek} paymentFees={paymentFees} />
+          <MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} />
           <ProductColumn items={foodItems} height={450} reviews={reviewMap} sales={salesMap} feePct={feePct} />
         </Card>
       </div>
@@ -1799,6 +1825,27 @@ export default function Home() {
   };
   const [tigerTasks, setTigerTasks] = useState<BacklogTask[]>([]);
   const [serverState, setServerState] = useState<Record<string, string[]>>({});
+  // Recent local check/uncheck toggles, keyed by `${date}|${blockId}`. Notion has
+  // read-after-write latency on the checked-state code block, so the 30s poll can
+  // read a stale value and regress a just-ticked task. We hold local intent for a
+  // short window and override the fetched state with it so the poll can't clobber.
+  const pendingWrites = useRef<Map<string, { checked: boolean; ts: number }>>(new Map());
+  const PENDING_TTL = 15000;
+
+  // Apply still-fresh local toggles on top of a freshly-fetched server state so a
+  // stale poll read can't undo a recent check (or re-add a recent uncheck).
+  const reconcilePending = (state: Record<string, string[]>): Record<string, string[]> => {
+    const now = Date.now();
+    const next: Record<string, string[]> = { ...state };
+    for (const [key, { checked, ts }] of pendingWrites.current.entries()) {
+      if (now - ts > PENDING_TTL) { pendingWrites.current.delete(key); continue; }
+      const [date, blockId] = key.split('|');
+      const ids = new Set(next[date] || []);
+      if (checked) ids.add(blockId); else ids.delete(blockId);
+      if (ids.size) next[date] = [...ids]; else delete next[date];
+    }
+    return next;
+  };
   const [delegateToast, setDelegateToast] = useState<string | null>(null);
   const [costings, setCostings] = useState<CostingProduct[]>([]);
   const [ingredientPrices, setIngredientPrices] = useState<IngredientPricesData | null>(null);
@@ -1834,7 +1881,8 @@ export default function Home() {
   const fetchServerState = async (): Promise<Record<string, string[]>> => {
     try {
       const d = await fetch('/api/checked-state').then(r => r.json());
-      const state = d.state || {};
+      // Override stale Notion reads with still-fresh local toggles (read-after-write gap).
+      const state = reconcilePending(d.state || {});
       setServerState(state);
       return state;
     } catch { return {}; }
@@ -2006,6 +2054,7 @@ export default function Home() {
 
 
   const syncCheckedState = (blockId: string, date: string, checked: boolean) => {
+    pendingWrites.current.set(`${date}|${blockId}`, { checked, ts: Date.now() });
     setServerState(prev => {
       const next = { ...prev };
       if (checked) { next[date] = [...new Set([...(next[date] || []), blockId])]; }
