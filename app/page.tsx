@@ -726,13 +726,16 @@ type MarginReviewData = {
 // live figure. The underlying Notion block text (task.text) is left
 // untouched — only the on-screen label is rewritten.
 const REVIEW_PRICING_PCT_RE = /^(review pricing\b[\s\-–—:]*)(.+?)\s*\([\d.]+%\)\s*$/i;
-function withLiveReviewMargin(text: string, reviewMap: Map<string, MarginReviewItem>): string {
+// reviewMap is keyed by product name (ALL CAPS) → current gross margin %.
+// Built from `costings` (30-min Notion sync, covers every product) NOT from
+// marginReview.items (weekly run, only flagged items — too sparse for this).
+function withLiveReviewMargin(text: string, reviewMap: Map<string, number>): string {
   const m = text.match(REVIEW_PRICING_PCT_RE);
   if (!m) return text;
   const [, prefix, itemName] = m;
-  const review = reviewMap.get(itemName.trim().toUpperCase());
-  if (!review) return text;
-  return `${prefix}${itemName.trim()} (${review.margin.toFixed(1)}%)`;
+  const margin = reviewMap.get(itemName.trim().toUpperCase());
+  if (margin === undefined) return text;
+  return `${prefix}${itemName.trim()} (${margin.toFixed(1)}%)`;
 }
 
 // Rolling "True Payment Cost" — Square fees as a % of total revenue, computed
@@ -2293,8 +2296,10 @@ export default function Home() {
   const projectsTotal = data.projects.flatMap(p => p.todos).length;
 
   // Live margin lookup for "Review pricing" to-dos — see withLiveReviewMargin.
-  const reviewMarginMap = new Map<string, MarginReviewItem>(
-    (marginReview?.items ?? []).map(i => [i.name.toUpperCase().trim(), i])
+  // Use costings (30-min Notion sync, all products) rather than marginReview.items
+  // (weekly, flagged items only) so the lookup always resolves.
+  const reviewMarginMap = new Map<string, number>(
+    costings.filter(p => p.margin !== null).map(p => [p.name.toUpperCase().trim(), p.margin!])
   );
 
   // ── Launcher tile metadata (counts + attention dots) ──
