@@ -55,28 +55,47 @@ Notion day pages. Swipe right = defer to tomorrow; swipe left = delete (one-off 
 
 | Prefix | Behaviour |
 |---|---|
-| `[YYYY-MM-DD]` | One-off — shows only on that date |
+| `[YYYY-MM-DD]` | One-off — shows only on that date, auto-deletes when past |
 | `[F]` | Fortnightly — odd ISO weeks only |
 | `[F2]` | Fortnightly — even ISO weeks only |
 | `[M]` | Monthly — first 7 days of month |
+| `[MD:n]` | Monthly on calendar day n |
 | `[CARRY]` | Carry-over — re-appears daily until checked |
+| `[STICKY]` | Persistent — shows every day until ticked off (📌 badge) |
+| `[STICKY:YYYY-MM-DD]` | Persistent — starts showing from the given date (📌 badge) |
+| `[D]` | *(Legacy)* Daily — parses existing blocks but no longer created by the picker |
 | *(none)* | Recurring — every week on that day |
+
+**Add-task recurrence picker** (single row): Today / Weekly / Fortnightly / Monthly. "Today" writes `[YYYY-MM-DD]`. "Daily" (`[D]`) was removed from the picker 16 Jun 2026. Persistent tasks are created via the pin button, not the picker.
+
+**Pin button (📌):** Appears on hover/focus on any non-sticky task in today’s Daily To Do (not available on other-day views). Tap to convert the task to `[STICKY:today]` — rewrites the Notion block via `/api/pin-task`. The task then shows every day from that date until ticked off. Already-pinned tasks show a static 📌 badge instead.
+
+**Review pricing to-dos:** Any task whose text starts with “Review pricing” (e.g. `Review pricing – Beef Sandwich (58.3%)`) is auto-pinned by the dashboard (`isReviewPricingTask()` in `dayTasks.ts`) and has its percentage swapped at render time for the current live margin from `costings` (30-min Notion sync). No prefix needed in Notion — the dashboard injects `isSticky` and the live margin at load time.
 
 **Category order:** ORDER → ADMIN → MAINTENANCE → STAFF → COSTING → MERCHANDISE → PERSONAL
 
 ### 🛒 Shopping List
-Standalone launcher tile. Sourced from dedicated Shopping List Notion page (`3683c99c0e8581c7b19cc2eec6b27b47`). Only unchecked items show — self-clears as bought. Per-item quantity as trailing `×N` — tap to adjust. Swipe-left (mobile) or hover-X (desktop) to delete an item.
+Standalone launcher tile. Sourced from dedicated Shopping List Notion page (`3683c99c0e8581c7b19cc2eec6b27b47`). Unchecked items show by default; checked items stay visible with strikethrough so you can verify the list before clearing. Checked state is persisted to Notion via `/api/check-shopping` so it survives reloads. Per-item quantity as trailing `×N` — tap to adjust. Swipe-left (mobile) or hover-X (desktop) to delete an item permanently.
 
 ### 📅 The Week Ahead
-Deputy roster for 7 days — shift times + area. Task count badge per day. Tap day = view/add tasks inline. Add panel supports recurring options (daily/weekly/fortnightly/monthly); recurring tasks deletable from here.
+Deputy roster for 7 days — shift times + area. Task count badge per day. Tap day = view/add tasks inline. Add panel supports recurring options (Today/Weekly/Fortnightly/Monthly); recurring tasks deletable from here.
 
 ### 🎯 Projects (+ Brain Dump)
 Brain Dump capture at top: free-text idea → `/api/braindump-analyze` (Opus) decides new project vs new action on existing → structured draft. Projects from Notion Projects DB. Status cycles In Progress → Blocked → On Hold → Done. Swipe-left archives (→ Notion trash, recoverable 30 days). Claude-logo button on an action = deep-link handoff to full Claude (Cowork on desktop; clipboard on mobile).
 
 ### ☕ Coffee Costings / 🥪 Food Costings
-Live margin view from Notion Costings DB. Sorted worst→best margin. MarginBadge summary (avg %, red/amber/green counts). Add-product button → AddProductModal.
+Live margin view from Notion Costings DB. Sorted worst→best margin. Add-product button → AddProductModal.
 
-**Weekly margin review folded into tiles.** Each product tile shows `N/wk` (units sold in the last 7 days, from Square) and, where the recipe is under the 70% target, `−$X/wk` shortfall. Data from `/api/margin-review` (reads the `margin_review` Notion JSON block written Mondays 6am by `MarginReview.js`). Card header shows total $/wk at risk. Square modifier maps attribute each sales bucket to exactly one costing (no double-count); unmapped sellers surface in `unmatched` for coverage gaps.
+**Each product tile shows:**
+- Gross margin (small, muted) and **net margin after card fees** (large, bold, colour-coded green/amber/red)
+- Sell price, margin progress bar, units sold/wk (from Square)
+- Where the recipe is under the 70% target: `−$X/wk` shortfall (from margin review)
+
+**Card header (MarginBadges):** `Avg XX.X% → YY.Y% [after Z.ZZ% card]` — gross average, then net after the live Square blended fee rate. Badge is green-tinted when using live data, grey when still on the static fallback.
+
+**Card fee rate:** Live rolling rate from `PaymentFeeTracker.js` (reads `payment_fees` Notion block via `/api/payment-fees`). Falls back to static `MERCHANT_FEE_PCT = 1.02%` constant until ≥30 days of live data have backfilled. Current live rate: ~1.04%.
+
+**Weekly margin review folded into tiles.** Data from `/api/margin-review` (reads `margin_review` Notion JSON block written Mondays 6am by `MarginReview.js`). Card header shows total $/wk at risk. Square modifier maps attribute each sales bucket to exactly one costing (no double-count); unmapped sellers surface in `unmatched` for coverage gaps.
 
 **Made-in-house components are hidden from these tiles.** Any Costings row whose **Notes** contains `made in house` or `component of` (case-insensitive) is treated as a sub-recipe (e.g. Fennel Slaw, Pickled Onions) and excluded from both columns — it's tracked in the Supplier Prices widget instead. Convention: when costing a sub-recipe as its own row, put "made in house" or "component of …" in its Notes field. Filter lives in `app/page.tsx` (`isComponent`).
 
@@ -95,7 +114,7 @@ TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e8
 | Projects DB | `f7712afe4c7247d7b1690f2e1ecc1a0d` |
 | Costings DB | `8f16358a47e54062b5fe1ce7a7480754` |
 | Tiger OS Backlog DB (Updates widget) | `657d36eb15e84269b85765e20096c6be` |
-| Main OS page (checked-state + ingredient_prices + recipe_map + price_drift_warnings JSON blocks) | `3403c99c0e858113a941c2118b3cdef9` |
+| Main OS page (checked-state + ingredient_prices + recipe_map + price_drift_warnings + margin_review + payment_fees JSON blocks) | `3403c99c0e858113a941c2118b3cdef9` |
 | Shopping List page | `3683c99c0e8581c7b19cc2eec6b27b47` |
 | Monday | `3403c99c0e858139bd34e9f3873dc7ef` |
 | Tuesday | `3403c99c0e858133bb31f63559b18716` |
@@ -121,6 +140,8 @@ TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e8
 | `/api/task-context` | GET/POST | Read/write per-task context notes (keyed by block ID) |
 | `/api/delete-task` | DELETE | Delete Notion block |
 | `/api/add-shopping` | POST | Add item to Shopping List page (with `×N` qty) |
+| `/api/check-shopping` | PATCH | Update Notion `to_do.checked` for a shopping item (persists across reloads) |
+| `/api/pin-task` | PATCH | Convert an existing daily task to `[STICKY:today]` — rewrites the Notion block |
 | `/api/update-shopping` | PATCH | Rewrite a shopping item's text (adjust qty) |
 | `/api/add-project-action` | POST | Add to_do block to a project |
 | `/api/project-status` | PATCH | Update project status |
@@ -135,6 +156,7 @@ TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e8
 | `/api/recipe-map` | GET | Reads `recipe_map` JSON block (ingredient→product attribution) |
 | `/api/price-drift` | GET | Reads `price_drift_warnings` JSON block |
 | `/api/margin-review` | GET | Reads `margin_review` JSON block (weekly margin intelligence; powers `N/wk` + `−$/wk` on costing tiles) |
+| `/api/payment-fees` | GET | Reads `payment_fees` JSON block (rolling Square card fee %; powers net margin display) |
 | `/api/tigeros-tasks` | GET | Fetch Tiger OS backlog tasks + subtasks (Updates widget) |
 | `/api/login` | POST | Password auth → set `gdt_session` cookie |
 
@@ -148,6 +170,7 @@ TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e8
 | `DEPUTY_ENDPOINT` | `/api/roster` |
 | `DEPUTY_ACCESS_TOKEN` | `/api/roster` |
 | `ANTHROPIC_API_KEY` | `/api/claude-assist`, `/api/braindump-analyze`, `/api/add-task` |
+| `SQUARE_ACCESS_TOKEN` | `PaymentFeeTracker.js` (Apps Script, reads Square Payments API) |
 | `APP_PASSWORD` | Verified by `/api/login` |
 | `SESSION_TOKEN` | Value of `gdt_session` cookie; `middleware.ts` gates the whole app |
 
@@ -172,7 +195,13 @@ Gmail → SaveInvoicesToDrive (hourly) → Drive folders
 SyncSquarePrices (hourly) → live Square retail prices → Coffee Costings sheet
 BuildRecipeMap (daily) → recipe_map JSON → Notion OS page
 SyncIngredientPrices (30 min) → ingredient_prices JSON → Notion OS page
+MarginReview (Mondays 6am) → margin_review JSON → Notion OS page → TIGER OS costing tiles
 TakeawayCupCounter (daily) → Planetware cup reorder at 10,000 cups
+PaymentFeeTracker → Square Payments API → "Payment Fees" tab (Coffee Costings sheet)
+                                        → payment_fees JSON → Notion OS page → TIGER OS net margin
+  ├─ installPaymentFeeTracker() → sets up triggers (run once)
+  ├─ runPaymentFeeBackfillStep() → 10-min trigger, self-deletes after 365 days covered
+  └─ runDailyPaymentFeeUpdate() → daily ~1am ongoing
 ```
 
 | File | Purpose |
@@ -184,6 +213,7 @@ TakeawayCupCounter (daily) → Planetware cup reorder at 10,000 cups
 | `SyncIngredientPrices.js` | Writes ingredient prices as chunked JSON to Notion OS page (30 min) |
 | `BuildRecipeMap.js` | Parses FOOD sheet formulas → ingredient→product map → `recipe_map` Notion block (daily) |
 | `MarginReview.js` | Joins 7 days of Square item sales against Notion Costings DB, ranks underperforming recipes by weekly $ impact → `margin_review` Notion block (Mondays 6am). Curated modifier maps attribute each sales bucket to one costing. `installMarginReview()` one-off setup; `printMarginReview()` previews. |
+| `PaymentFeeTracker.js` | Reads Square Payments API → writes daily Collected/Fees/Count rows to "Payment Fees" tab in Coffee Costings sheet → computes rolling 365-day blended fee % → writes `payment_fees` JSON block to Notion OS page. Run `installPaymentFeeTracker()` once to set up triggers (backfill + daily). `printPaymentFeeSummary()` to verify. |
 | `TakeawayCupCounter.js` | Polls Square Orders daily, tallies Planetware cups. At 10,000, appends reorder to Shopping List. Counter start: 2026-06-01. |
 | `AddProduct.js` / `AddIngredient.js` | Web-app endpoints backing in-app Add Product / Add Ingredient modals |
 | `BackupCostings.js` | Costings sheet backup |
