@@ -578,7 +578,7 @@ function buildShoppingText(name: string, qty: number): string {
 // Schedule type options for the add-task recurrence picker.
 // Persistent tasks are created by pinning (📌) in the Daily To Do — see handlePinTask.
 const RECURRENCE_OPTIONS = [
-  { value: 'once', label: 'Today' },
+  { value: 'once', label: 'Once Off' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'fortnightly', label: 'Fortnightly' },
   { value: 'monthly', label: 'Monthly' },
