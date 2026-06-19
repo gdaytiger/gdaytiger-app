@@ -910,7 +910,7 @@ function DriftChip({ drift }: { drift: DriftWarning }) {
 // The headline case: carton price drops but pack shrinks more — unit cost rises
 // while the invoice looks cheaper. Cleared via clearPackChange() in Apps Script
 // or auto-expires after 30 days.
-function PackChangeBanner({ packChanges, unmappedSkus }: { packChanges: PackChange[]; unmappedSkus: UnmappedSku[] }) {
+function PackChangeBanner({ packChanges, unmappedSkus, onAddSku }: { packChanges: PackChange[]; unmappedSkus: UnmappedSku[]; onAddSku: (sku: UnmappedSku) => void }) {
   if (packChanges.length === 0 && unmappedSkus.length === 0) return null;
   return (
     <div className="mb-2 space-y-2 shrink-0">
@@ -949,6 +949,12 @@ function PackChangeBanner({ packChanges, unmappedSkus }: { packChanges: PackChan
             {sku.supplier}: {sku.description}
           </span>
           <span className="text-xs font-bold shrink-0" style={{ color: '#7c2d12', fontVariantNumeric: 'tabular-nums' }}>${sku.price.toFixed(2)}</span>
+          <button
+            onClick={() => onAddSku(sku)}
+            className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-lg shrink-0 transition-colors"
+            style={{ background: '#fed7aa', color: '#7c2d12', border: '1px solid rgba(124,45,18,0.2)' }}
+            title={`Add "${sku.description}" as a tracked ingredient`}
+          >+ ADD</button>
         </div>
       ))}
     </div>
@@ -1475,6 +1481,12 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   const filteredCount = supplierGroups.reduce((n, g) => n + g.items.length, 0);
 
   const [addIngredientOpen, setAddIngredientOpen] = useState(false);
+  const [addPrefill, setAddPrefill] = useState<{ query?: string; supplier?: string; price?: number } | undefined>(undefined);
+  // Open the Add-Ingredient modal pre-filled from a "NEW SKU" invoice line.
+  const handleAddSku = (sku: UnmappedSku) => {
+    setAddPrefill({ query: sku.description, supplier: sku.supplier, price: sku.price });
+    setAddIngredientOpen(true);
+  };
 
   // Collapsible supplier tiles (Shopping List pattern). Searching auto-expands.
   const isSearching = priceQuery.trim().length > 0;
@@ -1530,7 +1542,8 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       {addIngredientOpen && (
         <AddIngredientModal
           open
-          onClose={() => setAddIngredientOpen(false)}
+          prefill={addPrefill}
+          onClose={() => { setAddIngredientOpen(false); setAddPrefill(undefined); }}
           onSuccess={() => onIngredientsChanged?.()}
         />
       )}
@@ -1538,16 +1551,8 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       {/* ── Ingredient Prices — always in DOM ── */}
       <div style={{ display: open.supplier ? 'block' : 'none' }}>
         <Card icon={<WidgetIcon name="supplier" chip={28} glyph={17} />} title="Supplier Prices"
-          onCollapse={() => onCollapse('supplier')}
-          headerRight={
-          <button
-            onClick={() => setAddIngredientOpen(true)}
-            className="text-xs font-semibold px-2 py-1 rounded-lg transition-colors"
-            style={{ background: 'rgba(0,0,0,0.06)', color: '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}
-            title="Add an ingredient from a recent invoice"
-          >+ ADD</button>
-        }>
-          <PackChangeBanner packChanges={priceDrift?.packChanges ?? []} unmappedSkus={priceDrift?.unmappedSkus ?? []} />
+          onCollapse={() => onCollapse('supplier')}>
+          <PackChangeBanner packChanges={priceDrift?.packChanges ?? []} unmappedSkus={priceDrift?.unmappedSkus ?? []} onAddSku={handleAddSku} />
           {firstLoad ? (
             <p className="text-xs text-gray-400 italic">Baseline saved — ingredient changes appear from tomorrow.</p>
           ) : ingredientChanges.length === 0 ? (

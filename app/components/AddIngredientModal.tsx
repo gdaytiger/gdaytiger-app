@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type Match = {
   supplier: string;
@@ -30,12 +30,15 @@ export default function AddIngredientModal({
   open,
   onClose,
   onSuccess,
+  prefill,
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  // Optional starting values, e.g. from a "NEW SKU" row on the dashboard.
+  prefill?: { query?: string; supplier?: string; price?: number };
 }) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(prefill?.query ?? '');
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -43,10 +46,10 @@ export default function AddIngredientModal({
   const [note, setNote] = useState<string | null>(null);
 
   // Confirm-form fields
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
+  const [name, setName] = useState(prefill?.query ? titleCase(prefill.query) : '');
+  const [price, setPrice] = useState(prefill?.price != null ? String(prefill.price) : '');
   const [unit, setUnit] = useState('');
-  const [supplier, setSupplier] = useState('');
+  const [supplier, setSupplier] = useState(prefill?.supplier ?? '');
   const [type, setType] = useState<'food' | 'coffee'>('food');
   const [category, setCategory] = useState('');
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
@@ -99,6 +102,15 @@ export default function AddIngredientModal({
       setSearching(false); setSearched(true);
     }
   };
+
+  // When opened from a "NEW SKU" row, the description is prefilled — kick off the
+  // invoice search automatically so the matches/confirm form appear straight away.
+  useEffect(() => {
+    // Intentional one-shot kickoff on mount; the modal is remounted per-open.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (prefill?.query) runSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickMatch = (idx: number, chosenPrice?: number) => {
     const m = matches[idx];
