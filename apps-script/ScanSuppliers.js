@@ -454,7 +454,7 @@ function scanCoffeeSuppliers(cutoffOverride) {
                `Cutoff: ${cutoff.toLocaleString('en-AU')}`, ''];
   let updates = 0;
 
-  // ── Seven Seeds (B5 GG 1KG, B7 Chai /6L, B8 F.Bomb, B9 Decaf)
+  // ── Seven Seeds (B5 GG 3KG ÷3, B7 Chai /6L, B8 F.Bomb, B9 Decaf)
   log.push('--- SEVEN SEEDS ---');
   try {
     const files = getSortedPdfs(FOLDER_SEVEN_SEEDS, 'Invoice INV', cutoff);
@@ -839,87 +839,83 @@ function parsePfdSalesOrderText_(text, log) {
 // ─── PARSERS: COFFEE SUPPLIERS ────────────────────────────────────────────────
 
 function parseSevenSeedsText(text) {
-  // Strategy v7 (event-based — final, after reading actual older invoices).
+  // Strategy v8 (positional FIFO) — handles Seven Seeds' 2026 invoice template.
   //
-  // The previous "anchor + lookahead" approach kept misfiring on real Seven
-  // Seeds invoices because product codes use characters my regex wouldn't
-  // match (slashes in MTMBO-S/O_1KG, periods/spaces in FIL_PAP-BREW-FLAT_56.50B A,
-  // multi-line wraps from OCR, descriptions appearing UNDER the wrong code,
-  // codes with descriptions on the same line as the price, etc).
+  // Why v7 (anchor/event) died: the new template's OCR separates product CODES
+  // (one block) from PRICES (another block) and stacks multiple "qty unit GST
+  // Free total" tuples onto a single line, e.g.:
+  //   GG-BL-1KG ... pricing_group_A
+  //   GG-BL-3KG ... pricing_group_A
+  //   6.00 36.00 GST Free 216.00 10.00 108.00 GST Free 1,080.00
+  // v7 attributed each price to the text immediately before it, so every rule
+  // saw BOTH codes before the price block and rejected the match as ambiguous —
+  // returning {} and silently going stale.
   //
-  // New approach: walk the text once, accumulating any non-price text into an
-  // "anchor buffer". Each time we hit a price line, emit a `priceEvent` whose
-  // anchor text is everything since the last price. The anchor text is GUARANTEED
-  // to belong to that product because price lines are the natural boundary
-  // between product blocks in this invoice format.
+  // v8: locate every product code AND every price tuple by their POSITION in the
+  // text, walk them in document order, and assign each price tuple to the OLDEST
+  // unfilled product seen before it (FIFO). Because the price block lists prices
+  // in the SAME order as the code block, the Nth product gets the Nth price. This
+  // is newline-agnostic and works for BOTH the new separated layout and the old
+  // inline layout (code + price on one line).
   //
-  // Then match each rule to its first qualifying event. No lookahead, no
-  // foreign-code regex, no window heuristics — just attribution by position.
-  const results = {};
-  const lines   = text.replace(/\r/g, '').split('\n').map(l => l.trim());
-  const priceRe = /(\d+\.\d{2})\s+(\d+\.\d{2})\s+(?:GST|10%)/i;
+  // cell:null means "detected only to keep the ordering aligned — don't write a
+  // cell" (sizes/variants we don't track, e.g. 250G).
+  //
+  // GG (B5) is 3KG-ONLY as of 2026-06-19 — Jonathan buys the 3KG bag and the
+  // 1kg/3kg per-kg prices are diverging, so the 1KG line must NOT feed B5. The
+  // 1KG/250G GG lines are still detected (to consume their own price tuples and
+  // keep alignment) but map to null. ÷N converts a pack price to the sheet's
+  // per-unit basis (recipes are costed per gram, so B5 stores a per-kg cost).
+  //
+  // LIMITATION: alignment relies on detecting EVERY line item. If Seven Seeds
+  // adds a SKU not listed below and it has no inline price, its price tuple could
+  // shift onto the wrong product. The min/max guard in validateAndUpdate is the
+  // backstop (a wrong value usually lands out of range and is rejected, flagging
+  // stale rather than writing a bad price). Add new SKUs here when they appear.
+  const r2 = n => Math.round(n * 100) / 100;
 
-  // Strip BOTH whitespace AND hyphens. The OCR consistently splits item codes
-  // at hyphen boundaries (e.g. `LA_SER-DECAF-1KG` becomes two lines:
-  // `LA_SER` and `DECAF-1KG`), losing the middle hyphen on concatenation.
-  // Stripping hyphens during normalisation makes the matching robust to that.
-  // Rule patterns are written without hyphens for the same reason.
-  function normalize(s) { return s.replace(/[\s\-]+/g, '').toUpperCase(); }
-
-  // Pass 1: build event list. Each event = unit price + anchor text since
-  // the previous event (or start of text). Inline anchor (text BEFORE the
-  // price on the same line) is included so single-line entries like
-  // "GG-BL-250G ... 8.00 11.00 GST Free 88.00" are correctly attributed.
-  const events = [];
-  let anchorAccum = '';
-  for (let i = 0; i < lines.length; i++) {
-    const m = priceRe.exec(lines[i]);
-    if (m) {
-      const matchStart = lines[i].search(priceRe);
-      const inline = matchStart > 0 ? lines[i].substring(0, matchStart) : '';
-      const anchorText = normalize(anchorAccum + ' ' + inline);
-      events.push({ unitPrice: parseFloat(m[2]), anchorText: anchorText });
-      anchorAccum = '';
-    } else if (lines[i]) {
-      anchorAccum += ' ' + lines[i];
-    }
-  }
-
-  // Rule definitions — hyphenless code form to match the normalised anchor text.
-  //   GGBL1KG     ← was GG-BL-1KG
-  //   F_BOMBBL3KG ← was F_BOMB-BL-3KG
-  //   LA_SERDECAF1KG ← was LA_SER-DECAF-1KG
-  //   etc. Sizes (1KG/3KG/250G) preserved so variants stay distinguishable.
-  // 3KG variants accepted with /3 conversion (same per-kg cost as 1KG).
-  const rules = [
-    { has: ['GGBL1KG'],                                          not: ['GGBL3KG', 'GGBL250G'],          cell: 'B5' },
-    { has: ['GGBL3KG'],                                          not: ['GGBL1KG', 'GGBL250G'],          cell: 'B5', convert: p => r2(p / 3) },
-    { has: ['CHAIFH6X1L'],                                       not: [],                               cell: 'B7', convert: p => r2(p / 6) },
-    { has: ['F_BOMBBL1KG'],                                      not: ['F_BOMBBL3KG', 'F_BOMBBL250G'],  cell: 'B8' },
-    { has: ['F_BOMBBL3KG'],                                      not: ['F_BOMBBL1KG', 'F_BOMBBL250G'],  cell: 'B8', convert: p => r2(p / 3) },
-    { has: ['LA_SERDECAF1KG', 'DECAFBL1KG', 'COLOMBIADECAF1KG'], not: ['LA_SERDECAF3KG', 'DECAFBL3KG', 'COLOMBIADECAF3KG'], cell: 'B9' },
-    { has: ['LA_SERDECAF3KG', 'DECAFBL3KG', 'COLOMBIADECAF3KG'], not: ['LA_SERDECAF1KG', 'DECAFBL1KG', 'COLOMBIADECAF1KG'], cell: 'B9', convert: p => r2(p / 3) },
+  const products = [
+    { re: /GG[\s\-]*BL[\s\-]*3\s*KG/gi,           cell: 'B5', conv: p => r2(p / 3) },
+    { re: /GG[\s\-]*BL[\s\-]*1\s*KG/gi,           cell: null },  // 3kg-only: ignore 1kg
+    { re: /GG[\s\-]*BL[\s\-]*250\s*G/gi,          cell: null },
+    { re: /F[_\s]*BOMB[\s\-]*BL[\s\-]*3\s*KG/gi,  cell: 'B8', conv: p => r2(p / 3) },
+    { re: /F[_\s]*BOMB[\s\-]*BL[\s\-]*1\s*KG/gi,  cell: 'B8' },
+    { re: /F[_\s]*BOMB[\s\-]*BL[\s\-]*250\s*G/gi, cell: null },
+    { re: /CHAI[\s\-]*FH[\s\-]*6\s*X\s*1\s*L/gi,  cell: 'B7', conv: p => r2(p / 6) },
+    { re: /DECAF[\s\-]*MTMBO[\s\-]*3\s*KG/gi,     cell: 'B9', conv: p => r2(p / 3) },
+    { re: /DECAF[\s\-]*MTMBO[\s\-]*1\s*KG/gi,     cell: 'B9' },
+    { re: /(?:LA[_\s]*SER|COLOMBIA)[\s\-]*DECAF[\s\-]*3\s*KG/gi, cell: 'B9', conv: p => r2(p / 3) },
+    { re: /(?:LA[_\s]*SER|COLOMBIA)[\s\-]*DECAF[\s\-]*1\s*KG/gi, cell: 'B9' },
   ];
 
-  // Auto-build cross-cell exclusions. Any event whose anchor contains a code
-  // belonging to a DIFFERENT tracked cell is ambiguous — usually because the
-  // OCR dumped multiple item codes into a header section before any prices.
-  // Match a rule against an ambiguous event and you'd attribute the price of
-  // ONE product to ALL the codes that appeared in the dump.
-  rules.forEach(r => {
-    r.autoExclude = rules
-      .filter(other => other.cell !== r.cell)
-      .flatMap(other => other.has);
+  // Collect product-code markers and price tuples, each with its text position.
+  const markers = [];
+  products.forEach(p => {
+    let m; p.re.lastIndex = 0;
+    while ((m = p.re.exec(text)) !== null) {
+      markers.push({ index: m.index, kind: 'product', cell: p.cell, conv: p.conv });
+    }
   });
+  // A price tuple = "qty unit GST [Free] total". Group 2 is the unit price.
+  // Requiring GST excludes SHIPPING/TOTAL lines (no GST), which carry no tuple.
+  const tupleRe = /(\d[\d,]*\.\d{2})\s+(\d[\d,]*\.\d{2})\s+GST(?:\s+Free)?\s+(\d[\d,]*\.\d{2})/gi;
+  let t;
+  while ((t = tupleRe.exec(text)) !== null) {
+    markers.push({ index: t.index, kind: 'price', unit: parseFloat(t[2].replace(/,/g, '')) });
+  }
 
-  // Pass 2: match each rule to its first qualifying, unambiguous event.
-  for (const rule of rules) {
-    for (const ev of events) {
-      if (!rule.has.some(h => ev.anchorText.includes(h))) continue;
-      if (rule.not.some(bad => ev.anchorText.includes(bad))) continue;
-      if (rule.autoExclude.some(other => ev.anchorText.includes(other))) continue;
-      results[rule.cell] = rule.convert ? rule.convert(ev.unitPrice) : ev.unitPrice;
-      break;
+  markers.sort((a, b) => a.index - b.index);
+
+  // Walk in document order; each price fills the oldest pending product (FIFO).
+  // Last write wins for a cell (e.g. if both 1KG and 3KG feed B8, the later 3KG).
+  const results = {};
+  const queue = [];
+  for (const mk of markers) {
+    if (mk.kind === 'product') {
+      queue.push(mk);
+    } else if (queue.length) {
+      const prod = queue.shift();
+      if (prod.cell) results[prod.cell] = prod.conv ? prod.conv(mk.unit) : mk.unit;
     }
   }
   return results;
