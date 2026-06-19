@@ -9,7 +9,8 @@
     "prebuild": "node scripts/gen-version.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "push:apps-script": "cd apps-script && clasp push"
   },
   "dependencies": {
     "next": "^16.2.9",

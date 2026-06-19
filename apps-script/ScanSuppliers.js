@@ -102,12 +102,12 @@ const COFFEE_CELL_META = {
   H6:  { min: 70,  max: 140, refreshDays: 90, label: 'Cup 12oz /1000', pack: 1000 },
   H7:  { min: 50,  max: 100, refreshDays: 90, label: 'Hot Lid /1000',  pack: 1000 },
   H9:  { min: 40,  max: 80,  refreshDays: 60, label: 'Sipper Lid /1000' },
-  H10: { min: 80,  max: 150, refreshDays: 60, label: 'Paper Straw /2500' },
+  H10: { min: 80,  max: 150, refreshDays: 60, label: 'Paper Straw /2500', manual: true }, // Trio, bought too rarely to track on a window — still auto-captures when invoiced
 };
 
 const FOOD_CELL_META = {
   R12: { min: 3,  max: 6,   refreshDays: 14, label: 'Sungold FC 2LT (cross-write)' },
-  R15: { min: 30, max: 80,  refreshDays: 60, label: 'Pinenuts /1kg' },
+  R15: { min: 30, max: 80,  refreshDays: 60, label: 'Pinenuts /1kg', manual: true }, // never appears on a scanned invoice — maintained by hand in FOOD COSTINGS
   // Add ranges for other Food sheet cells incrementally as needed.
 };
 
@@ -886,6 +886,11 @@ function parseSevenSeedsText(text) {
     { re: /DECAF[\s\-]*MTMBO[\s\-]*1\s*KG/gi,     cell: 'B9' },
     { re: /(?:LA[_\s]*SER|COLOMBIA)[\s\-]*DECAF[\s\-]*3\s*KG/gi, cell: 'B9', conv: p => r2(p / 3) },
     { re: /(?:LA[_\s]*SER|COLOMBIA)[\s\-]*DECAF[\s\-]*1\s*KG/gi, cell: 'B9' },
+    // Single-origin beans, billed as "<ORIGIN>-S/O_<size>" (e.g. MTMBO-S/O_1KG).
+    // We don't track single origins, but they MUST be detected so they consume
+    // their own price tuple and don't shift the next product's price. (Undetected,
+    // Matambo single-origin's $55 was polluting B9/B8 on mixed invoices.)
+    { re: /[A-Z][A-Z0-9_]*[\s\-]*S\s*\/\s*O[_\s\-]*\d+\s*(?:KG|G)\b/gi, cell: null },
   ];
 
   // Collect product-code markers and price tuples, each with its text position.
