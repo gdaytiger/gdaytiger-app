@@ -40,7 +40,8 @@
 var MR_DB_ID         = '8f16358a47e54062b5fe1ce7a7480754';  // Notion Product Costings DB
 var MR_TARGET_MARGIN = 70;    // % — matches the green threshold convention
 var MR_RED_BELOW     = 60;    // % — red threshold
-var MR_MAX_ITEMS     = 12;    // cap the ranked list
+var MR_MAX_ITEMS     = 12;    // legacy global cap (kept for reference; see MR_MAX_PER_CAT)
+var MR_MAX_PER_CAT   = 8;     // cap the ranked DISPLAY list PER category (coffee / food)
 var MR_MAX_UNMATCHED = 12;    // top Square sellers with no costing match
 
 // Modifiers that change WHICH recipe a drink/dish is costed against.
@@ -57,6 +58,10 @@ var MR_MOD_ALIASES = {
   'SOY MILK':    'SOY',
   'OAT MILK':    'OAT',
   'ALMOND MILK': 'ALMOND',
+  // The Tiger Style modifier rings with its full descriptive name; collapse it
+  // to the recognised 'TIGER STYLE' so H+C Tiger Style splits out of plain H+C
+  // and attributes to its own costing (confirmed Square name Jun 2026).
+  'TIGER STYLE (PICKLES + TIGER SAUCE)': 'TIGER STYLE',
 };
 
 // Recipe-name → Notion-costing-name aliases, for recipes whose sheet section
@@ -73,8 +78,30 @@ var MR_NAME_ALIASES = {
 var MR_EXTRA_MAP = (function () {
   var entries = [];
 
-  // Dine-in white-coffee items: milk modifier picks the recipe.
+  // Food variants that ring as a base item + a RECOGNISED modifier (see
+  // MR_RECOGNISED_MODS). Recognising the modifier splits it into its own
+  // sales bucket, so without an entry here it can never attribute to its
+  // costing and drops to `unmatched` (qty/wk shows blank on the tile).
+  // Confirmed via printAllBuckets() Jun 2026:
+  //   "Caponata +ADD CHEESE"  → CAPONATA (MOZZARELLA)
+  //   "H+C +TIGER STYLE"      → H+C (TIGER STYLE)
+  // NB: the Tiger Style modifier rings as "TIGER STYLE (Pickles + Tiger Sauce)"
+  // and is canonicalised to 'TIGER STYLE' via MR_MOD_ALIASES above; before that
+  // alias existed it was unrecognised and folded silently into plain H+C.
+  entries.push({ squareItem: 'Caponata', modifiers: ['Add Cheese'],
+    recipes: ['CAPONATA (MOZZARELLA)'] });
+  entries.push({ squareItem: 'H+C', modifiers: ['Tiger Style'],
+    recipes: ['H+C (TIGER STYLE)'] });
+
+  // Dine-in white-coffee items: milk modifier picks the recipe. Register rings
+  // size as a 'Large' variation (or a LARGE modifier, promoted to a variation
+  // upstream in mrFetchSquareBuckets_). The SMALL/default and LARGE rows are
+  // BOTH required — without the Large rows, large dine-in whites fall back to
+  // the small recipe, which zeroes the (LARGE) tile (qty shows blank) AND
+  // over-states + under-costs the small (large volume folded into it).
+  // Observed Jun 2026: Latte/Flat White/Cappuccino LARGE alone ≈ 58 drinks/wk.
   ['Flat White', 'Latte', 'Cappuccino'].forEach(function (item) {
+    // — small / default —
     entries.push({ squareItem: item, modifiers: [],
       recipes: ['DINE IN FC MILK COFFEE', 'TAKEAWAY FC MILK COFFEE'] });
     entries.push({ squareItem: item, modifiers: ['Soy'],
@@ -85,11 +112,45 @@ var MR_EXTRA_MAP = (function () {
       recipes: ['DINE IN ALMOND COFFEE', 'TAKEAWAY ALMOND COFFEE'] });
     entries.push({ squareItem: item, modifiers: ['Chocolate'],
       recipes: ['DINE IN HOT CHOCOLATE (SMALL)', 'TAKEAWAY HOT CHOCOLATE (SMALL)'] });
+    // — large —
+    entries.push({ squareItem: item, variation: 'Large', modifiers: [],
+      recipes: ['DINE IN FC MILK COFFEE (LARGE)', 'TAKEAWAY FC MILK COFFEE (LARGE)'] });
+    entries.push({ squareItem: item, variation: 'Large', modifiers: ['Soy'],
+      recipes: ['DINE IN SOY COFFEE (LARGE)', 'TAKEAWAY SOY COFFEE (LARGE)'] });
+    entries.push({ squareItem: item, variation: 'Large', modifiers: ['Oat'],
+      recipes: ['DINE IN OAT COFFEE (LARGE)', 'TAKEAWAY OAT COFFEE (LARGE)'] });
+    entries.push({ squareItem: item, variation: 'Large', modifiers: ['Almond'],
+      recipes: ['DINE IN ALMOND COFFEE (LARGE)', 'TAKEAWAY ALMOND COFFEE (LARGE)'] });
+    entries.push({ squareItem: item, variation: 'Large', modifiers: ['Chocolate'],
+      recipes: ['DINE IN HOT CHOCOLATE (LARGE)', 'TAKEAWAY HOT CHOCOLATE (LARGE)'] });
   });
 
-  // Dine-in black coffee.
+  // Dine-in black coffee (small + large).
   entries.push({ squareItem: 'Long Black', modifiers: [],
     recipes: ['DINE IN BLACK COFFEE', 'TAKEAWAY BLACK COFFEE'] });
+  entries.push({ squareItem: 'Long Black', variation: 'Large', modifiers: [],
+    recipes: ['DINE IN BLACK COFFEE (LARGE)', 'TAKEAWAY BLACK COFFEE (LARGE)'] });
+
+  // Hot Chocolate rings as its OWN item (dine-in), not White +Chocolate.
+  entries.push({ squareItem: 'Hot Chocolate', modifiers: [],
+    recipes: ['DINE IN HOT CHOCOLATE (SMALL)', 'TAKEAWAY HOT CHOCOLATE (SMALL)'] });
+  entries.push({ squareItem: 'Hot Chocolate', variation: 'Large', modifiers: [],
+    recipes: ['DINE IN HOT CHOCOLATE (LARGE)', 'TAKEAWAY HOT CHOCOLATE (LARGE)'] });
+
+  // Espresso-family short blacks/whites with no dedicated recipe — costed as the
+  // nearest standard drink (Jonathan's call: macchiato = white). Piccolo/Magic
+  // are milk coffees → small white; Espresso → small black; Long Macchiato →
+  // white (small default, large safety). All low volume (~3-8/wk each).
+  entries.push({ squareItem: 'Piccolo', modifiers: [],
+    recipes: ['DINE IN FC MILK COFFEE', 'TAKEAWAY FC MILK COFFEE'] });
+  entries.push({ squareItem: 'Magic', modifiers: [],
+    recipes: ['DINE IN FC MILK COFFEE', 'TAKEAWAY FC MILK COFFEE'] });
+  entries.push({ squareItem: 'Espresso', modifiers: [],
+    recipes: ['DINE IN BLACK COFFEE', 'TAKEAWAY BLACK COFFEE'] });
+  entries.push({ squareItem: 'Long Macchiato', modifiers: [],
+    recipes: ['DINE IN FC MILK COFFEE', 'TAKEAWAY FC MILK COFFEE'] });
+  entries.push({ squareItem: 'Long Macchiato', modifiers: [], variation: 'Large',
+    recipes: ['DINE IN FC MILK COFFEE (LARGE)', 'TAKEAWAY FC MILK COFFEE (LARGE)'] });
 
   // Mocha + matcha — ring as modifiers on the white-coffee items (76/wk and
   // 86/wk observed). If no matching costing exists yet they surface in
@@ -265,11 +326,31 @@ function buildMarginReview_() {
   }
 
   // Rank underperformers by weekly $ shortfall vs the 70% target.
+  //
+  // Coffee vs food are reported as SEPARATE badges on the dashboard. Two traps
+  // this code now avoids on purpose:
+  //   1. Dollar-shortfall ranking structurally favours food. A $19 panini 12pts
+  //      under target loses ~$20/wk; a $7 coffee 10pts under loses ~$0.50/wk.
+  //      A single global top-N list therefore lets food crowd coffee out, and
+  //      the coffee badge reads near-zero. Fix: cap the DISPLAY list per
+  //      category (MR_MAX_PER_CAT each), not globally.
+  //   2. The badge $ figure must be CATEGORY-COMPLETE, i.e. summed over ALL
+  //      underperformers in that category — never over the display-capped
+  //      slice. Fix: coffeeShortfall / foodShortfall below are computed from
+  //      the full `items` array before any capping.
   var items = [];
   var greenCount = 0;
+  // Category revenue (GST-inc gross) for every matched product, greens
+  // included — the denominator for "% of category sales at risk". Low-ticket
+  // coffee will always show a smaller $ at-risk than food even when fully
+  // costed; the % makes the real pressure comparable across categories.
+  var catRevenue = { coffee: 0, food: 0 };
+  function mrIsCoffee_(p) { return (p.category || '') === 'Coffee'; }
   for (var norm in acc) {
     var a = acc[norm];
     var p = a.product;
+    if (mrIsCoffee_(p)) catRevenue.coffee += a.gross / 100;
+    else                catRevenue.food   += a.gross / 100;
     if (p.margin >= MR_TARGET_MARGIN) { greenCount++; continue; }
     var sellEx    = p.sell / 1.1;
     var shortfall = r2(a.qty * sellEx * (MR_TARGET_MARGIN - p.margin) / 100);
@@ -285,7 +366,28 @@ function buildMarginReview_() {
     });
   }
   items.sort(function (a, b) { return b.shortfall - a.shortfall; });
-  var top = items.slice(0, MR_MAX_ITEMS);
+
+  var coffeeItems = items.filter(function (i) { return i.category === 'Coffee'; });
+  var foodItems   = items.filter(function (i) { return i.category !== 'Coffee'; });
+
+  // Category-complete at-risk $ (summed over ALL underperformers, pre-cap).
+  function mrSumShortfall_(list) {
+    return r2(list.reduce(function (s, i) { return s + i.shortfall; }, 0));
+  }
+  var coffeeShortfall = mrSumShortfall_(coffeeItems);
+  var foodShortfall   = mrSumShortfall_(foodItems);
+
+  // % of category revenue lost to sub-target margin — comparable across coffee
+  // and food regardless of ticket size.
+  var coffeeShortfallPct = catRevenue.coffee > 0 ? r2(100 * coffeeShortfall / catRevenue.coffee) : 0;
+  var foodShortfallPct   = catRevenue.food   > 0 ? r2(100 * foodShortfall   / catRevenue.food)   : 0;
+
+  // Display list: top N per category, re-merged and re-sorted by $ shortfall so
+  // each category is guaranteed representation but the combined list still reads
+  // worst-first.
+  var top = coffeeItems.slice(0, MR_MAX_PER_CAT)
+    .concat(foodItems.slice(0, MR_MAX_PER_CAT))
+    .sort(function (a, b) { return b.shortfall - a.shortfall; });
 
   unmatched.sort(function (a, b) { return b.weeklyQty - a.weeklyQty; });
 
@@ -296,18 +398,37 @@ function buildMarginReview_() {
     sales.push({ name: acc[sk].product.name, weeklyQty: acc[sk].qty });
   }
 
+  // Honest coverage signal: how many unmatched buckets look like drinks/coffee
+  // with no costing yet (Babychino, Batch Brew, Iced Filter, Long Macchiato…).
+  // These contribute $0 to coffeeShortfall, so the badge can flag the gap
+  // ("+N drinks not yet costed") instead of silently under-reporting.
+  var COFFEE_KW = /\b(COFFEE|LATTE|CAPPU|FLAT WHITE|LONG BLACK|MACCHIATO|ESPRESSO|PICCOLO|MAGIC|CORTADO|MOCHA|MATCHA|CHAI|BABYCHINO|BATCH BREW|COLD BREW|FILTER|AFFOGATO|ICED|HOT CHOC|TA WHITE|LG WHITE)\b/;
+  var unmatchedCoffee = unmatched.filter(function (u) { return COFFEE_KW.test(String(u.name).toUpperCase()); });
+
   return {
-    type:           'margin_review',
-    updated:        new Date().toISOString(),
-    weekStart:      start.toISOString().slice(0, 10),
-    weekEnd:        end.toISOString().slice(0, 10),
-    targetMargin:   MR_TARGET_MARGIN,
-    items:          top,
-    totalShortfall: r2(top.reduce(function (s, i) { return s + i.shortfall; }, 0)),
-    greenCount:     greenCount,
-    sales:          sales,
-    unmatched:      unmatched.slice(0, MR_MAX_UNMATCHED),
-    duplicates:     fetched.duplicates,   // Notion costing entries sharing a name
+    type:                'margin_review',
+    updated:             new Date().toISOString(),
+    weekStart:           start.toISOString().slice(0, 10),
+    weekEnd:             end.toISOString().slice(0, 10),
+    targetMargin:        MR_TARGET_MARGIN,
+    items:               top,
+    // Category-complete at-risk totals (summed pre-cap). totalShortfall is now
+    // coffee + food so it stays consistent with the two badges.
+    coffeeShortfall:     coffeeShortfall,
+    foodShortfall:       foodShortfall,
+    coffeeShortfallPct:  coffeeShortfallPct,
+    foodShortfallPct:    foodShortfallPct,
+    coffeeRevenue:       r2(catRevenue.coffee),
+    foodRevenue:         r2(catRevenue.food),
+    coffeeFlagged:       coffeeItems.length,
+    foodFlagged:         foodItems.length,
+    totalShortfall:      r2(coffeeShortfall + foodShortfall),
+    greenCount:          greenCount,
+    sales:               sales,
+    unmatched:           unmatched.slice(0, MR_MAX_UNMATCHED),
+    unmatchedCoffeeCount: unmatchedCoffee.length,
+    unmatchedCoffeeQty:   unmatchedCoffee.reduce(function (s, u) { return s + u.weeklyQty; }, 0),
+    duplicates:          fetched.duplicates,   // Notion costing entries sharing a name
   };
 }
 
