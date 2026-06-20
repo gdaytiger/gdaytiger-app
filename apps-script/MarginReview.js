@@ -68,6 +68,12 @@ var MR_MOD_ALIASES = {
 // name differs from the Notion product name. Checked before fuzzy resolution.
 var MR_NAME_ALIASES = {
   'H+C CROISSANT': 'FILLED CROISSANT',
+  // SQUARE_RETAIL_MAP already wires the H+C/Caponata variants, but to their
+  // costings-SHEET section names. Map those to the Notion product names so the
+  // modifier buckets attribute to the right tile instead of fuzzy-resolving to
+  // the plain item. Keys are the normalised sheet recipe names.
+  'H+C SANDWICH TIGER STYLE':      'H+C (TIGER STYLE)',
+  'CAPONATA SANDWICH WITH CHEESE': 'CAPONATA (MOZZARELLA)',
 };
 
 // Review-only map entries for Square items the price-sync maps don't cover.
@@ -78,20 +84,10 @@ var MR_NAME_ALIASES = {
 var MR_EXTRA_MAP = (function () {
   var entries = [];
 
-  // Food variants that ring as a base item + a RECOGNISED modifier (see
-  // MR_RECOGNISED_MODS). Recognising the modifier splits it into its own
-  // sales bucket, so without an entry here it can never attribute to its
-  // costing and drops to `unmatched` (qty/wk shows blank on the tile).
-  // Confirmed via printAllBuckets() Jun 2026:
-  //   "Caponata +ADD CHEESE"  → CAPONATA (MOZZARELLA)
-  //   "H+C +TIGER STYLE"      → H+C (TIGER STYLE)
-  // NB: the Tiger Style modifier rings as "TIGER STYLE (Pickles + Tiger Sauce)"
-  // and is canonicalised to 'TIGER STYLE' via MR_MOD_ALIASES above; before that
-  // alias existed it was unrecognised and folded silently into plain H+C.
-  entries.push({ squareItem: 'Caponata', modifiers: ['Add Cheese'],
-    recipes: ['CAPONATA (MOZZARELLA)'] });
-  entries.push({ squareItem: 'H+C', modifiers: ['Tiger Style'],
-    recipes: ['H+C (TIGER STYLE)'] });
+  // NB: H+C (Tiger Style) and Caponata (Mozzarella) are NOT mapped here — they
+  // already exist in SQUARE_RETAIL_MAP. Their fix lives in MR_NAME_ALIASES
+  // (sheet-name → Notion-product-name) + the MR_MOD_ALIASES Tiger Style entry
+  // that lets the modifier bucket split out in the first place.
 
   // Dine-in white-coffee items: milk modifier picks the recipe. Register rings
   // size as a 'Large' variation (or a LARGE modifier, promoted to a variation
