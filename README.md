@@ -99,6 +99,26 @@ Live margin view from Notion Costings DB. Sorted worst→best margin. Add-produc
 
 **Made-in-house components are hidden from these tiles.** Any Costings row whose **Notes** contains `made in house` or `component of` (case-insensitive) is treated as a sub-recipe (e.g. Fennel Slaw, Pickled Onions) and excluded from both columns — it's tracked in the Supplier Prices widget instead. Convention: when costing a sub-recipe as its own row, put "made in house" or "component of …" in its Notes field. Filter lives in `app/page.tsx` (`isComponent`).
 
+#### Sales attribution — POS + online (Mr Yum), and modifier handling
+
+`MarginReview.js` joins 7 days of Square sales to costings to produce the `N/wk` and `−$/wk` figures. Counter (Square POS) **and** online (Mr Yum / me&u) orders land in the **same Square location** (`G'DAY TIGER`, `NTXJ6XDXK8MNY`) and the **same order feed**, so the script reads both together — online is *not* a separate location or data source. Sales are bucketed by item **name** (normalised), then each bucket is attributed to exactly one costing.
+
+Three alias layers make the matching robust (all near the top of `MarginReview.js`):
+
+| Map | Purpose | Example |
+|---|---|---|
+| `MR_RECOGNISED_MODS` | Modifiers that split a sale into its own bucket. Everything else folds into the base item (so cheap add-ons don't fragment counts). | `SOY`, `OAT`, `ALMOND`, `TIGER STYLE`, `ADD CHEESE` |
+| `MR_MOD_ALIASES` | Canonicalise a modifier's real Square name to a recognised key (POS and online often differ) | `TIGER STYLE (PICKLES + TIGER SAUCE)` → `TIGER STYLE`; online `CHEESE` → `ADD CHEESE`; `SOY MILK` → `SOY` |
+| `MR_NAME_ALIASES` | Map a recipe / sheet-section / online item name to the Notion product name | online `SALAMI AUTOGRILL` → `AUTOGRILL (SALAMI PANINI)`; `H+C SANDWICH TIGER STYLE` → `H+C (TIGER STYLE)` |
+
+**Channels merge automatically.** Per-product tally (`acc`) is keyed by the *resolved costing*, not the bucket — so even differently-named buckets (POS `Autogrill SALAMI` + online `SALAMI AUTOGRILL`) combine onto one tile.
+
+**Fold-in trap.** If a *variant* tile shows blank `N/wk` while the plain item is fine, the cause is usually the variant fuzzy-resolving to its base (e.g. `H+C SANDWICH (TIGER STYLE)` → plain `H+C`, silently absorbing the volume). Fix with an `MR_NAME_ALIASES` entry — **not** a new map entry (duplicate map entries lose a first-wins race anyway).
+
+**Modifier alias caution.** Only alias a *generic* modifier (e.g. `Cheese`) to a recognised key when it's effectively used on a single product. Recognising it globally splits **every** item that carries it into its own bucket; any without a costing match drop to `unmatched` and undercount the base. (`Cheese` → `ADD CHEESE` is safe only because cheese is ~99% a Caponata add.)
+
+**Diagnostics** (run from the Apps Script editor, project `G'DAY TIGER Costings`): `printAllBuckets()` dumps every sales bucket (item · variation · modifier → qty); `printAllModifiers()` lists every modifier name seen in 7 days. Log counts `N flagged / N unmatched` from `runWeeklyMarginReview()` are **display-capped** — trust `greenCount` and `totalShortfall` as the real signals that something changed.
+
 ### 📦 Supplier Prices
 Ingredient-level price tracking, grouped into collapsible supplier tiles with search. Cards show ingredient, supplier, price/unit, affected-product count. 7-day delta shown red/green. "Add ingredient from invoice" via `/api/find-ingredient-price`. Data from `SyncIngredientPrices` → Notion JSON block.
 
@@ -212,7 +232,7 @@ PaymentFeeTracker → Square Payments API → "Payment Fees" tab (Coffee Costing
 | `SyncSquarePrices.js` | Pulls live Square retail prices → Coffee Costings sheet (hourly) |
 | `SyncIngredientPrices.js` | Writes ingredient prices as chunked JSON to Notion OS page (30 min) |
 | `BuildRecipeMap.js` | Parses FOOD sheet formulas → ingredient→product map → `recipe_map` Notion block (daily) |
-| `MarginReview.js` | Joins 7 days of Square item sales against Notion Costings DB, ranks underperforming recipes by weekly $ impact → `margin_review` Notion block (Mondays 6am). Curated modifier maps attribute each sales bucket to one costing. `installMarginReview()` one-off setup; `printMarginReview()` previews. |
+| `MarginReview.js` | Joins 7 days of Square item sales (POS + Mr Yum online, same feed) against Notion Costings DB, ranks underperforming recipes by weekly $ impact → `margin_review` Notion block (Mondays 6am). Attribution via `MR_RECOGNISED_MODS` + `MR_MOD_ALIASES` (modifier names) + `MR_NAME_ALIASES` (item/recipe names); each bucket → exactly one costing, channels auto-merge by resolved product. `installMarginReview()` one-off setup; `printMarginReview()` previews; `printAllBuckets()` / `printAllModifiers()` diagnose gaps. See "Sales attribution" above. |
 | `PaymentFeeTracker.js` | Reads Square Payments API → writes daily Collected/Fees/Count rows to "Payment Fees" tab in Coffee Costings sheet → computes rolling 365-day blended fee % → writes `payment_fees` JSON block to Notion OS page. Run `installPaymentFeeTracker()` once to set up triggers (backfill + daily). `printPaymentFeeSummary()` to verify. |
 | `TakeawayCupCounter.js` | Polls Square Orders daily, tallies Planetware cups. At 10,000, appends reorder to Shopping List. Counter start: 2026-06-01. |
 | `AddProduct.js` / `AddIngredient.js` | Web-app endpoints backing in-app Add Product / Add Ingredient modals |

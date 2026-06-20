@@ -282,6 +282,36 @@ function printAllModifiers() {
   Logger.log(out.join('  |  ') || 'NO MODIFIERS');
 }
 
+// Diagnostic: list every Coffee-category costing in the DB, then every
+// coffee-ish 7-day sales bucket with what it currently resolves to (or
+// UNMATCHED). Use this to catch online (Mr Yum / me&u) coffee buckets that fold
+// into the wrong recipe or drop out — the multi-channel attribution check.
+// Run from the editor; no clasp/deploy needed.
+function mrDebugCoffee() {
+  var end = new Date(), start = new Date(end.getTime() - 7 * 86400000);
+  var buckets  = mrFetchSquareBuckets_(start.toISOString(), end.toISOString());
+  var entries  = mrExplicitEntries_();
+  var products = mrFetchCostings_().products;
+
+  Logger.log('--- COFFEE COSTINGS IN DB ---');
+  products.filter(function (p) { return (p.category || '') === 'Coffee'; })
+          .sort(function (a, b) { return a.name < b.name ? -1 : 1; })
+          .forEach(function (p) { Logger.log('%s  $%s  %s%%', p.name, p.sell, p.margin); });
+
+  Logger.log('--- COFFEE-ISH BUCKETS -> RESOLVED ---');
+  var KW = /COFFEE|LATTE|CAPPU|FLAT WHITE|LONG BLACK|MACCHIATO|ESPRESSO|PICCOLO|MAGIC|MOCHA|MATCHA|CHAI|BABYCHINO|BATCH|COLD BREW|FILTER|AFFOGATO|ICED|HOT CHOC|TA WHITE|LG WHITE|TA BLACK|LG BLACK/;
+  var rows = [];
+  for (var k in buckets) {
+    var b = buckets[k];
+    if (!KW.test(b.item)) continue;
+    var p = mrAttribute_(b, entries, products) || (!b.mods ? mrResolveProduct_(b.itemName, products) : null);
+    rows.push({ disp: b.item + (b.variation && b.variation !== 'REGULAR' ? ' ' + b.variation : '') +
+                       (b.mods ? ' +' + b.mods : ''), qty: b.qty, to: (p ? p.name : 'UNMATCHED') });
+  }
+  rows.sort(function (a, b) { return (a.to === 'UNMATCHED' ? 0 : 1) - (b.to === 'UNMATCHED' ? 0 : 1) || b.qty - a.qty; });
+  rows.forEach(function (r) { Logger.log('%s  qty %s  ->  %s', r.disp, r.qty, r.to); });
+}
+
 function installMarginReview() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'runWeeklyMarginReview') ScriptApp.deleteTrigger(t);
