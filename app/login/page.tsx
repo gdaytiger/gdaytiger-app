@@ -1,22 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password.trim() || submitting) return;
+    // Read the field directly so iOS/Safari autofill (which doesn't always fire
+    // onChange) still works — don't trust React state alone.
+    const pw = inputRef.current?.value || password;
+    if (!pw.trim() || submitting) return;
     setSubmitting(true);
     setError('');
     try {
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password: pw }),
       });
       if (res.ok) {
         window.location.href = '/';
@@ -37,6 +41,7 @@ export default function Login() {
           TIGER <span style={{ color: '#fbcdad' }}>OS</span>
         </h1>
         <input
+          ref={inputRef}
           type="password"
           value={password}
           onChange={e => setPassword(e.target.value)}
@@ -48,7 +53,7 @@ export default function Login() {
         />
         <button
           type="submit"
-          disabled={submitting || !password.trim()}
+          disabled={submitting}
           className="w-full text-xs uppercase tracking-widest px-5 py-3 rounded-xl font-semibold disabled:opacity-40"
           style={{ background: '#fbcdad', color: '#333' }}
         >

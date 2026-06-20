@@ -194,6 +194,106 @@ function LauncherTile({ emoji, icon, title, subtitle, badgeText, alert, active, 
   );
 }
 
+// Bottom sheet — secondary widgets open as a sheet that slides up over the
+// dashboard. The two pinned widgets (Daily To Do, Week Ahead) and the launcher
+// dock stay put underneath behind a scrim. Close by: swiping the handle down,
+// tapping the scrim, the ✕, or the card's ▲. Content scrolls inside the sheet so
+// the dashboard never reflows. One sheet at a time (toggleWidget is single-open).
+function BottomSheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startY = useRef(0);
+  const draggingRef = useRef(false);
+  const isMobile = useSyncExternalStore(
+    (cb) => { const mq = window.matchMedia('(hover: none) and (pointer: coarse)'); mq.addEventListener('change', cb); return () => mq.removeEventListener('change', cb); },
+    () => window.matchMedia('(hover: none) and (pointer: coarse)').matches,
+    () => false,
+  );
+
+  // Lock background scroll while the sheet is open.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
+  // Close on Escape (desktop).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  const onTouchStart = (e: React.TouchEvent) => { startY.current = e.touches[0].clientY; draggingRef.current = true; setDragging(true); };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!draggingRef.current) return;
+    const dy = e.touches[0].clientY - startY.current;
+    setDragY(dy > 0 ? dy : 0); // only allow dragging downward
+  };
+  const onTouchEnd = () => {
+    draggingRef.current = false;
+    setDragging(false);
+    if (dragY > 120) onClose();
+    setDragY(0);
+  };
+
+  return (
+    <>
+      {/* Scrim */}
+      <div
+        onClick={onClose}
+        aria-hidden={!open}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 40,
+          background: 'rgba(20,20,25,0.35)',
+          backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+          transition: 'opacity 0.3s ease',
+        }}
+      />
+      {/* Sheet */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50,
+          maxHeight: '90vh',
+          display: 'flex', flexDirection: 'column',
+          transform: open ? `translateY(${dragY}px)` : 'translateY(100%)',
+          transition: dragging ? 'none' : 'transform 0.38s cubic-bezier(0.32,0.72,0,1)',
+          pointerEvents: open ? 'auto' : 'none',
+          background: 'rgba(245,243,239,0.94)',
+          backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          borderTopLeftRadius: '28px', borderTopRightRadius: '28px',
+          boxShadow: '0 -8px 40px rgba(0,0,0,0.18)',
+          borderTop: '1px solid rgba(255,255,255,0.7)',
+        }}
+      >
+        {/* Grab handle — swipe down to dismiss */}
+        <div
+          onTouchStart={isMobile ? onTouchStart : undefined}
+          onTouchMove={isMobile ? onTouchMove : undefined}
+          onTouchEnd={isMobile ? onTouchEnd : undefined}
+          style={{ flexShrink: 0, padding: '10px 0 6px', display: 'flex', justifyContent: 'center', cursor: 'grab', touchAction: 'none' }}
+        >
+          <div style={{ width: '40px', height: '5px', borderRadius: '999px', background: 'rgba(0,0,0,0.18)' }} />
+        </div>
+        {/* Close button */}
+        <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '12px', right: '16px', zIndex: 2, fontSize: '18px', lineHeight: 1, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>✕</button>
+        {/* Scrollable content (capped + centred for desktop) */}
+        <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '4px 16px calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
+          <div style={{ maxWidth: '720px', margin: '0 auto', width: '100%' }}>
+            {children}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // Claude logomark — radial burst in Claude orange. Hand-built approximation;
 // drop in the official SVG asset here if a brand file is available.
 function ClaudeLogo({ size = 14 }: { size?: number }) {
@@ -1803,25 +1903,16 @@ export default function Home() {
   // collapsed to square tiles (resets every load by design).
   const [openWidgets, setOpenWidgets] = useState<Set<string>>(new Set());
   const shoppingWidgetRef = useRef<HTMLDivElement>(null);
+  // Single-open: tapping a tile opens that widget in the bottom sheet and closes
+  // any other. Tapping the same tile (or the sheet's close/▲) closes it. The
+  // sheet overlays the dashboard, so no scroll juggling is needed.
   const toggleWidget = (key: string) => {
-    const scrollY = window.scrollY;
-    setOpenWidgets(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      window.scrollTo({ top: scrollY, behavior: 'instant' });
-    }));
+    setOpenWidgets(prev => prev.has(key) ? new Set() : new Set([key]));
   };
-  // Used by the Daily To Do shopping link row — opens the widget and scrolls to it.
+  const closeWidgets = () => setOpenWidgets(new Set());
+  // Used by the Daily To Do shopping link row — opens the Shopping sheet.
   const openShoppingWidget = () => {
-    const alreadyOpen = openWidgets.has('shopping');
-    const scrollY = window.scrollY;
-    setOpenWidgets(prev => { const n = new Set(prev); if (n.has('shopping')) n.delete('shopping'); else n.add('shopping'); return n; });
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (!alreadyOpen) {
-        shoppingWidgetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        window.scrollTo({ top: scrollY, behavior: 'instant' });
-      }
-    }));
+    setOpenWidgets(prev => prev.has('shopping') ? new Set() : new Set(['shopping']));
   };
   const [tigerTasks, setTigerTasks] = useState<BacklogTask[]>([]);
   const [serverState, setServerState] = useState<Record<string, string[]>>({});
@@ -2499,8 +2590,9 @@ export default function Home() {
 
         </div>{/* end stable grid */}
 
-        {/* ── Widget panels — stacked below; never shifts the top grid ── */}
-        <div className="flex flex-col gap-4 mt-4">
+        {/* ── Widget panels — open one at a time in a bottom sheet over the dashboard ── */}
+        <BottomSheet open={openWidgets.size > 0} onClose={closeWidgets}>
+        <div className="flex flex-col gap-4">
 
         {/* SHOPPING LIST widget — always in DOM, shown/hidden via CSS to avoid scroll-jump */}
         <div ref={shoppingWidgetRef} style={{ display: openWidgets.has('shopping') ? 'block' : 'none' }}>
@@ -2678,6 +2770,7 @@ export default function Home() {
           onIngredientsChanged={() => fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {})} />
 
         </div>{/* end widget panels */}
+        </BottomSheet>
       </div>
 
       {/* DELEGATE TOAST (mobile clipboard handoff) */}
