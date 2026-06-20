@@ -76,8 +76,8 @@ function sipCollectPrices_() {
   //   Woolworths → F10
   //   Redi Milk  → R12
   //   Abicor     → P8, P9
-  //   GDay Tiger → L col (Made In House — formula-driven)
-  //   Manual     → B6 (Candied), B8 (Noisette), N7, P5–P7, H20
+  //   GDay Tiger → L col (Made In House — formula-driven); P7, P10 (branded printed bags)
+  //   Manual     → B6 (Candied), B8 (Noisette), N7, P5, P6, H20
 
   const foodSheet = SpreadsheetApp.openById(SIP_FOOD_SHEET_ID).getSheetByName('FOOD');
   const foodData  = foodSheet.getDataRange().getValues();
@@ -147,6 +147,8 @@ function sipCollectPrices_() {
     // ── PACKAGING ────────────────────────────────────────────────────────────
     { key: 'napkins',            name: 'Napkins (2000pk)',                  col: 16, row: 8,  unit: '2000pk',    supplier: 'Abicor' },
     { key: 'tray',               name: 'Paper Tray (150pk)',                col: 16, row: 9,  unit: '150pk',     supplier: 'Abicor' },
+    { key: 'bags_small',         name: 'Small Bags (20,200pk)',             col: 16, row: 7,  unit: '20,200pk',  supplier: 'GDay Tiger' },
+    { key: 'bags_large',         name: 'Large Bags Printed (17,275pk)',     col: 16, row: 10, unit: '17,275pk',  supplier: 'GDay Tiger' },
     // ── PANTRY ───────────────────────────────────────────────────────────────
     { key: 'plain_flour',        name: 'Plain Flour (12.5kg)',              col: 18, row: 5,  unit: '12.5kg',    supplier: '5Ways' },
     { key: 'sr_flour',           name: 'Self-Raising Flour (12.5kg)',       col: 18, row: 6,  unit: '12.5kg',    supplier: '5Ways' },

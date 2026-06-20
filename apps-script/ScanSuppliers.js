@@ -160,8 +160,15 @@ const SCICLUNAS_MAP = [
   { match: ['Lemon', 'Lemons'],                    cell: 'H17', convert: p => p, note: 'Lemons /kg' },
   { match: ['Carrot', 'Carrots'],                  cell: 'H18', convert: p => p, note: 'Carrots /kg' },
   { match: ['Cucumber'],                           cell: 'H19', convert: p => p, note: 'Cucumber /each' },
+  { match: ['Basil'],                              cell: 'H21', convert: p => p, note: 'Basil /bunch' },
+  { match: ['Crushed Garlic', 'Garlic - Crushed', 'Garlic'], cell: 'H22', convert: p => p, note: 'Crushed Garlic /kg' },
   { match: ['Eggs', 'Egg Free Range'],             cell: 'N9',  convert: p => p, note: 'Eggs /box (15 doz)' },
 ];
+
+// Sciclunas lines we deliberately DON'T track — irregular soup veg, not standing
+// menu ingredients. Matched (case-insensitive substring) before recording an
+// unmapped SKU, so they never raise a "NEW SKU" badge. Extend as soups rotate.
+const SCICLUNAS_IGNORE = ['Potato', 'Onions - Brown', 'Brown Onion', 'Leek', 'Kale', 'Celery'];
 
 const UNCLES_MAP = [
   { match: ['Pastrami', 'New York Pastrami'], cell: 'D6', convert: p => p, note: 'Uncles Beef Pastrami /kg' },
@@ -319,6 +326,9 @@ function scanFoodSuppliers(cutoffOverride) {
       items.forEach(item => {
         const map = SCICLUNAS_MAP.find(m => matchesAny(item.description, m.match));
         if (map) { if (updateIfChanged(sheet, map.cell, map.convert(item.unitPrice, item.unit), map.note, log)) updates++; }
+        else if (matchesAny(item.description, SCICLUNAS_IGNORE)) {
+          log.push(`  IGNORED (untracked soup veg): ${item.description}`);
+        }
         else {
           log.push(`  NO MAP: ${item.description} ${item.unit} $${item.unitPrice}`);
           recordUnmappedSku_('Sciclunas', item.description, item.unitPrice);
