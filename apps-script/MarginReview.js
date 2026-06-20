@@ -62,6 +62,11 @@ var MR_MOD_ALIASES = {
   // to the recognised 'TIGER STYLE' so H+C Tiger Style splits out of plain H+C
   // and attributes to its own costing (confirmed Square name Jun 2026).
   'TIGER STYLE (PICKLES + TIGER SAUCE)': 'TIGER STYLE',
+  // Mr Yum online rings the cheese add-on as 'Cheese'; POS rings 'Add Cheese'.
+  // Collapse to the recognised 'ADD CHEESE' so online Caponata+cheese lands on
+  // CAPONATA (MOZZARELLA). Safe because cheese is ~99% a Caponata add (per
+  // Jonathan); a rare cheese-on-other-sandwich just drops that one to unmatched.
+  'CHEESE': 'ADD CHEESE',
 };
 
 // Recipe-name → Notion-costing-name aliases, for recipes whose sheet section
@@ -74,6 +79,10 @@ var MR_NAME_ALIASES = {
   // the plain item. Keys are the normalised sheet recipe names.
   'H+C SANDWICH TIGER STYLE':      'H+C (TIGER STYLE)',
   'CAPONATA SANDWICH WITH CHEESE': 'CAPONATA (MOZZARELLA)',
+  // Mr Yum online item rings as "SALAMI AUTOGRILL" (word order flipped vs the
+  // POS "Autogrill SALAMI"). Alias both to the same costing so online + counter
+  // sales merge onto one tile. POS name still fuzzy-resolves; this covers online.
+  'SALAMI AUTOGRILL':              'AUTOGRILL (SALAMI PANINI)',
 };
 
 // Review-only map entries for Square items the price-sync maps don't cover.
