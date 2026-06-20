@@ -260,6 +260,8 @@ function BottomSheet({ open, onClose, children }: { open: boolean; onClose: () =
         aria-modal="true"
         style={{
           position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50,
+          // Full-width on mobile; capped to the widget width and centred on desktop.
+          maxWidth: '760px', marginLeft: 'auto', marginRight: 'auto',
           maxHeight: '90vh',
           display: 'flex', flexDirection: 'column',
           transform: open ? `translateY(${dragY}px)` : 'translateY(100%)',
@@ -268,8 +270,8 @@ function BottomSheet({ open, onClose, children }: { open: boolean; onClose: () =
           background: 'rgba(245,243,239,0.94)',
           backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)',
           borderTopLeftRadius: '28px', borderTopRightRadius: '28px',
-          boxShadow: '0 -8px 40px rgba(0,0,0,0.18)',
-          borderTop: '1px solid rgba(255,255,255,0.7)',
+          boxShadow: '0 0 40px rgba(0,0,0,0.18)',
+          border: '1px solid rgba(255,255,255,0.7)', borderBottom: 'none',
         }}
       >
         {/* Grab handle — swipe down to dismiss */}
