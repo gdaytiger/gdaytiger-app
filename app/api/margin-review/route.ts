@@ -27,7 +27,17 @@ type MarginReviewPayload = {
   targetMargin?: number;
   items: MarginReviewItem[];
   totalShortfall?: number;
+  coffeeShortfall?: number;
+  foodShortfall?: number;
+  coffeeShortfallPct?: number;
+  foodShortfallPct?: number;
+  coffeeRevenue?: number;
+  foodRevenue?: number;
+  coffeeFlagged?: number;
+  foodFlagged?: number;
   greenCount?: number;
+  unmatchedCoffeeCount?: number;
+  unmatchedCoffeeQty?: number;
   unmatched?: { name: string; weeklyQty: number; weeklyGross: number }[];
 };
 

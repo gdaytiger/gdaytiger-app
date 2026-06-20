@@ -44,20 +44,24 @@ var MR_MAX_ITEMS     = 12;    // legacy global cap (kept for reference; see MR_M
 var MR_MAX_PER_CAT   = 8;     // cap the ranked DISPLAY list PER category (coffee / food)
 var MR_MAX_UNMATCHED = 12;    // top Square sellers with no costing match
 
-// Modifiers that change WHICH recipe a drink/dish is costed against.
-// Anything not in this list (extra shot, takeaway cup, etc) is ignored for
-// attribution. DECAF is recognised but unmapped on purpose — decaf sales
-// surface in `unmatched` until a decaf costing exists.
-var MR_RECOGNISED_MODS = ['SOY', 'OAT', 'ALMOND', 'CHOCOLATE', 'CHAI', 'DECAF',
+// Modifiers that change WHICH recipe a drink/dish is costed against. Rule:
+// only recognise a modifier if the +modifier version has its OWN costing —
+// otherwise it just fragments the base count. Everything else (extra shot,
+// decaf, skinny, sugar, takeaway cup, etc) folds into the base recipe.
+// DECAF removed Jun 2026: no decaf costing exists and decaf beans cost ≈
+// regular, so decaf drinks now count + cost on their normal tile instead of
+// losing ~19/wk to `unmatched`. Re-add only if a separate decaf costing is made.
+var MR_RECOGNISED_MODS = ['SOY', 'OAT', 'ALMOND', 'CHOCOLATE', 'CHAI',
                           'MOCHA', 'MATCHA', 'TIGER STYLE', 'ADD CHEESE'];
 
 // Alternate modifier names observed in real orders (printAllModifiers, Jun
 // 2026): registers use both "Soy" and "Soy Milk" etc. Canonicalise before
 // matching.
 var MR_MOD_ALIASES = {
-  'SOY MILK':    'SOY',
-  'OAT MILK':    'OAT',
-  'ALMOND MILK': 'ALMOND',
+  'SOY MILK':       'SOY',
+  'OAT MILK':       'OAT',
+  'COLD OAT MILK':  'OAT',
+  'ALMOND MILK':    'ALMOND',
   // The Tiger Style modifier rings with its full descriptive name; collapse it
   // to the recognised 'TIGER STYLE' so H+C Tiger Style splits out of plain H+C
   // and attributes to its own costing (confirmed Square name Jun 2026).
@@ -137,10 +141,18 @@ var MR_EXTRA_MAP = (function () {
     recipes: ['DINE IN BLACK COFFEE (LARGE)', 'TAKEAWAY BLACK COFFEE (LARGE)'] });
 
   // Hot Chocolate rings as its OWN item (dine-in), not White +Chocolate.
-  entries.push({ squareItem: 'Hot Chocolate', modifiers: [],
-    recipes: ['DINE IN HOT CHOCOLATE (SMALL)', 'TAKEAWAY HOT CHOCOLATE (SMALL)'] });
-  entries.push({ squareItem: 'Hot Chocolate', variation: 'Large', modifiers: [],
-    recipes: ['DINE IN HOT CHOCOLATE (LARGE)', 'TAKEAWAY HOT CHOCOLATE (LARGE)'] });
+  // FC + milk variants, small + large (milk modifier picks the recipe).
+  [
+    { milk: [],         base: 'HOT CHOCOLATE' },
+    { milk: ['Soy'],    base: 'SOY HOT CHOCOLATE' },
+    { milk: ['Oat'],    base: 'OAT HOT CHOCOLATE' },
+    { milk: ['Almond'], base: 'ALMOND HOT CHOCOLATE' },
+  ].forEach(function (v) {
+    entries.push({ squareItem: 'Hot Chocolate', modifiers: v.milk,
+      recipes: ['DINE IN ' + v.base + ' (SMALL)', 'TAKEAWAY ' + v.base + ' (SMALL)'] });
+    entries.push({ squareItem: 'Hot Chocolate', modifiers: v.milk, variation: 'Large',
+      recipes: ['DINE IN ' + v.base + ' (LARGE)', 'TAKEAWAY ' + v.base + ' (LARGE)'] });
+  });
 
   // Espresso-family short blacks/whites with no dedicated recipe — costed as the
   // nearest standard drink (Jonathan's call: macchiato = white). Piccolo/Magic
@@ -210,10 +222,13 @@ var MR_EXTRA_MAP = (function () {
         recipes: ['DINE IN ' + v.base, 'DINE IN ' + v.base + ' (SMALL)', 'TAKEAWAY ' + v.base] });
     });
     ['Chai', 'Chai Latte'].forEach(function (item) {
+      // Use the explicit (SMALL) names — bare 'TAKEAWAY CHAI' is ambiguous
+      // (both '… (SMALL)' and '… (LARGE)' contain it) so the resolver returns
+      // null and the sale drops to unmatched.
       entries.push({ squareItem: item, modifiers: v.milk,
-        recipes: ['TAKEAWAY ' + v.base, 'DINE IN ' + v.base] });
+        recipes: ['DINE IN ' + v.base + ' (SMALL)', 'TAKEAWAY ' + v.base + ' (SMALL)'] });
       entries.push({ squareItem: item, modifiers: v.milk, variation: 'Large',
-        recipes: ['TAKEAWAY ' + v.base + ' (LARGE)', 'DINE IN ' + v.base + ' (LARGE)'] });
+        recipes: ['DINE IN ' + v.base + ' (LARGE)', 'TAKEAWAY ' + v.base + ' (LARGE)'] });
     });
   });
 
