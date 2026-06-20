@@ -14,7 +14,10 @@ export async function POST(req: NextRequest) {
 
   res.cookies.set('gdt_session', SESSION_TOKEN!, {
     httpOnly: true,
-    secure: true,
+    // Secure only in production (HTTPS on Vercel). Local dev is served over plain
+    // HTTP on the LAN (e.g. http://192.168.x.x), where a secure cookie is dropped
+    // and login would loop back to the password screen.
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax', // 'strict' breaks iOS PWA home screen apps
     maxAge: 60 * 60 * 24 * 30, // 30 days
     path: '/',
