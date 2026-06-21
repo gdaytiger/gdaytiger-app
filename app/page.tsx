@@ -284,9 +284,9 @@ function BottomSheet({ open, onClose, children }: { open: boolean; onClose: () =
           <div style={{ width: '40px', height: '5px', borderRadius: '999px', background: 'rgba(0,0,0,0.18)' }} />
         </div>
         {/* Close button */}
-        <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '16px', right: '20px', zIndex: 2, fontSize: '18px', lineHeight: 1, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: '6px' }}>✕</button>
-        {/* Scrollable content (capped + centred for desktop; top space clears the ✕) */}
-        <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 20px calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
+        <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '12px', right: '14px', zIndex: 2, width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', lineHeight: 1, color: '#6b7280', background: 'rgba(0,0,0,0.06)', borderRadius: '999px', border: 'none', cursor: 'pointer', padding: 0 }}>✕</button>
+        {/* Scrollable content (capped + centred for desktop; top space clears the ✕ chip) */}
+        <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '20px 20px calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
           <div style={{ maxWidth: '720px', margin: '0 auto', width: '100%' }}>
             {children}
           </div>
