@@ -140,25 +140,33 @@ const applyServerChecked = (todos: Todo[], date: string, state: Record<string, s
     .map(t => (t.isHeader || t.isShopping) ? t : { ...t, checked: checkedIds.has(t.id) });
 };
 
-function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onCollapse }: {
+// `bare` renders the card chromeless and auto-height for use inside the bottom
+// sheet: no nested white panel, no fixed 575px height, no ▲ collapse (the sheet
+// supplies its own close ✕ and grab handle). Content flows naturally and the
+// sheet itself scrolls.
+function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onCollapse, bare }: {
   emoji?: string; icon?: React.ReactNode; title: string; children: React.ReactNode; onEmojiClick?: () => void; headerRight?: React.ReactNode;
   onCollapse?: () => void;
+  bare?: boolean;
 }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', height: '575px', overflow: 'hidden' }} className="rounded-3xl p-5 flex flex-col gap-4">
+    <div
+      style={bare ? undefined : { background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', height: '575px', overflow: 'hidden' }}
+      className={bare ? 'flex flex-col gap-4' : 'rounded-3xl p-5 flex flex-col gap-4'}
+    >
       <div className="flex items-center gap-2 shrink-0">
         {icon ? icon : <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>}
         <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
-        {(headerRight || onCollapse) && (
+        {(headerRight || (onCollapse && !bare)) && (
           <div className="ml-auto flex items-center gap-2">
             {headerRight}
-            {onCollapse && (
+            {onCollapse && !bare && (
               <button onClick={onCollapse} aria-label="Collapse" title="Collapse" className="text-gray-300 hover:text-gray-500 transition-colors leading-none" style={{ fontSize: '11px' }}>▲</button>
             )}
           </div>
         )}
       </div>
-      <div className="no-scrollbar flex-1 overflow-y-auto min-h-0">{children}</div>
+      <div className={bare ? '' : 'no-scrollbar flex-1 overflow-y-auto min-h-0'}>{children}</div>
     </div>
   );
 }
@@ -1646,7 +1654,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
     <>
       {/* ── Coffee Costings — always in DOM ── */}
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
-        <Card icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
+        <Card bare icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" headerRight={addButton('coffee')} onCollapse={() => onCollapse('coffee')}>
           <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} uncosted={coffeeUncosted} week={reviewWeek} paymentFees={paymentFees} />
           <ProductColumn items={coffeeItems} height={450} reviews={reviewMap} sales={salesMap} feePct={feePct} />
         </Card>
@@ -1654,7 +1662,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
 
       {/* ── Food Costings — always in DOM ── */}
       <div style={{ display: open.food ? 'block' : 'none' }}>
-        <Card icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
+        <Card bare icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" headerRight={addButton('food')} onCollapse={() => onCollapse('food')}>
           <MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} />
           <ProductColumn items={foodItems} height={450} reviews={reviewMap} sales={salesMap} feePct={feePct} />
         </Card>
@@ -1678,7 +1686,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
 
       {/* ── Ingredient Prices — always in DOM ── */}
       <div style={{ display: open.supplier ? 'block' : 'none' }}>
-        <Card icon={<WidgetIcon name="supplier" chip={28} glyph={17} />} title="Supplier Prices"
+        <Card bare icon={<WidgetIcon name="supplier" chip={28} glyph={17} />} title="Supplier Prices"
           onCollapse={() => onCollapse('supplier')}>
           <PackChangeBanner packChanges={priceDrift?.packChanges ?? []} unmappedSkus={priceDrift?.unmappedSkus ?? []} onAddSku={handleAddSku} />
           {firstLoad ? (
@@ -2598,7 +2606,7 @@ export default function Home() {
 
         {/* SHOPPING LIST widget — always in DOM, shown/hidden via CSS to avoid scroll-jump */}
         <div ref={shoppingWidgetRef} style={{ display: openWidgets.has('shopping') ? 'block' : 'none' }}>
-          <Card icon={<WidgetIcon name="shopping" chip={28} />} title="Shopping List" onCollapse={() => toggleWidget('shopping')}>
+          <Card bare icon={<WidgetIcon name="shopping" chip={28} />} title="Shopping List" onCollapse={() => toggleWidget('shopping')}>
             <div className="space-y-2">
               {[...shoppingAllUnchecked, ...shoppingAllChecked].map(item => {
                   const { name, qty } = parseShoppingQty(item.text);
@@ -2652,7 +2660,7 @@ export default function Home() {
 
         {/* PROJECTS — always in DOM */}
         <div style={{ display: openWidgets.has('projects') ? 'block' : 'none' }}>
-        <Card icon={<WidgetIcon name="projects" chip={28} glyph={17} />} title="Projects" onCollapse={() => toggleWidget('projects')}>
+        <Card bare icon={<WidgetIcon name="projects" chip={28} glyph={17} />} title="Projects" onCollapse={() => toggleWidget('projects')}>
          <div className="uppercase">
           {/* ── Capture zone ── */}
           {!draft ? (
@@ -2745,7 +2753,7 @@ export default function Home() {
 
         {/* TIGER OS UPDATES — always in DOM */}
         <div style={{ display: openWidgets.has('updates') ? 'block' : 'none' }}>
-          <Card icon={<WidgetIcon name="updates" chip={28} glyph={17} />} title="TIGER OS Updates" onCollapse={() => toggleWidget('updates')}>
+          <Card bare icon={<WidgetIcon name="updates" chip={28} glyph={17} />} title="TIGER OS Updates" onCollapse={() => toggleWidget('updates')}>
             <UpdateWidget
               tasks={tigerTasks}
               onAddTask={addTigerTask}
@@ -2760,7 +2768,7 @@ export default function Home() {
 
         {/* LABOUR — Staff cost % (Deputy hours ÷ Square sales), last-14-day trend, roster shape */}
         <div style={{ display: openWidgets.has('labour') ? 'block' : 'none' }}>
-          <Card icon={<WidgetIcon name="labour" chip={28} glyph={17} />} title="Labour" onCollapse={() => toggleWidget('labour')}>
+          <Card bare icon={<WidgetIcon name="labour" chip={28} glyph={17} />} title="Labour" onCollapse={() => toggleWidget('labour')}>
             <LabourCardBody data={staffCost} />
           </Card>
         </div>
