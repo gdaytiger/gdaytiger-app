@@ -144,23 +144,18 @@ const applyServerChecked = (todos: Todo[], date: string, state: Record<string, s
 // sheet: no nested white panel, no fixed 575px height, no ▲ collapse (the sheet
 // supplies its own close ✕ and grab handle). Content flows naturally and the
 // sheet itself scrolls.
-// `bare` renders the card chromeless and fills its parent (the bottom sheet has a
-// fixed height, so every widget opens to the same size). `fillContent` lets the
-// children manage their own scroll (used by costings: fixed header badges + a
-// scrolling product list); otherwise the card body itself scrolls.
-function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onCollapse, bare, fillContent }: {
+// `bare` renders the card chromeless (no nested white panel, no fixed height, no
+// ▲ collapse) for use inside the bottom sheet — the sheet supplies the fixed
+// height, the close ✕ and the single scroll. Content flows naturally.
+function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onCollapse, bare }: {
   emoji?: string; icon?: React.ReactNode; title: string; children: React.ReactNode; onEmojiClick?: () => void; headerRight?: React.ReactNode;
   onCollapse?: () => void;
   bare?: boolean;
-  fillContent?: boolean;
 }) {
-  const bodyClass = bare
-    ? (fillContent ? 'flex-1 min-h-0 flex flex-col' : 'flex-1 min-h-0 overflow-y-auto no-scrollbar')
-    : 'no-scrollbar flex-1 overflow-y-auto min-h-0';
   return (
     <div
       style={bare ? undefined : { background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', height: '575px', overflow: 'hidden' }}
-      className={bare ? 'flex flex-col gap-4 h-full min-h-0' : 'rounded-3xl p-5 flex flex-col gap-4'}
+      className={bare ? 'flex flex-col gap-4' : 'rounded-3xl p-5 flex flex-col gap-4'}
     >
       <div className="flex items-center gap-2 shrink-0">
         {icon ? icon : <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>}
@@ -174,7 +169,7 @@ function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onColla
           </div>
         )}
       </div>
-      <div className={bodyClass}>{children}</div>
+      <div className={bare ? '' : 'no-scrollbar flex-1 overflow-y-auto min-h-0'}>{children}</div>
     </div>
   );
 }
@@ -305,8 +300,8 @@ function BottomSheet({ open, onClose, children }: { open: boolean; onClose: () =
         <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '12px', right: '14px', zIndex: 2, width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', lineHeight: 1, color: '#6b7280', background: 'rgba(0,0,0,0.06)', borderRadius: '999px', border: 'none', cursor: 'pointer', padding: 0 }}>✕</button>
         {/* Content fills the fixed-height sheet; the widget inside owns its scroll.
             Capped + centred for desktop; top space clears the ✕ chip. */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', WebkitOverflowScrolling: 'touch', padding: '16px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
-          <div style={{ maxWidth: '720px', margin: '0 auto', width: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
+          <div style={{ maxWidth: '720px', margin: '0 auto', width: '100%' }}>
             {children}
           </div>
         </div>
@@ -1338,20 +1333,44 @@ function ProductItem({ p, review, weeklyQty, feePct }: { p: CostingProduct; revi
   );
 }
 
-function ProductColumn({ items, height = 272, fill, reviews, sales, feePct }: { items: CostingProduct[]; height?: number; fill?: boolean; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number>; feePct?: number }) {
+// Compact product search for the Coffee / Food costings widgets. Filters the
+// visible list; a clear (✕) appears once there's a query.
+function ProductSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <div className={`flex-1 min-w-0 ${fill ? 'flex flex-col' : ''}`}>
+    <div className="relative pt-2 pb-1">
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder || 'Search…'}
+        className="w-full text-sm pl-3 pr-8 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200"
+        style={{ background: 'rgba(255,255,255,0.75)', border: '1px solid rgba(0,0,0,0.08)', color: '#374151' }}
+      />
+      {value && (
+        <button onClick={() => onChange('')} aria-label="Clear search"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          style={{ fontSize: '13px', lineHeight: 1 }}>✕</button>
+      )}
+    </div>
+  );
+}
+
+function ProductColumn({ items, height = 272, fill, reviews, sales, feePct }: { items: CostingProduct[]; height?: number; fill?: boolean; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number>; feePct?: number }) {
+  const list = items.map(p => {
+    const key = p.name.toUpperCase().trim();
+    return <ProductItem key={p.id} p={p} review={reviews?.get(key)} weeklyQty={sales?.get(key)} feePct={feePct} />;
+  });
+  return (
+    <div className="flex-1 min-w-0">
       {items.length === 0 ? (
-        <p className="text-xs text-gray-400 italic">No data</p>
+        <p className="text-xs text-gray-400 italic">No matches</p>
+      ) : fill ? (
+        // In the bottom sheet the sheet itself scrolls, so render the list inline.
+        <div className="pr-1" style={{ paddingTop: '6px' }}>{list}</div>
       ) : (
-        <div className={fill ? 'relative flex-1 min-h-0' : 'relative'} style={fill ? undefined : { height: `${height}px` }}>
+        <div className="relative" style={{ height: `${height}px` }}>
           <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
-          <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
-            {items.map(p => {
-              const key = p.name.toUpperCase().trim();
-              return <ProductItem key={p.id} p={p} review={reviews?.get(key)} weeklyQty={sales?.get(key)} feePct={feePct} />;
-            })}
-          </div>
+          <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>{list}</div>
         </div>
       )}
     </div>
@@ -1617,6 +1636,14 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   const changedCount = ingredientChanges.filter(i => i.delta !== undefined).length;
   const [addProductOpen, setAddProductOpen] = useState<null | 'food' | 'coffee'>(null);
 
+  // Per-widget product search (Coffee / Food). Filters the visible list only;
+  // the summary badges keep showing the full-category figures.
+  const [coffeeQuery, setCoffeeQuery] = useState('');
+  const [foodQuery, setFoodQuery] = useState('');
+  const matchName = (p: CostingProduct, q: string) => p.name.toLowerCase().includes(q.trim().toLowerCase());
+  const coffeeShown = coffeeQuery.trim() ? coffeeItems.filter(p => matchName(p, coffeeQuery)) : coffeeItems;
+  const foodShown   = foodQuery.trim()   ? foodItems.filter(p => matchName(p, foodQuery))     : foodItems;
+
   // Supplier Prices: search + group-by-supplier
   const [priceQuery, setPriceQuery] = useState('');
   const supplierGroups = useMemo(() => {
@@ -1662,18 +1689,24 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   return (
     <>
       {/* ── Coffee Costings — always in DOM ── */}
-      <div style={{ display: open.coffee ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
-        <Card bare fillContent icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" onCollapse={() => onCollapse('coffee')}>
-          <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} uncosted={coffeeUncosted} week={reviewWeek} paymentFees={paymentFees} onAdd={() => setAddProductOpen('coffee')} />
-          <ProductColumn items={coffeeItems} fill reviews={reviewMap} sales={salesMap} feePct={feePct} />
+      <div style={{ display: open.coffee ? 'block' : 'none' }}>
+        <Card bare icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" onCollapse={() => onCollapse('coffee')}>
+          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(245,243,239,0.97)' }}>
+            <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} uncosted={coffeeUncosted} week={reviewWeek} paymentFees={paymentFees} onAdd={() => setAddProductOpen('coffee')} />
+            <ProductSearch value={coffeeQuery} onChange={setCoffeeQuery} placeholder="Search coffee products…" />
+          </div>
+          <ProductColumn items={coffeeShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} />
         </Card>
       </div>
 
       {/* ── Food Costings — always in DOM ── */}
-      <div style={{ display: open.food ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
-        <Card bare fillContent icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" onCollapse={() => onCollapse('food')}>
-          <MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} onAdd={() => setAddProductOpen('food')} />
-          <ProductColumn items={foodItems} fill reviews={reviewMap} sales={salesMap} feePct={feePct} />
+      <div style={{ display: open.food ? 'block' : 'none' }}>
+        <Card bare icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" onCollapse={() => onCollapse('food')}>
+          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(245,243,239,0.97)' }}>
+            <MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} onAdd={() => setAddProductOpen('food')} />
+            <ProductSearch value={foodQuery} onChange={setFoodQuery} placeholder="Search food products…" />
+          </div>
+          <ProductColumn items={foodShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} />
         </Card>
       </div>
 
@@ -1694,7 +1727,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       )}
 
       {/* ── Ingredient Prices — always in DOM ── */}
-      <div style={{ display: open.supplier ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
+      <div style={{ display: open.supplier ? 'block' : 'none' }}>
         <Card bare icon={<WidgetIcon name="supplier" chip={28} glyph={17} />} title="Supplier Prices"
           onCollapse={() => onCollapse('supplier')}>
           <PackChangeBanner packChanges={priceDrift?.packChanges ?? []} unmappedSkus={priceDrift?.unmappedSkus ?? []} onAddSku={handleAddSku} />
@@ -2611,10 +2644,10 @@ export default function Home() {
 
         {/* ── Widget panels — open one at a time in a bottom sheet over the dashboard ── */}
         <BottomSheet open={openWidgets.size > 0} onClose={closeWidgets}>
-        <div className="flex flex-col gap-4 flex-1 min-h-0">
+        <div className="flex flex-col gap-4">
 
         {/* SHOPPING LIST widget — always in DOM, shown/hidden via CSS to avoid scroll-jump */}
-        <div ref={shoppingWidgetRef} style={{ display: openWidgets.has('shopping') ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
+        <div ref={shoppingWidgetRef} style={{ display: openWidgets.has('shopping') ? 'block' : 'none' }}>
           <Card bare icon={<WidgetIcon name="shopping" chip={28} />} title="Shopping List" onCollapse={() => toggleWidget('shopping')}>
             <div className="space-y-2">
               {[...shoppingAllUnchecked, ...shoppingAllChecked].map(item => {
@@ -2668,7 +2701,7 @@ export default function Home() {
         </div>
 
         {/* PROJECTS — always in DOM */}
-        <div style={{ display: openWidgets.has('projects') ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
+        <div style={{ display: openWidgets.has('projects') ? 'block' : 'none' }}>
         <Card bare icon={<WidgetIcon name="projects" chip={28} glyph={17} />} title="Projects" onCollapse={() => toggleWidget('projects')}>
          <div className="uppercase">
           {/* ── Capture zone ── */}
@@ -2761,7 +2794,7 @@ export default function Home() {
         </div>
 
         {/* TIGER OS UPDATES — always in DOM */}
-        <div style={{ display: openWidgets.has('updates') ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
+        <div style={{ display: openWidgets.has('updates') ? 'block' : 'none' }}>
           <Card bare icon={<WidgetIcon name="updates" chip={28} glyph={17} />} title="TIGER OS Updates" onCollapse={() => toggleWidget('updates')}>
             <UpdateWidget
               tasks={tigerTasks}
@@ -2776,7 +2809,7 @@ export default function Home() {
         </div>
 
         {/* LABOUR — Staff cost % (Deputy hours ÷ Square sales), last-14-day trend, roster shape */}
-        <div style={{ display: openWidgets.has('labour') ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
+        <div style={{ display: openWidgets.has('labour') ? 'block' : 'none' }}>
           <Card bare icon={<WidgetIcon name="labour" chip={28} glyph={17} />} title="Labour" onCollapse={() => toggleWidget('labour')}>
             <LabourCardBody data={staffCost} />
           </Card>
