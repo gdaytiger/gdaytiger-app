@@ -145,12 +145,12 @@ const applyServerChecked = (todos: Todo[], date: string, state: Record<string, s
     .map(t => (t.isHeader || t.isShopping) ? t : { ...t, checked: checkedIds.has(t.id) });
 };
 
-// Badge count for a day in the Week Ahead: unchecked, non-header tasks (stickies
-// included — the API injects them into each day). Derived from the enriched task
-// list so it tracks optimistic ticks and the pendingWrites guard, rather than the
-// raw server total.
+// Badge count for a day in the Week Ahead: unchecked day tasks (stickies included,
+// shopping excluded — it has its own tile). Derived from the same task list the
+// Daily To Do renders for that day, so it tracks optimistic ticks and matches what
+// the user sees exactly.
 const uncheckedTaskCount = (tasks: Todo[]): number =>
-  tasks.filter(t => !t.isHeader && !t.checked).length;
+  tasks.filter(t => !t.isHeader && !t.isShopping && !t.checked).length;
 
 // `bare` renders the card chromeless and auto-height for use inside the bottom
 // sheet: no nested white panel, no fixed 575px height, no ▲ collapse (the sheet
@@ -2495,6 +2495,16 @@ export default function Home() {
     : data.dailyTasks.filter(t => !movedRecurringIds.has(t.id));
   const selectedShift = selectedDate ? shifts.find(s => s.date === selectedDate) : null;
   const displayDayLabel = isViewingOtherDay && selectedShift ? selectedShift.label : null;
+  // Week Ahead badge count per day. Today must come from data.dailyTasks (the list
+  // the Daily To Do actually renders, incl. [CARRY] tasks the week API doesn't carry)
+  // so the number matches the visible list and updates the instant a task is ticked.
+  // Other days read the enriched week-tasks list.
+  const dayBadgeCount = (dateStr: string): number =>
+    uncheckedTaskCount(
+      dateStr === todayStr
+        ? data.dailyTasks.filter(t => !movedRecurringIds.has(t.id))
+        : (weekTasks[dateStr]?.tasks ?? [])
+    );
   // Day tasks only (exclude the 🛒 Shopping List group — it has its own tile + count)
   const dailyTasks: typeof displayedTasks = [];
   let inShoppingSection = false;
@@ -2632,7 +2642,7 @@ export default function Home() {
           <div className="space-y-2">
             {shifts.length === 0 ? <p className="text-sm text-gray-400 italic">No shifts found</p> : (
               shifts.map(shift => (
-                <RosterRow key={shift.date} shift={shift} isToday={shift.date === todayStr} isHighlighted={selectedDate ? shift.date === selectedDate : shift.date === todayStr} taskCount={weekTasks[shift.date] ? uncheckedTaskCount(weekTasks[shift.date].tasks) : 0} onAdd={handleAddTask} onSelectDay={handleSelectDay}
+                <RosterRow key={shift.date} shift={shift} isToday={shift.date === todayStr} isHighlighted={selectedDate ? shift.date === selectedDate : shift.date === todayStr} taskCount={dayBadgeCount(shift.date)} onAdd={handleAddTask} onSelectDay={handleSelectDay}
                   isDragOver={dragOverDate === shift.date}
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverDate(shift.date); }}
                   onDragLeave={() => setDragOverDate(null)}
