@@ -185,3 +185,78 @@ export function parseDayTaskBlocks(blocks: Block[], opts: ParseOpts): ParsedTask
   }
   return tasks;
 }
+
+// ── Shared checked-state + [STICKY] helpers ──────────────────────────────────
+// Used by /api/dashboard (today) and /api/week-tasks (next 7 days) so persistent
+// tasks surface identically in both. Permanent-done key for stickies — see
+// /api/dashboard for the full rationale (sorts above any date string, so it
+// survives the date-keyed cleanup in /api/checked-state).
+export const STICKY_DONE_KEY = '_sticky_done';
+
+// Page holding the JSON checked-state code block.
+const CHECKED_STATE_PAGE_ID = '3403c99c0e858113a941c2118b3cdef9';
+
+async function notionGET(path: string): Promise<{ results?: Block[]; has_more?: boolean; next_cursor?: string }> {
+  const res = await fetch(`https://api.notion.com/v1${path}`, {
+    headers: { Authorization: `Bearer ${NOTION_API_KEY}`, 'Notion-Version': '2022-06-28' },
+    cache: 'no-store',
+  });
+  return res.json();
+}
+
+// The date-keyed checked-state map: { "YYYY-MM-DD": [blockId, ...], "_sticky_done": [...] }.
+export async function getCheckedState(): Promise<Record<string, string[]>> {
+  let allBlocks: Block[] = [];
+  let cursor: string | undefined;
+  do {
+    const data = await notionGET(`/blocks/${CHECKED_STATE_PAGE_ID}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ''}`);
+    allBlocks = allBlocks.concat(data.results || []);
+    cursor = data.has_more ? data.next_cursor : undefined;
+  } while (cursor);
+  const codeBlock = allBlocks.find(b => b.type === 'code' && b.code?.language === 'json');
+  if (codeBlock) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = (codeBlock.code?.rich_text || []).map((r: any) => r.plain_text).join('');
+    try { return JSON.parse(text || '{}'); } catch { return {}; }
+  }
+  return {};
+}
+
+export type StickyCandidate = { id: string; text: string; header: string; startDate: string | null };
+
+// Scan today + the past 6 day-pages (covers all 7 weekday pages) for [STICKY] /
+// [STICKY:YYYY-MM-DD] blocks. Mirrors the dashboard's candidate scan so the week
+// view counts the same persistent tasks. Done-filtering happens at the call site.
+export async function fetchStickyCandidates(today: Date): Promise<StickyCandidate[]> {
+  const pages = await Promise.all(
+    Array.from({ length: 7 }, (_, i) => {
+      const past = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+      return notionGET(`/blocks/${DAY_PAGES[past.getDay()]}/children?page_size=100`);
+    })
+  );
+  const sticky: StickyCandidate[] = [];
+  const seen = new Set<string>();
+  for (const data of pages) {
+    let currentHeader = 'ADMIN';
+    for (const block of (data.results || [])) {
+      if (block.type === 'heading_2' || block.type === 'heading_3') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        currentHeader = (block[block.type]?.rich_text || []).map((r: any) => r.plain_text).join('').trim();
+        continue;
+      }
+      let raw: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (block.type === 'bulleted_list_item') raw = (block.bulleted_list_item?.rich_text || []).map((r: any) => r.plain_text).join('');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      else if (block.type === 'to_do') raw = (block.to_do?.rich_text || []).map((r: any) => r.plain_text).join('');
+      else continue;
+      if (seen.has(block.id)) continue;
+      const m = raw.match(STICKY_PREFIX_RE);
+      if (m) {
+        seen.add(block.id);
+        sticky.push({ id: block.id, text: raw.replace(STICKY_PREFIX_RE, '').trim(), header: currentHeader, startDate: m[1] || null });
+      }
+    }
+  }
+  return sticky;
+}

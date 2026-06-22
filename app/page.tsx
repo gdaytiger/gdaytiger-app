@@ -132,13 +132,25 @@ const applyServerChecked = (todos: Todo[], date: string, state: Record<string, s
   const checkedIds = new Set(state[date] || []);
   // Recurring tasks moved away from this date are stored under `date:moved` and filtered out entirely.
   const movedIds = new Set(state[`${date}:moved`] || []);
+  // Persistent ([STICKY]) tasks ticked off are recorded permanently under "_sticky_done".
+  // The API already drops these from the day lists, but filtering here too means a
+  // just-ticked sticky (held in pendingWrites) can't bounce back if a stale poll
+  // re-returns it before Notion propagates the write.
+  const stickyDone = new Set(state['_sticky_done'] || []);
   return todos
-    .filter(t => t.isHeader || !movedIds.has(t.id))
+    .filter(t => t.isHeader || (!movedIds.has(t.id) && !stickyDone.has(t.id)))
     // Shopping items: checked state is owned by Notion to_do.checked (written by
     // /api/check-shopping). Skip them here — the date-keyed state doesn't track them
     // and would reset them to unchecked on every refresh.
     .map(t => (t.isHeader || t.isShopping) ? t : { ...t, checked: checkedIds.has(t.id) });
 };
+
+// Badge count for a day in the Week Ahead: unchecked, non-header tasks (stickies
+// included — the API injects them into each day). Derived from the enriched task
+// list so it tracks optimistic ticks and the pendingWrites guard, rather than the
+// raw server total.
+const uncheckedTaskCount = (tasks: Todo[]): number =>
+  tasks.filter(t => !t.isHeader && !t.checked).length;
 
 // `bare` renders the card chromeless and auto-height for use inside the bottom
 // sheet: no nested white panel, no fixed 575px height, no ▲ collapse (the sheet
@@ -2393,7 +2405,9 @@ export default function Home() {
       syncCheckedState(blockId, isSticky ? '_sticky_done' : todayStr, checked);
     } else if (section === 'week' && date) {
       setWeekTasks(prev => ({ ...prev, [date]: { ...prev[date], tasks: prev[date].tasks.map(t => t.id === blockId ? { ...t, checked } : t) } }));
-      syncCheckedState(blockId, date, checked);
+      // Persistent tasks tick off permanently (_sticky_done) even from another day's
+      // view, matching the Daily To Do — otherwise they'd resurface the next day.
+      syncCheckedState(blockId, isSticky ? '_sticky_done' : date, checked);
     } else if (section === 'project' && projectId) {
       setData(prev => prev ? { ...prev, projects: prev.projects.map(p => p.id === projectId ? { ...p, todos: p.todos.map(t => t.id === blockId ? { ...t, checked } : t) } : p) } : prev);
       await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
@@ -2618,7 +2632,7 @@ export default function Home() {
           <div className="space-y-2">
             {shifts.length === 0 ? <p className="text-sm text-gray-400 italic">No shifts found</p> : (
               shifts.map(shift => (
-                <RosterRow key={shift.date} shift={shift} isToday={shift.date === todayStr} isHighlighted={selectedDate ? shift.date === selectedDate : shift.date === todayStr} taskCount={weekTasks[shift.date]?.count ?? 0} onAdd={handleAddTask} onSelectDay={handleSelectDay}
+                <RosterRow key={shift.date} shift={shift} isToday={shift.date === todayStr} isHighlighted={selectedDate ? shift.date === selectedDate : shift.date === todayStr} taskCount={weekTasks[shift.date] ? uncheckedTaskCount(weekTasks[shift.date].tasks) : 0} onAdd={handleAddTask} onSelectDay={handleSelectDay}
                   isDragOver={dragOverDate === shift.date}
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverDate(shift.date); }}
                   onDragLeave={() => setDragOverDate(null)}
