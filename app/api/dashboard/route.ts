@@ -259,20 +259,17 @@ export async function GET() {
   // Unlike [CARRY], there's no retention window — once a sticky task's ID is recorded
   // in checkedState["_sticky_done"] it never resurfaces again. Stickies with no
   // encoded date (older [STICKY] blocks) show immediately, as before.
+  // Persistent tasks render together as a single "📌 PINNED" group at the BOTTOM of
+  // the daily list (below the categorised day tasks), and only ever on the current
+  // day — if left unchecked they resurface here again tomorrow via this same scan.
   const stickyDone: string[] = checkedState[STICKY_DONE_KEY] || [];
   const stickies = stickyCandidates.filter(c =>
     !stickyDone.includes(c.id) && (!c.startDate || c.startDate <= todayStr)
   );
-  for (const sticky of stickies) {
-    const stickyTask = { id: sticky.id, text: sticky.text, checked: false, isRecurring: false, isSticky: true };
-    const headerIdx = dailyTasks.findIndex((t: { isHeader?: boolean; text: string }) => t.isHeader && t.text === sticky.header);
-    if (headerIdx !== -1) {
-      dailyTasks.splice(headerIdx + 1, 0, stickyTask);
-    } else {
-      dailyTasks.unshift(
-        { id: `header-sticky-${sticky.header}`, text: sticky.header, checked: false, isHeader: true },
-        stickyTask,
-      );
+  if (stickies.length > 0) {
+    dailyTasks.push({ id: 'header-sticky', text: '📌 PINNED', checked: false, isHeader: true });
+    for (const sticky of stickies) {
+      dailyTasks.push({ id: sticky.id, text: sticky.text, checked: false, isRecurring: false, isSticky: true });
     }
   }
 
