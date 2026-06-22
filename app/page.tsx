@@ -2595,11 +2595,19 @@ export default function Home() {
                 const bi = CATEGORY_ORDER.indexOf(b.category);
                 return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
               });
-              // Checked tasks sink to the absolute bottom of the list (across all categories)
+              // Checked tasks sink to the absolute bottom of the list (across all categories).
+              // Persistent (📌) tasks — [STICKY] and "Review pricing" follow-ups — group
+              // together just above the shopping/checked sections, keeping their own
+              // category label rather than their in-list position.
               const checkedBucket: { task: typeof displayedTasks[0]; category: string }[] = [];
+              const stickyBucket: { task: typeof displayedTasks[0]; category: string }[] = [];
               const uncheckedGroups = normalGroups.map(g => ({
                 ...g,
-                tasks: g.tasks.filter(t => { if (t.checked) { checkedBucket.push({ task: t, category: g.category }); return false; } return true; }),
+                tasks: g.tasks.filter(t => {
+                  if (t.checked) { checkedBucket.push({ task: t, category: g.category }); return false; }
+                  if (t.isSticky) { stickyBucket.push({ task: t, category: g.category }); return false; }
+                  return true;
+                }),
               })).filter(g => g.tasks.length > 0);
               const renderTask = (task: typeof displayedTasks[0], category: string) => (
                 <CheckItem key={task.id} id={task.id} text={withLiveReviewMargin(task.text, reviewMarginMap)} checked={task.checked} label={category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave} isSticky={task.isSticky}
@@ -2611,6 +2619,7 @@ export default function Home() {
               );
               const elements = [
                 ...uncheckedGroups.flatMap(group => group.tasks.map(task => renderTask(task, group.category))),
+                ...stickyBucket.map(({ task, category }) => renderTask(task, category)),
               ];
               // 🛒 Shopping List — one collapsible tile with a count badge (like the week-ahead rows).
               // Tap to expand into one tile per item; tick = bought (writes to Notion, won't return).
