@@ -14,6 +14,7 @@ type Body = {
   supplier?: string;
   type?: 'food' | 'coffee';   // which costing sheet
   category?: string;          // which category column within that sheet
+  sig?: string;               // unmapped-SKU id, when added from a NEW SKU prompt
 };
 
 export async function POST(req: NextRequest) {
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
         supplier: (body.supplier || 'Other').toString().trim() || 'Other',
         type,
         category,
+        sig: (body.sig || '').toString(),
       }),
       cache: 'no-store',
     });

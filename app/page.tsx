@@ -1043,6 +1043,49 @@ function DriftChip({ drift }: { drift: DriftWarning }) {
   );
 }
 
+// ── Unmapped-SKU tile (Supplier Prices card) ─────────────────────────────────
+// One collapsible tile per supplier, listing invoice lines the scanner couldn't
+// map to a tracked ingredient cell. Collapsed by default to keep the widget tidy;
+// the count sits on the header so you can see how many are waiting without opening.
+function UnmappedSkuTile({ supplier, skus, onAddSku }: { supplier: string; skus: UnmappedSku[]; onAddSku: (sku: UnmappedSku) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-2xl overflow-hidden"
+      style={{ background: 'rgba(254,215,170,0.5)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 px-3 py-2 select-none">
+        <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0" style={{ background: '#fed7aa', color: '#7c2d12' }}>
+          new sku
+        </span>
+        <span className="text-xs font-bold flex-1 min-w-0 truncate text-left" style={{ color: '#7c2d12', textTransform: 'uppercase', fontFamily: '"stolzl", sans-serif' }}>
+          {supplier}
+        </span>
+        <span className="text-xs font-black shrink-0" style={{ color: '#7c2d12', fontVariantNumeric: 'tabular-nums' }}>{skus.length}</span>
+        <span className="text-[10px] shrink-0" style={{ color: '#7c2d12', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
+      </button>
+      {open && (
+        <div className="px-2 pb-2 space-y-1.5">
+          {skus.map(sku => (
+            <div key={sku.sig} className="rounded-xl px-2.5 py-2 flex items-center gap-2"
+              style={{ background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.6)' }}>
+              <span className="text-xs flex-1 min-w-0 truncate" style={{ color: '#7c2d12', textTransform: 'uppercase' }}
+                title={`${sku.supplier}: ${sku.description} — $${sku.price} (not mapped to any ingredient cell)`}>
+                {sku.description}
+              </span>
+              <span className="text-xs font-bold shrink-0" style={{ color: '#7c2d12', fontVariantNumeric: 'tabular-nums' }}>${sku.price.toFixed(2)}</span>
+              <button
+                onClick={() => onAddSku(sku)}
+                className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-lg shrink-0 transition-colors"
+                style={{ background: '#fed7aa', color: '#7c2d12', border: '1px solid rgba(124,45,18,0.2)' }}
+                title={`Add "${sku.description}" as a tracked ingredient`}
+              >+ ADD</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Pack-size change banner (Supplier Prices card) ───────────────────────────
 // Rendered when the invoice scanner detects a supplier changed units-per-carton.
 // The headline case: carton price drops but pack shrinks more — unit cost rises
@@ -1077,24 +1120,21 @@ function PackChangeBanner({ packChanges, unmappedSkus, onAddSku }: { packChanges
           </div>
         );
       })}
-      {unmappedSkus.map(sku => (
-        <div key={sku.sig} className="rounded-2xl px-3 py-2 flex items-center gap-2"
-          style={{ background: 'rgba(254,215,170,0.5)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
-          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0" style={{ background: '#fed7aa', color: '#7c2d12' }}>
-            new sku
-          </span>
-          <span className="text-xs flex-1 min-w-0 truncate" style={{ color: '#7c2d12' }} title={`${sku.supplier}: ${sku.description} — $${sku.price} (not mapped to any ingredient cell)`}>
-            {sku.supplier}: {sku.description}
-          </span>
-          <span className="text-xs font-bold shrink-0" style={{ color: '#7c2d12', fontVariantNumeric: 'tabular-nums' }}>${sku.price.toFixed(2)}</span>
-          <button
-            onClick={() => onAddSku(sku)}
-            className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-lg shrink-0 transition-colors"
-            style={{ background: '#fed7aa', color: '#7c2d12', border: '1px solid rgba(124,45,18,0.2)' }}
-            title={`Add "${sku.description}" as a tracked ingredient`}
-          >+ ADD</button>
-        </div>
-      ))}
+      {(() => {
+        // Group unmapped SKUs by supplier, render one collapsible tile each,
+        // sorted alphabetically by supplier name.
+        const groups = new Map<string, UnmappedSku[]>();
+        unmappedSkus.forEach(s => {
+          const g = groups.get(s.supplier) ?? [];
+          g.push(s);
+          groups.set(s.supplier, g);
+        });
+        return [...groups.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([supplier, skus]) => (
+            <UnmappedSkuTile key={supplier} supplier={supplier} skus={skus} onAddSku={onAddSku} />
+          ));
+      })()}
     </div>
   );
 }
@@ -1677,10 +1717,10 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   const filteredCount = supplierGroups.reduce((n, g) => n + g.items.length, 0);
 
   const [addIngredientOpen, setAddIngredientOpen] = useState(false);
-  const [addPrefill, setAddPrefill] = useState<{ query?: string; supplier?: string; price?: number } | undefined>(undefined);
+  const [addPrefill, setAddPrefill] = useState<{ query?: string; supplier?: string; price?: number; sig?: string } | undefined>(undefined);
   // Open the Add-Ingredient modal pre-filled from a "NEW SKU" invoice line.
   const handleAddSku = (sku: UnmappedSku) => {
-    setAddPrefill({ query: sku.description, supplier: sku.supplier, price: sku.price });
+    setAddPrefill({ query: sku.description, supplier: sku.supplier, price: sku.price, sig: sku.sig });
     setAddIngredientOpen(true);
   };
 

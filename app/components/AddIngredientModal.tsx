@@ -50,7 +50,7 @@ export default function AddIngredientModal({
   onClose: () => void;
   onSuccess?: () => void;
   // Optional starting values, e.g. from a "NEW SKU" row on the dashboard.
-  prefill?: { query?: string; supplier?: string; price?: number };
+  prefill?: { query?: string; supplier?: string; price?: number; sig?: string };
 }) {
   const [query, setQuery] = useState(prefill?.query ?? '');
   const [searching, setSearching] = useState(false);
@@ -150,6 +150,7 @@ export default function AddIngredientModal({
           supplier: supplier.trim() || 'Other',
           type,
           category,
+          sig: prefill?.sig ?? '',
         }),
       });
       const data: AddResponse = await res.json();
