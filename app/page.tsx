@@ -312,7 +312,7 @@ function BottomSheet({ open, onClose, children }: { open: boolean; onClose: () =
         <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '12px', right: '14px', zIndex: 2, width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', lineHeight: 1, color: '#6b7280', background: 'rgba(0,0,0,0.06)', borderRadius: '999px', border: 'none', cursor: 'pointer', padding: 0 }}>✕</button>
         {/* Content fills the fixed-height sheet; the widget inside owns its scroll.
             Capped + centred for desktop; top space clears the ✕ chip. */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', scrollbarGutter: 'stable', WebkitOverflowScrolling: 'touch', padding: '16px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
+        <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
           <div style={{ maxWidth: '720px', margin: '0 auto', width: '100%' }}>
             {children}
           </div>
