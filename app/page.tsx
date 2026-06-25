@@ -2106,7 +2106,13 @@ export default function Home() {
       const toInject = prevChecked.filter(t => !freshIds.has(t.id));
       if (toInject.length === 0) return { ...d, dailyTasks: freshTasks };
       const headerIdx = freshTasks.findIndex(t => t.isHeader && t.text.toUpperCase().includes('SHOPPING'));
-      if (headerIdx === -1) return { ...d, dailyTasks: freshTasks };
+      if (headerIdx === -1) {
+        // All items checked → Notion returns 0 unchecked, so the server drops the
+        // whole shopping group (header + items). Recreate the header and re-attach
+        // the locally-checked items so the list stays visible (struck through)
+        // instead of vanishing on the next soft refresh.
+        return { ...d, dailyTasks: [...freshTasks, { id: 'header-shopping', text: '🛒 SHOPPING LIST', checked: false, isHeader: true }, ...toInject] };
+      }
       return { ...d, dailyTasks: [...freshTasks.slice(0, headerIdx + 1), ...toInject, ...freshTasks.slice(headerIdx + 1)] };
     });
   };

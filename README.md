@@ -8,8 +8,8 @@ G'Day Tiger internal operations dashboard. Built on Next.js, deployed on Vercel,
 
 | Layer | Tool / Version |
 |---|---|
-| Framework | Next.js 16.2.6 (App Router, TypeScript) |
-| UI | React 19.2.4, Tailwind CSS v4 |
+| Framework | Next.js 16.2.9 (App Router, TypeScript) |
+| UI | React 19.2.7, Tailwind CSS v4 |
 | Hosting | Vercel (auto-deploys from `main`) |
 | Primary DB | Notion (via REST API) |
 | Roster | Deputy API |
@@ -33,7 +33,7 @@ Live in ~30 seconds. To roll back: **vercel.com → your project → Deployments
 
 ## Layout
 
-Two persistent cards at the top (Daily To Do + Week Ahead), then a **6-tile launcher dock**. Each tile shows a count badge and a red alert dot when something needs attention. Dock resets to all-collapsed on every load. App auto-reloads on day rollover and soft-refreshes on tab refocus.
+Two persistent cards at the top (Daily To Do + Week Ahead), then a **7-tile launcher dock**. Each tile shows a count badge and a red alert dot when something needs attention. Tapping a tile opens its widget as a **bottom sheet** that slides up over the dashboard (`BottomSheet` in `page.tsx`) — the two pinned cards + dock stay put underneath behind a scrim; close by swiping the handle down, tapping the scrim, the ✕, or the card's ▲. App auto-reloads on day rollover and soft-refreshes on tab refocus.
 
 | Tile | Widget |
 |---|---|
@@ -42,7 +42,8 @@ Two persistent cards at the top (Daily To Do + Week Ahead), then a **6-tile laun
 | 📦 Supplier Prices | Ingredient-level price tracking with 7-day drift |
 | ☕ Coffee Costings | Coffee products, sorted worst→best margin |
 | 🥪 Food Costings | Food products, sorted worst→best margin |
-| 🐯 Tiger OS Updates | In-app changelog + backlog (Notion Backlog DB) |
+| 🚀 Tiger OS Updates | In-app changelog + backlog (Notion Backlog DB) |
+| 📊 Labour | Daily/weekly staff cost % (labour ÷ sales) |
 
 ---
 
@@ -122,8 +123,11 @@ Three alias layers make the matching robust (all near the top of `MarginReview.j
 ### 📦 Supplier Prices
 Ingredient-level price tracking, grouped into collapsible supplier tiles with search. Cards show ingredient, supplier, price/unit, affected-product count. 7-day delta shown red/green. "Add ingredient from invoice" via `/api/find-ingredient-price`. Data from `SyncIngredientPrices` → Notion JSON block.
 
-### 🐯 Tiger OS Updates
-TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e84269b85765e20096c6be`). Reuses Projects UI patterns for subtask toggle/add. Badge shows open-task count.
+### 🚀 Tiger OS Updates
+TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e84269b85765e20096c6be`). Reuses Projects UI patterns for subtask toggle/add. Badge shows open-task count. Version number + What's New come from `app/lib/version.ts`, auto-generated from git log by `scripts/gen-version.mjs` (gitignored — do not hand-edit).
+
+### 📊 Labour
+Daily/weekly **staff cost %** = labour cost ÷ gross sales (the winter staff-cost blowout instrument). Body in `LabourCardBody.tsx`. Backed by `/api/staff-cost`, which merges `/api/labour` (Deputy **Timesheet** = actual worked hours + cost, all employees, distinct from `/api/roster`) with `/api/sales-daily` (Square sales by Melbourne trading day). Labour cost = hours × rate (default $38) ≈ wage cost **excluding Jonathan** (he doesn't clock into Deputy), validated within ~2% of the wage sheet. Tile badge shows this-week staff % with a red alert when over target.
 
 ---
 
@@ -177,6 +181,9 @@ TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e8
 | `/api/price-drift` | GET | Reads `price_drift_warnings` JSON block |
 | `/api/margin-review` | GET | Reads `margin_review` JSON block (weekly margin intelligence; powers `N/wk` + `−$/wk` on costing tiles) |
 | `/api/payment-fees` | GET | Reads `payment_fees` JSON block (rolling Square card fee %; powers net margin display) |
+| `/api/labour` | GET | Deputy Timesheet actual hours + cost per day, all employees (distinct from `/api/roster`) |
+| `/api/sales-daily` | GET | Reads `sales_daily` JSON block (Square sales by Melbourne trading day) |
+| `/api/staff-cost` | GET | Merges labour + sales into staff cost % per day/week (powers Labour card) |
 | `/api/tigeros-tasks` | GET | Fetch Tiger OS backlog tasks + subtasks (Updates widget) |
 | `/api/login` | POST | Password auth → set `gdt_session` cookie |
 
@@ -190,7 +197,7 @@ TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e8
 | `DEPUTY_ENDPOINT` | `/api/roster` |
 | `DEPUTY_ACCESS_TOKEN` | `/api/roster` |
 | `ANTHROPIC_API_KEY` | `/api/claude-assist`, `/api/braindump-analyze`, `/api/add-task` |
-| `SQUARE_ACCESS_TOKEN` | `PaymentFeeTracker.js` (Apps Script, reads Square Payments API) |
+| `SQUARE_ACCESS_TOKEN` | `PaymentFeeTracker.js` + `SalesDaily.js` (Apps Script — Square Payments / Orders API) |
 | `APP_PASSWORD` | Verified by `/api/login` |
 | `SESSION_TOKEN` | Value of `gdt_session` cookie; `middleware.ts` gates the whole app |
 
@@ -222,6 +229,10 @@ PaymentFeeTracker → Square Payments API → "Payment Fees" tab (Coffee Costing
   ├─ installPaymentFeeTracker() → sets up triggers (run once)
   ├─ runPaymentFeeBackfillStep() → 10-min trigger, self-deletes after 365 days covered
   └─ runDailyPaymentFeeUpdate() → daily ~1am ongoing
+SalesDaily → Square Orders → sales by Melbourne trading day → sales_daily JSON → Notion OS page
+                                        → /api/sales-daily + /api/staff-cost → TIGER OS Labour card
+  ├─ backfill stepper (10-min trigger, self-deletes when window covered)
+  └─ daily update ~12:30am
 ```
 
 | File | Purpose |
@@ -234,6 +245,7 @@ PaymentFeeTracker → Square Payments API → "Payment Fees" tab (Coffee Costing
 | `BuildRecipeMap.js` | Parses FOOD sheet formulas → ingredient→product map → `recipe_map` Notion block (daily) |
 | `MarginReview.js` | Joins 7 days of Square item sales (POS + Mr Yum online, same feed) against Notion Costings DB, ranks underperforming recipes by weekly $ impact → `margin_review` Notion block (Mondays 6am). Attribution via `MR_RECOGNISED_MODS` + `MR_MOD_ALIASES` (modifier names) + `MR_NAME_ALIASES` (item/recipe names); each bucket → exactly one costing, channels auto-merge by resolved product. `installMarginReview()` one-off setup; `printMarginReview()` previews; `printAllBuckets()` / `printAllModifiers()` diagnose gaps. See "Sales attribution" above. |
 | `PaymentFeeTracker.js` | Reads Square Payments API → writes daily Collected/Fees/Count rows to "Payment Fees" tab in Coffee Costings sheet → computes rolling 365-day blended fee % → writes `payment_fees` JSON block to Notion OS page. Run `installPaymentFeeTracker()` once to set up triggers (backfill + daily). `printPaymentFeeSummary()` to verify. |
+| `SalesDaily.js` | Polls Square Orders daily (~12:30am), buckets sales by Melbourne trading day → `sales_daily` JSON block to Notion OS page. Mirrors PaymentFeeTracker (sheet accumulator + self-deleting backfill stepper). Paired with `/api/labour` → `/api/staff-cost` for daily staff cost %. |
 | `TakeawayCupCounter.js` | Polls Square Orders daily, tallies Planetware cups. At 10,000, appends reorder to Shopping List. Counter start: 2026-06-01. |
 | `AddProduct.js` / `AddIngredient.js` | Web-app endpoints backing in-app Add Product / Add Ingredient modals |
 | `BackupCostings.js` | Costings sheet backup |
