@@ -5,6 +5,7 @@ import AddProductModal from './components/AddProductModal';
 import AddIngredientModal from './components/AddIngredientModal';
 import LabourCardBody, { type StaffCostData } from './components/LabourCardBody';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
+import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle } from './lib/theme';
 
 // Blended "True Payment Cost" — Square processing fees as a % of total revenue,
 // from Sales Summary (12mo to 15 Jun 2026): $12,916.54 fees / $1,262,991.94 collected.
@@ -98,13 +99,7 @@ const CATEGORY_ORDER = ['ORDER', 'ADMIN', 'MAINTENANCE', 'STAFF', 'COSTING', 'ME
 
 // Shared "tile" look used by action items, the brain-dump capture box, and the
 // collapsible project headers so they all read as the same component.
-const TILE_STYLE: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.45)',
-  backdropFilter: 'blur(16px) saturate(180%)',
-  WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-  border: '1px solid rgba(255,255,255,0.7)',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
-};
+const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
 
 // ── Widget icons (emoji) ─────────────────────────────────────────────────────
 // One place mapping each widget to its emoji, rendered at a size derived from
@@ -166,12 +161,12 @@ function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onColla
 }) {
   return (
     <div
-      style={bare ? undefined : { background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', height: '575px', overflow: 'hidden' }}
+      style={bare ? undefined : { ...glassStrongStyle, height: '575px', overflow: 'hidden' }}
       className={bare ? 'flex flex-col gap-4' : 'rounded-3xl p-5 flex flex-col gap-4'}
     >
       <div className="flex items-center gap-2 shrink-0">
         {icon ? icon : <span className={`text-base transition-all ${onEmojiClick ? 'cursor-pointer select-none' : ''}`} style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }} onClick={onEmojiClick}>{emoji}</span>}
-        <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: 'var(--color-ink-label)' }}>{title}</span>
         {(headerRight || (onCollapse && !bare)) && (
           <div className="ml-auto flex items-center gap-2">
             {headerRight}
@@ -199,18 +194,18 @@ function LauncherTile({ emoji, icon, title, subtitle, badgeText, alert, active, 
       style={{
         ...TILE_STYLE,
         aspectRatio: '1 / 1',
-        ...(active ? { border: '1.5px solid #fbcdad', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 3px rgba(251,205,173,0.35)' } : {}),
+        ...(active ? { border: '1.5px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow), var(--glass-ring)' } : {}),
       }}
     >
       {icon ? icon : <span style={{ fontSize: '26px', lineHeight: 1, filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>{emoji}</span>}
-      <span className="text-[10px] font-bold tracking-widest uppercase leading-tight" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: '#6b7280' }}>{title}</span>
-      {subtitle && <span className="text-[9px] tabular-nums" style={{ color: '#9ca3af', marginTop: '-2px' }}>{subtitle}</span>}
+      <span className="text-[10px] font-bold tracking-widest uppercase leading-tight" style={{ fontFamily: '"stolzl", sans-serif', fontWeight: 700, color: 'var(--color-ink-label)' }}>{title}</span>
+      {subtitle && <span className="text-[9px] tabular-nums" style={{ color: 'var(--color-ink-muted)', marginTop: '-2px' }}>{subtitle}</span>}
       <div className="flex items-center gap-1.5" style={{ minHeight: '22px' }}>
         {alert && (
-          <span title="Needs attention" style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626', flexShrink: 0, boxShadow: '0 0 0 3px rgba(220,38,38,0.15)' }} />
+          <span title="Needs attention" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-danger)', flexShrink: 0, boxShadow: '0 0 0 3px rgba(220,38,38,0.15)' }} />
         )}
         {badgeText !== undefined && badgeText !== '' && (
-          <span className="flex items-center justify-center rounded-full font-bold tabular-nums" style={{ minWidth: '22px', height: '22px', padding: '0 7px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{badgeText}</span>
+          <span className="flex items-center justify-center rounded-full font-bold tabular-nums" style={{ minWidth: '22px', height: '22px', padding: '0 7px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{badgeText}</span>
         )}
       </div>
     </div>
@@ -309,7 +304,7 @@ function BottomSheet({ open, onClose, children }: { open: boolean; onClose: () =
           <div style={{ width: '40px', height: '5px', borderRadius: '999px', background: 'rgba(0,0,0,0.18)' }} />
         </div>
         {/* Close button */}
-        <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '12px', right: '14px', zIndex: 2, width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', lineHeight: 1, color: '#6b7280', background: 'rgba(0,0,0,0.06)', borderRadius: '999px', border: 'none', cursor: 'pointer', padding: 0 }}>✕</button>
+        <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '12px', right: '14px', zIndex: 2, width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', lineHeight: 1, color: 'var(--color-ink-label)', background: 'rgba(0,0,0,0.06)', borderRadius: '999px', border: 'none', cursor: 'pointer', padding: 0 }}>✕</button>
         {/* Content fills the fixed-height sheet; the widget inside owns its scroll.
             Capped + centred for desktop; top space clears the ✕ chip. */}
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
@@ -386,7 +381,7 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
       onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
       <div className="absolute inset-0 flex items-center justify-end pr-4 rounded-2xl pointer-events-none"
         style={{ background: committed ? 'linear-gradient(270deg, #ef4444 0%, #fca5a5 100%)' : `linear-gradient(270deg, rgba(239,68,68,${eased * 0.9}) 0%, rgba(252,165,165,${eased * 0.7}) 100%)`, opacity: offset < 0 ? 1 : 0, transition: swiping ? 'none' : 'background 0.2s ease' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: '#7f1d1d', opacity: eased }}>DELETE ←</span>
+        <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--color-danger-deep)', opacity: eased }}>DELETE ←</span>
       </div>
       <div
         style={{ transform: `translateX(${offset}px)`, transition: swiping ? 'none' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)', willChange: 'transform' }}
@@ -597,20 +592,20 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ userSelect: 'none', minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}
+      style={{ userSelect: 'none', minHeight: '62px', ...glassTileStyle }}
     >
       {/* Right swipe reveal — tomorrow */}
       {canSwipeRight && (
         <div className="absolute inset-0 flex items-center pl-4 rounded-xl pointer-events-none"
           style={{
             background: committed && isRightSwipe
-              ? 'linear-gradient(90deg, #fbcdad 0%, #f9b48a 100%)'
+              ? 'linear-gradient(90deg, var(--color-brand-peach) 0%, #f9b48a 100%)'
               : `linear-gradient(90deg, rgba(251,205,173,${eased * 0.9}) 0%, rgba(249,180,138,${eased * 0.7}) 100%)`,
             opacity: isRightSwipe ? 1 : 0,
             transition: swiping ? 'none' : 'background 0.2s ease',
           }}>
           <span style={{
-            fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: '#7c4a2d',
+            fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--color-brand-bark-soft)',
             opacity: isRightSwipe ? eased : 0,
             transform: `translateX(${(1 - eased) * -8}px)`,
             transition: swiping ? 'none' : 'all 0.2s ease',
@@ -630,7 +625,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
             transition: swiping ? 'none' : 'background 0.2s ease',
           }}>
           <span style={{
-            fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: '#7f1d1d',
+            fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--color-danger-deep)',
             opacity: isLeftSwipe ? eased : 0,
             transform: `translateX(${(1 - eased) * 8}px)`,
             transition: swiping ? 'none' : 'all 0.2s ease',
@@ -648,7 +643,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         }}
         onClick={() => { if (!didSwipeRef.current) setExpanded(e => !e); didSwipeRef.current = false; }}
       >
-        <div onClick={e => { e.stopPropagation(); onChange(id, !checked); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
+        <div onClick={e => { e.stopPropagation(); onChange(id, !checked); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? 'var(--color-brand-peach)' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid var(--color-brand-peach)' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
           {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
         <div className="flex-1 min-w-0">
@@ -665,7 +660,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         </div>
         {isSticky && <span className="shrink-0 text-xs mt-0.5 leading-none" title="Persistent — stays until ticked off">📌</span>}
         {!isSticky && !checked && onPin && <button onClick={e => { e.stopPropagation(); onPin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-60 hover:!opacity-100 mt-0.5" aria-label="Pin task" title="Make persistent — stays until ticked off" style={{ fontSize: '13px' }}>📌</button>}
-        {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: '#fbcdad' }} title="Has context" />}
+        {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
         {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
         {!isMobile && onDelete && <button onClick={e => { e.stopPropagation(); onDelete(id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Delete" title="Delete">✕</button>}
       </div>
@@ -737,8 +732,8 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
   const baseStyle = isDragOver
     ? { background: 'rgba(22,163,74,0.10)', borderColor: 'rgba(22,163,74,0.25)', boxShadow: '0 0 0 2px rgba(22,163,74,0.15)' }
     : isHighlighted
-      ? { background: 'rgba(251,205,173,0.12)', borderColor: '#fbcdad', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }
-      : { background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
+      ? { background: 'rgba(251,205,173,0.12)', borderColor: 'var(--color-brand-peach)', boxShadow: 'var(--glass-shadow)' }
+      : { ...glassTileStyle };
 
   return (
     <div
@@ -756,7 +751,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
         </div>
         <div className="flex items-center gap-2">
           <span className={`text-sm font-medium uppercase ${shift.working ? 'text-gray-500' : 'text-gray-300'}`}>{shift.working ? `${shift.start} – ${shift.end}` : 'Not working'}</span>
-          <button onClick={() => onSelectDay(shift.date)} className="flex items-center justify-center rounded-full font-bold transition-all hover:scale-110" style={{ width: '22px', height: '22px', background: taskCount > 0 ? '#fbcdad' : 'rgba(0,0,0,0.06)', color: taskCount > 0 ? '#333' : '#aaa', flexShrink: 0, fontSize: '11px' }} title={`${taskCount} task${taskCount !== 1 ? 's' : ''}`}>{taskCount}</button>
+          <button onClick={() => onSelectDay(shift.date)} className="flex items-center justify-center rounded-full font-bold transition-all hover:scale-110" style={{ width: '22px', height: '22px', background: taskCount > 0 ? 'var(--color-brand-peach)' : 'rgba(0,0,0,0.06)', color: taskCount > 0 ? '#333' : '#aaa', flexShrink: 0, fontSize: '11px' }} title={`${taskCount} task${taskCount !== 1 ? 's' : ''}`}>{taskCount}</button>
           <button onClick={openInput} className="transition-colors text-xl leading-none font-light text-gray-300 hover:text-gray-400" aria-label="Add task">+</button>
         </div>
       </div>
@@ -764,7 +759,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold shrink-0 text-gray-500 uppercase">{shift.label.split(' ')[0]}</span>
           <input ref={inputRef} value={taskText} onChange={e => setTaskText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') close(); }} placeholder="ADD TASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-          <button onClick={submit} disabled={saving || !taskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>{saving ? '...' : 'ADD'}</button>
+          <button onClick={submit} disabled={saving || !taskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>{saving ? '...' : 'ADD'}</button>
           <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
         </div>
         <div className="flex items-center gap-1.5 overflow-x-auto pl-7" style={{ scrollbarWidth: 'none' }}>
@@ -773,7 +768,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
               key={opt.value}
               onClick={() => setRecurrence(opt.value)}
               className="text-[10px] uppercase font-semibold px-2 py-1 rounded-full transition-colors shrink-0 tracking-wide"
-              style={{ background: recurrence === opt.value ? '#fbcdad' : 'rgba(0,0,0,0.05)', color: recurrence === opt.value ? '#333' : '#999' }}
+              style={{ background: recurrence === opt.value ? 'var(--color-brand-peach)' : 'rgba(0,0,0,0.05)', color: recurrence === opt.value ? '#333' : '#999' }}
             >
               {opt.label}
             </button>
@@ -1020,8 +1015,8 @@ function productMatchesIngredient(productName: string, ingredientKey: string): b
 // Visual styling per drift severity. Used by the chip on each ingredient card.
 const DRIFT_STYLES: Record<DriftSeverity, { bg: string; fg: string }> = {
   yellow: { bg: '#fef3c7', fg: '#78350f' },
-  amber:  { bg: '#fed7aa', fg: '#7c2d12' },
-  red:    { bg: '#fecaca', fg: '#7f1d1d' },
+  amber:  { bg: 'var(--color-brand-peach-soft)', fg: 'var(--color-brand-bark)' },
+  red:    { bg: '#fecaca', fg: 'var(--color-danger-deep)' },
 };
 
 function DriftChip({ drift }: { drift: DriftWarning }) {
@@ -1051,31 +1046,31 @@ function UnmappedSkuTile({ supplier, skus, onAddSku }: { supplier: string; skus:
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-2xl overflow-hidden"
-      style={{ background: 'rgba(254,215,170,0.5)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+      style={{ ...glassPeachStyle }}>
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 px-3 py-2 select-none">
-        <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0" style={{ background: '#fed7aa', color: '#7c2d12' }}>
+        <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'var(--color-brand-peach-soft)', color: 'var(--color-brand-bark)' }}>
           new sku
         </span>
-        <span className="text-xs font-bold flex-1 min-w-0 truncate text-left" style={{ color: '#7c2d12', textTransform: 'uppercase', fontFamily: '"stolzl", sans-serif' }}>
+        <span className="text-xs font-bold flex-1 min-w-0 truncate text-left" style={{ color: 'var(--color-brand-bark)', textTransform: 'uppercase', fontFamily: '"stolzl", sans-serif' }}>
           {supplier}
         </span>
-        <span className="text-xs font-black shrink-0" style={{ color: '#7c2d12', fontVariantNumeric: 'tabular-nums' }}>{skus.length}</span>
-        <span className="text-[10px] shrink-0" style={{ color: '#7c2d12', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
+        <span className="text-xs font-black shrink-0" style={{ color: 'var(--color-brand-bark)', fontVariantNumeric: 'tabular-nums' }}>{skus.length}</span>
+        <span className="text-[10px] shrink-0" style={{ color: 'var(--color-brand-bark)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
       </button>
       {open && (
         <div className="px-2 pb-2 space-y-1.5">
           {skus.map(sku => (
             <div key={sku.sig} className="rounded-xl px-2.5 py-2 flex items-center gap-2"
               style={{ background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.6)' }}>
-              <span className="text-xs flex-1 min-w-0 truncate" style={{ color: '#7c2d12', textTransform: 'uppercase' }}
+              <span className="text-xs flex-1 min-w-0 truncate" style={{ color: 'var(--color-brand-bark)', textTransform: 'uppercase' }}
                 title={`${sku.supplier}: ${sku.description} — $${sku.price} (not mapped to any ingredient cell)`}>
                 {sku.description}
               </span>
-              <span className="text-xs font-bold shrink-0" style={{ color: '#7c2d12', fontVariantNumeric: 'tabular-nums' }}>${sku.price.toFixed(2)}</span>
+              <span className="text-xs font-bold shrink-0" style={{ color: 'var(--color-brand-bark)', fontVariantNumeric: 'tabular-nums' }}>${sku.price.toFixed(2)}</span>
               <button
                 onClick={() => onAddSku(sku)}
                 className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-lg shrink-0 transition-colors"
-                style={{ background: '#fed7aa', color: '#7c2d12', border: '1px solid rgba(124,45,18,0.2)' }}
+                style={{ background: 'var(--color-brand-peach-soft)', color: 'var(--color-brand-bark)', border: '1px solid rgba(124,45,18,0.2)' }}
                 title={`Add "${sku.description}" as a tracked ingredient`}
               >+ ADD</button>
             </div>
@@ -1099,18 +1094,18 @@ function PackChangeBanner({ packChanges, unmappedSkus, onAddSku }: { packChanges
         const up = (pc.unitCostPct ?? 0) > 0;
         return (
           <div key={pc.cell + pc.date} className="rounded-2xl px-3 py-2.5"
-            style={{ background: 'rgba(254,202,202,0.55)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+            style={{ ...glassDangerStyle }}>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#7f1d1d', fontFamily: '"stolzl", sans-serif' }}>
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--color-danger-deep)', fontFamily: '"stolzl", sans-serif' }}>
                 ⚠ Pack size changed
               </span>
               {pc.unitCostPct !== null && (
-                <span className="text-xs font-black ml-auto shrink-0" style={{ color: up ? '#dc2626' : '#16a34a', fontVariantNumeric: 'tabular-nums' }}>
+                <span className="text-xs font-black ml-auto shrink-0" style={{ color: up ? 'var(--color-danger)' : 'var(--color-success)', fontVariantNumeric: 'tabular-nums' }}>
                   unit cost {up ? '+' : ''}{pc.unitCostPct.toFixed(1)}%
                 </span>
               )}
             </div>
-            <p className="text-xs leading-snug" style={{ color: '#7f1d1d' }}>
+            <p className="text-xs leading-snug" style={{ color: 'var(--color-danger-deep)' }}>
               {pc.label}: /{pc.oldPack} → /{pc.newPack} per carton (${pc.cartonPrice.toFixed(2)}).
               {pc.oldUnitCost !== null && (
                 <> True unit cost ${pc.oldUnitCost.toFixed(3)} → ${pc.newUnitCost.toFixed(3)}.</>
@@ -1143,12 +1138,12 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
   const [open, setOpen] = useState(false);
   const hasPriceDelta = ing.delta !== undefined;
   const isUp = hasPriceDelta && ing.delta! > 0;
-  const deltaCol = isUp ? '#dc2626' : '#16a34a';
+  const deltaCol = isUp ? 'var(--color-danger)' : 'var(--color-success)';
 
   return (
     <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0 cursor-pointer select-none"
       onClick={() => setOpen(o => !o)}
-      style={{ background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
+      style={{ ...glassTileStyle }}>
 
       {/* Header row */}
       <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -1162,7 +1157,7 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
             {isUp ? '+' : ''}{ing.pct!.toFixed(1)}%
           </span>
         ) : (
-          <span className="text-sm font-black shrink-0 leading-none" style={{ color: '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>
+          <span className="text-sm font-black shrink-0 leading-none" style={{ color: 'var(--color-ink-muted)', fontVariantNumeric: 'tabular-nums' }}>
             {ing.affectedProducts.length}
           </span>
         )}
@@ -1192,7 +1187,7 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
         <div className="mt-2 pt-2 space-y-1.5" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
           {ing.affectedProducts.map((p, i) => {
             const hasShift = Math.abs(p.dp) >= 0.15;
-            const col = hasShift ? (p.dp < 0 ? '#dc2626' : '#16a34a') : '#9ca3af';
+            const col = hasShift ? (p.dp < 0 ? 'var(--color-danger)' : 'var(--color-success)') : 'var(--color-ink-muted)';
             return (
               <div key={i} className="flex items-center gap-2 text-xs">
                 <span className="text-gray-500 flex-1 min-w-0 truncate" style={{ textTransform: 'uppercase' }}>
@@ -1211,12 +1206,12 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
               </div>
             );
           })}
-          <p className="text-xs text-right" style={{ color: '#9ca3af' }}>▲ collapse</p>
+          <p className="text-xs text-right" style={{ color: 'var(--color-ink-muted)' }}>▲ collapse</p>
         </div>
       )}
 
       {!open && ing.affectedProducts.length > 0 && (
-        <p className="text-xs text-right mt-0.5" style={{ color: '#9ca3af' }}>▼ {ing.affectedProducts.length} AFFECTED</p>
+        <p className="text-xs text-right mt-0.5" style={{ color: 'var(--color-ink-muted)' }}>▼ {ing.affectedProducts.length} AFFECTED</p>
       )}
     </div>
   );
@@ -1225,8 +1220,8 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
 function ChangeCard({ c }: { c: MarginChange }) {
   const [open, setOpen] = useState(false);
   const isNeg = c.dp < 0;
-  const arrowCol = isNeg ? '#dc2626' : '#16a34a';
-  const newMc = c.newPct >= 70 ? '#16a34a' : c.newPct >= 60 ? '#d97706' : '#dc2626';
+  const arrowCol = isNeg ? 'var(--color-danger)' : 'var(--color-success)';
+  const newMc = c.newPct >= 70 ? 'var(--color-success)' : c.newPct >= 60 ? 'var(--color-warning)' : 'var(--color-danger)';
   const oldBar = Math.min(100, Math.max(0, c.oldPct));
   const newBar = Math.min(100, Math.max(0, c.newPct));
   return (
@@ -1234,11 +1229,9 @@ function ChangeCard({ c }: { c: MarginChange }) {
       className="rounded-2xl px-3 py-2.5 mb-2 shrink-0 cursor-pointer select-none"
       onClick={() => setOpen(o => !o)}
       style={{
+        ...glassTileStyle,
         background: isNeg ? 'rgba(254,242,242,0.65)' : 'rgba(240,253,244,0.65)',
-        backdropFilter: 'blur(16px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
         border: `1px solid ${isNeg ? 'rgba(220,38,38,0.18)' : 'rgba(22,163,74,0.18)'}`,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
         transition: 'box-shadow 0.15s',
       }}
     >
@@ -1254,7 +1247,7 @@ function ChangeCard({ c }: { c: MarginChange }) {
       </div>
       {/* Margin transition row */}
       <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-xs shrink-0" style={{ color: '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>
+        <span className="text-xs shrink-0" style={{ color: 'var(--color-ink-muted)', fontVariantNumeric: 'tabular-nums' }}>
           {c.oldPct.toFixed(1)}%
           <span className="mx-1 text-gray-300">→</span>
           <span style={{ color: newMc, fontWeight: 700 }}>{c.newPct.toFixed(1)}%</span>
@@ -1326,18 +1319,12 @@ function supplierIcon(name: string): string {
 }
 
 function ProductItem({ p, review, weeklyQty, feePct }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number; feePct?: number }) {
-  const mc = p.margin! >= 70 ? '#16a34a' : p.margin! >= 60 ? '#d97706' : '#dc2626';
+  const mc = p.margin! >= 70 ? 'var(--color-success)' : p.margin! >= 60 ? 'var(--color-warning)' : 'var(--color-danger)';
   const bar = Math.min(100, Math.max(0, p.margin!));
   const netMargin = feePct !== undefined ? p.margin! - feePct : null;
-  const netColor  = netMargin !== null ? (netMargin >= 70 ? '#16a34a' : netMargin >= 60 ? '#d97706' : '#dc2626') : mc;
+  const netColor  = netMargin !== null ? (netMargin >= 70 ? 'var(--color-success)' : netMargin >= 60 ? 'var(--color-warning)' : 'var(--color-danger)') : mc;
   return (
-    <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0" style={{
-      background: 'rgba(255,255,255,0.45)',
-      backdropFilter: 'blur(16px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-      border: '1px solid rgba(255,255,255,0.7)',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
-    }}>
+    <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0" style={{ ...glassTileStyle }}>
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <p className="text-sm font-normal text-gray-800 leading-snug flex-1 min-w-0 truncate"
           style={{ fontFamily: '"stolzl", sans-serif', textTransform: 'uppercase' }}>
@@ -1353,7 +1340,7 @@ function ProductItem({ p, review, weeklyQty, feePct }: { p: CostingProduct; revi
               title="Net margin after Square card processing fees">
               {netMargin.toFixed(1)}%
             </span>
-            <span style={{ fontSize: '8px', color: '#9ca3af', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1 }}>net</span>
+            <span style={{ fontSize: '8px', color: 'var(--color-ink-muted)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1 }}>net</span>
           </div>
         ) : (
           <span className="text-base font-black shrink-0 leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
@@ -1375,7 +1362,7 @@ function ProductItem({ p, review, weeklyQty, feePct }: { p: CostingProduct; revi
           </span>
         )}
         {review && (
-          <span className="text-xs font-black shrink-0" style={{ color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}
+          <span className="text-xs font-black shrink-0" style={{ color: 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}
             title={`Earning ~$${Math.round(review.shortfall)}/wk less than at the 70% target margin`}>
             −${Math.round(review.shortfall)}/wk
           </span>
@@ -1440,7 +1427,7 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, o
   const red    = items.filter(p => p.margin! < 60).length;
   const yellow = items.filter(p => p.margin! >= 60 && p.margin! < 70).length;
   const green  = items.filter(p => p.margin! >= 70).length;
-  const netColor = net !== null ? (net >= 70 ? '#16a34a' : net >= 60 ? '#d97706' : '#dc2626') : '#6b7280';
+  const netColor = net !== null ? (net >= 70 ? 'var(--color-success)' : net >= 60 ? 'var(--color-warning)' : 'var(--color-danger)') : 'var(--color-ink-label)';
   return (
     <div className="flex items-center gap-2 flex-wrap pb-3 mb-1 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
       {avg !== null && (
@@ -1459,7 +1446,7 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, o
                 style={{
                   fontSize: '9px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
                   background: liveFee !== null ? 'rgba(22,163,74,0.10)' : 'rgba(0,0,0,0.06)',
-                  color: liveFee !== null ? '#15803d' : '#9ca3af',
+                  color: liveFee !== null ? '#15803d' : 'var(--color-ink-muted)',
                 }}>
                 after {feePct.toFixed(2)}% card
               </span>
@@ -1791,7 +1778,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
             <>
               <div className="flex items-center gap-2 mb-2 shrink-0">
                 {changedCount > 0 && (
-                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full shrink-0 uppercase" style={{ background: '#fbcdad', color: '#7c4a2d' }}>
+                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full shrink-0 uppercase" style={{ background: 'var(--color-brand-peach)', color: 'var(--color-brand-bark-soft)' }}>
                     {changedCount} price {changedCount === 1 ? 'change' : 'changes'}
                   </span>
                 )}
@@ -1816,14 +1803,14 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
                       {supplierGroups.map(group => {
                         const changeCount = group.items.filter(i => i.delta !== undefined).length;
                         const open = isSearching || openSuppliers.has(group.supplier);
-                        const tileStyle = { minHeight: '60px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
+                        const tileStyle = { minHeight: '60px', ...glassTileStyle };
                         return (
                           <div key={group.supplier} className={open ? 'md:col-span-2' : ''}>
                             <div onClick={() => toggleSupplier(group.supplier)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3 py-2.5" style={tileStyle}>
                               <span className="text-base">{supplierIcon(group.supplier)}</span>
                               <span className="flex-1 min-w-0 text-sm font-normal uppercase truncate text-gray-800" style={{ fontFamily: '"stolzl", sans-serif' }}>{group.supplier}</span>
                               {changeCount > 0 && (
-                                <span className="flex items-center justify-center rounded-full font-bold" style={{ minWidth: '22px', height: '22px', padding: '0 6px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{changeCount}</span>
+                                <span className="flex items-center justify-center rounded-full font-bold" style={{ minWidth: '22px', height: '22px', padding: '0 6px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{changeCount}</span>
                               )}
                               <span className="text-xs text-gray-400" style={{ flexShrink: 0 }}>{group.items.length}</span>
                               <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
@@ -1900,8 +1887,8 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
       <div className="rounded-2xl p-3 mb-4" style={{ ...TILE_STYLE }}>
         <div className="flex items-center gap-2">
           <span className="text-base" style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>🐯</span>
-          <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: '#6b7280' }}>TIGER OS</span>
-          <button onClick={() => setShowVer(v => !v)} className="ml-auto flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full tabular-nums transition-colors cursor-pointer" style={{ background: '#fbcdad', color: '#333' }} title="Tap for what's new">
+          <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: 'var(--color-ink-label)' }}>TIGER OS</span>
+          <button onClick={() => setShowVer(v => !v)} className="ml-auto flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full tabular-nums transition-colors cursor-pointer" style={{ background: 'var(--color-brand-peach)', color: '#333' }} title="Tap for what's new">
             {VERSION}
             <span style={{ fontSize: '8px', opacity: 0.7 }}>{showVer ? '▲' : '▼'}</span>
           </button>
@@ -1939,7 +1926,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
           <input value={newTaskText} onChange={e => setNewTaskText(e.target.value.toUpperCase())} autoFocus
             onKeyDown={e => { if (e.key === 'Enter') submitTask(); if (e.key === 'Escape') { setAddingTask(false); setNewTaskText(''); } }}
             placeholder="NEW TASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-          <button onClick={submitTask} disabled={!newTaskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
+          <button onClick={submitTask} disabled={!newTaskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
           <button onClick={() => { setAddingTask(false); setNewTaskText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
         </div>
       )}
@@ -1953,7 +1940,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
               <div key={task.id} className="space-y-2">
                 <SwipeToDelete onDelete={() => onDeleteTask(task.id)} onClick={() => toggleExpand(task.id)}>
                   <div className="px-4 flex items-center gap-2.5 cursor-pointer" style={{ minHeight: '62px' }}>
-                    <div onClick={e => { e.stopPropagation(); onToggleDone(task.id, !task.done); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: task.done ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: task.done ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
+                    <div onClick={e => { e.stopPropagation(); onToggleDone(task.id, !task.done); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: task.done ? 'var(--color-brand-peach)' : 'rgba(255,255,255,0.6)', border: task.done ? '1.5px solid var(--color-brand-peach)' : '1.5px solid rgba(0,0,0,0.15)' }}>
                       {task.done && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
                     <span className={`flex-1 min-w-0 text-sm font-semibold transition-colors uppercase ${task.done ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.name}</span>
@@ -1972,7 +1959,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
                         <input value={newSubText} onChange={e => setNewSubText(e.target.value.toUpperCase())} autoFocus
                           onKeyDown={e => { if (e.key === 'Enter') submitSub(task.id); if (e.key === 'Escape') { setAddingSubFor(null); setNewSubText(''); } }}
                           placeholder="NEW SUBTASK..." className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                        <button onClick={() => submitSub(task.id)} disabled={!newSubText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
+                        <button onClick={() => submitSub(task.id)} disabled={!newSubText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
                         <button onClick={() => { setAddingSubFor(null); setNewSubText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
                       </div>
                     ) : (
@@ -2531,7 +2518,7 @@ export default function Home() {
   if (!data) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-8 text-center" style={{ background: 'linear-gradient(135deg, #f0f4ff 0%, #fef9f0 50%, #f0fff4 100%)' }}>
       <p className="text-gray-500 text-sm">Couldn&apos;t load — check your connection.</p>
-      <button onClick={() => window.location.reload()} className="text-xs uppercase tracking-widest px-5 py-2 rounded-full font-semibold" style={{ background: '#fbcdad', color: '#333' }}>Reload</button>
+      <button onClick={() => window.location.reload()} className="text-xs uppercase tracking-widest px-5 py-2 rounded-full font-semibold" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Reload</button>
     </div>
   );
 
@@ -2597,7 +2584,7 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-5 pt-8 pb-4 flex items-center justify-between relative">
         <div>
           <h1 className="text-4xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif', fontWeight: 700, fontStyle: 'italic', fontVariationSettings: "'opsz' 18, 'wght' 700" }}>
-            TIGER <span style={{ color: '#fbcdad' }}>OS</span>
+            TIGER <span style={{ color: 'var(--color-brand-peach)' }}>OS</span>
           </h1>
           <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr}</p>
           <p className="text-xs text-gray-400 mt-0.5 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.weather}</p>
@@ -2673,16 +2660,16 @@ export default function Home() {
               const shoppingUnchecked = shoppingItems.filter(t => !t.checked);
               const shoppingChecked = shoppingItems.filter(t => t.checked);
               const shoppingCount = shoppingUnchecked.length;
-              const tileStyle = { minHeight: '62px', background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)' };
+              const tileStyle = { minHeight: '62px', ...glassTileStyle };
               // Shopping link row — only shown when there are unchecked items; opens the shopping widget.
               // Placed above the checked-tasks bucket so it stays visible while there's still shopping to do.
               if (!isViewingOtherDay && shoppingBadge > 0) elements.push(
                 <div key="shopping" onClick={openShoppingWidget} role="button"
                   className="rounded-2xl cursor-pointer flex items-center gap-3 px-3"
-                  style={{ ...tileStyle, minHeight: '62px', ...(openWidgets.has('shopping') ? { border: '1.5px solid #fbcdad', boxShadow: '0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 3px rgba(251,205,173,0.35)' } : {}) }}>
+                  style={{ ...tileStyle, minHeight: '62px', ...(openWidgets.has('shopping') ? { border: '1.5px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow), var(--glass-ring)' } : {}) }}>
                   <WidgetIcon name="shopping" chip={28} glyph={17} />
                   <span className="flex-1 text-sm font-semibold text-gray-800 uppercase">Shopping List</span>
-                  <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: '#fbcdad', color: '#333', fontSize: '11px', flexShrink: 0 }}>{shoppingBadge}</span>
+                  <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{shoppingBadge}</span>
                   <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('shopping') ? '▼' : '▶'}</span>
                 </div>
               );
@@ -2735,7 +2722,7 @@ export default function Home() {
                   return (
                     <SwipeToDelete key={item.id} onDelete={() => deleteShopping(item.id)}>
                     <div className="group flex items-center gap-3 px-3 py-2.5" style={{ minHeight: '54px' }}>
-                      <div onClick={() => toggleShopping(item.id, !item.checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: item.checked ? '#fbcdad' : 'rgba(255,255,255,0.6)', border: item.checked ? '1.5px solid #fbcdad' : '1.5px solid rgba(0,0,0,0.15)' }}>
+                      <div onClick={() => toggleShopping(item.id, !item.checked)} className="shrink-0 w-4 h-4 rounded flex items-center justify-center cursor-pointer" style={{ background: item.checked ? 'var(--color-brand-peach)' : 'rgba(255,255,255,0.6)', border: item.checked ? '1.5px solid var(--color-brand-peach)' : '1.5px solid rgba(0,0,0,0.15)' }}>
                         {item.checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       </div>
                       <span onClick={() => toggleShopping(item.id, !item.checked)} className={`flex-1 text-sm leading-snug font-semibold cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{name}</span>
@@ -2762,7 +2749,7 @@ export default function Home() {
                   <input type="number" min={1} value={newShoppingQty} onChange={e => setNewShoppingQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
                     onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); }}
                     aria-label="Quantity" title="Quantity" className="w-12 text-sm text-center px-1 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                  <button onClick={() => addShopping(newShoppingText, newShoppingQty)} disabled={!newShoppingText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>ADD</button>
+                  <button onClick={() => addShopping(newShoppingText, newShoppingQty)} disabled={!newShoppingText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>ADD</button>
                   <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
                 </div>
               ) : (
@@ -2789,7 +2776,7 @@ export default function Home() {
               <textarea value={braindump} onChange={e => setBraindump(e.target.value)} placeholder="Drop an idea" style={{ ...TILE_STYLE, minHeight: '62px' }} className="w-full rounded-2xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 uppercase resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" rows={1} />
               {braindump.trim() && (
                 <div className="flex gap-2 items-center">
-                  <button onClick={handleAnalyze} disabled={analyzing} className="text-xs disabled:opacity-50 px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: '#fbcdad', color: '#333' }}>{analyzing ? 'Drafting…' : '✨ Draft with AI'}</button>
+                  <button onClick={handleAnalyze} disabled={analyzing} className="text-xs disabled:opacity-50 px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>{analyzing ? 'Drafting…' : '✨ Draft with AI'}</button>
                   <button onClick={handleManualDraft} disabled={analyzing} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2 uppercase transition-colors">Skip → manual</button>
                 </div>
               )}
@@ -2817,7 +2804,7 @@ export default function Home() {
               ))}
               <button onClick={addDraftAction} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">+ Add action</button>
               <div className="flex gap-2 pt-1">
-                <button onClick={handleCreateProject} disabled={promoting || (draft.mode === 'new' ? !draft.projectName.trim() : (!draft.matchProjectId || draft.actions.every(a => !a.trim())))} className="text-xs disabled:opacity-40 px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: '#fbcdad', color: '#333' }}>{promoting ? (draft.mode === 'existing' ? 'Adding…' : 'Creating…') : (draft.mode === 'existing' ? 'Add Actions' : 'Create Project')}</button>
+                <button onClick={handleCreateProject} disabled={promoting || (draft.mode === 'new' ? !draft.projectName.trim() : (!draft.matchProjectId || draft.actions.every(a => !a.trim())))} className="text-xs disabled:opacity-40 px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>{promoting ? (draft.mode === 'existing' ? 'Adding…' : 'Creating…') : (draft.mode === 'existing' ? 'Add Actions' : 'Create Project')}</button>
                 <button onClick={cancelDraft} className="text-xs text-gray-400 hover:text-gray-600 px-3 py-2 transition-colors font-bold uppercase tracking-wider">Cancel</button>
               </div>
             </div>
@@ -2855,7 +2842,7 @@ export default function Home() {
                       {addingActionFor === project.id ? (
                         <div className="flex gap-2 mt-1">
                           <input value={newActionText} onChange={e => setNewActionText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddProjectAction(project.id, newActionText); if (e.key === 'Escape') { setAddingActionFor(null); setNewActionText(''); } }} placeholder="New action..." autoFocus className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                          <button onClick={() => handleAddProjectAction(project.id, newActionText)} disabled={!newActionText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: '#fbcdad', color: '#333' }}>Add</button>
+                          <button onClick={() => handleAddProjectAction(project.id, newActionText)} disabled={!newActionText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
                           <button onClick={() => { setAddingActionFor(null); setNewActionText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
                         </div>
                       ) : (

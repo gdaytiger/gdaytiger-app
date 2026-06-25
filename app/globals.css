@@ -1,5 +1,81 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   DESIGN TOKENS — single source of truth for the TigerOS design language.
+   Change a value here and it updates everywhere. Never hardcode a brand colour,
+   blur, or shadow in a component — reference these tokens (as a Tailwind utility
+   like `bg-brand-peach`, or inline via `var(--color-brand-peach)`).
+   See the widget-anatomy page in the Second Brain vault for the full standard.
+   ──────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Brand */
+  --color-brand-peach: #fbcdad;       /* primary accent: chips, highlights, rings */
+  --color-brand-peach-soft: #fed7aa;  /* softer peach: badge fills */
+  --color-brand-bark: #7c2d12;        /* dark brown: text on peach */
+  --color-brand-bark-soft: #7c4a2d;   /* muted brown text */
+
+  /* Status */
+  --color-danger: #dc2626;            /* price up / alerts / delete */
+  --color-danger-deep: #7f1d1d;       /* danger text on tinted bg */
+  --color-success: #16a34a;           /* price down / healthy */
+  --color-warning: #d97706;           /* attention / drift */
+
+  /* Ink (text greys) */
+  --color-ink-label: #6b7280;         /* widget titles, secondary labels */
+  --color-ink-muted: #9ca3af;         /* tertiary / placeholder */
+
+  /* Typeface */
+  --font-display: "stolzl", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Composite glass tokens — assembled by the .glass* classes below. Kept as plain
+   custom properties (not @theme) because they're multi-value recipes, not scales. */
+:root {
+  --glass-fill: rgba(255, 255, 255, 0.45);
+  --glass-blur: blur(16px) saturate(180%);
+  --glass-blur-strong: blur(24px) saturate(180%);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 2px 8px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --glass-shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --glass-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --glass-ring: 0 0 0 3px rgba(251, 205, 173, 0.35);  /* peach focus/active ring */
+  --glass-fill-peach: rgba(254, 215, 170, 0.5);
+  --glass-fill-danger: rgba(254, 202, 202, 0.55);
+}
+
+/* Glass surface classes — the canonical frosted look for every tile and panel.
+   Use `.glass` for tiles/cards, `.glass-strong` for the big widget container.
+   Add a tint modifier (`.glass-peach` / `.glass-danger`) and/or `.glass-active`
+   for the selected-ring state. */
+.glass {
+  background: var(--glass-fill);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+.glass-strong {
+  background: var(--glass-fill);
+  backdrop-filter: var(--glass-blur-strong);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow-lg);
+}
+.glass-peach { background: var(--glass-fill-peach); box-shadow: var(--glass-shadow-soft); }
+.glass-danger { background: var(--glass-fill-danger); box-shadow: var(--glass-shadow-soft); }
+.glass-active { box-shadow: var(--glass-shadow), var(--glass-ring); }
+
+/* Status pill / badge — the small uppercase chips (NEW SKU, status, counts). */
+.pill {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 9999px;
+  background: var(--color-brand-peach-soft);
+  color: var(--color-brand-bark);
+}
+
 /* App-wide default typeface: stolzl (loaded via Typekit in layout.tsx), so all
    widgets read consistently. Elements that need a different face (e.g. the
    Bodoni page title) set fontFamily explicitly and still win. */

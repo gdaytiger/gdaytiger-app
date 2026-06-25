@@ -30,7 +30,7 @@ const money = (n: number | null | undefined) =>
 
 // Traffic-light colour for a staff-cost %.
 function pctColor(p: number | null): string {
-  if (p == null) return '#9ca3af';
+  if (p == null) return 'var(--color-ink-muted)';
   if (p <= 35) return '#15803d'; // green
   if (p <= 45) return '#b45309'; // amber
   return '#b91c1c';              // red
@@ -39,7 +39,7 @@ function pctColor(p: number | null): string {
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-[10px] font-bold uppercase tracking-widest mb-2"
-      style={{ fontFamily: '"stolzl", sans-serif', color: '#9ca3af' }}>{children}</div>
+      style={{ fontFamily: '"stolzl", sans-serif', color: 'var(--color-ink-muted)' }}>{children}</div>
   );
 }
 
@@ -138,7 +138,7 @@ export default function LabourCardBody({ data }: { data: StaffCostData }) {
               <span className="text-[10px] text-gray-400 tabular-nums shrink-0" style={{ width: '34px' }}>{r.weekday}</span>
               <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.06)' }}>
                 <div className="h-full rounded-full"
-                  style={{ width: `${(r.avgHours / maxRoster) * 100}%`, background: '#fbcdad', transition: 'width 0.5s ease' }} />
+                  style={{ width: `${(r.avgHours / maxRoster) * 100}%`, background: 'var(--color-brand-peach)', transition: 'width 0.5s ease' }} />
               </div>
               <span className="text-[10px] font-semibold tabular-nums shrink-0 text-gray-500" style={{ width: '30px', textAlign: 'right' }}>
                 {r.avgHours.toFixed(1)}

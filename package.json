@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "check:design": "node scripts/check-design-tokens.mjs",
     "push:apps-script": "cd apps-script && clasp push"
   },
   "dependencies": {

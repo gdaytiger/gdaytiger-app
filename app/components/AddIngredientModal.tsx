@@ -194,7 +194,7 @@ export default function AddIngredientModal({
             <p className="text-xs text-gray-500 mt-1">
               {done.synced ? 'It now appears in Supplier Prices.' : 'It will appear after the next price sync (~30 min).'}
             </p>
-            <button onClick={onClose} className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: '#fbcdad', color: '#333' }}>Done</button>
+            <button onClick={onClose} className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Done</button>
           </div>
         ) : (
           <div className="p-5 space-y-4">
@@ -215,7 +215,7 @@ export default function AddIngredientModal({
                   onClick={runSearch}
                   disabled={query.trim().length < 2 || searching}
                   className="shrink-0 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-40 transition-colors"
-                  style={{ background: '#fbcdad', color: '#333' }}
+                  style={{ background: 'var(--color-brand-peach)', color: '#333' }}
                 >{searching ? 'Searching…' : 'Find price'}</button>
               </div>
             </div>
@@ -243,7 +243,7 @@ export default function AddIngredientModal({
                       className={`rounded-lg px-3 py-2 transition-colors ${matches.length > 1 ? 'cursor-pointer' : ''}`}
                       style={{
                         background: selectedIdx === idx ? 'rgba(251,205,173,0.35)' : 'rgba(0,0,0,0.03)',
-                        border: selectedIdx === idx ? '1px solid #fbcdad' : '1px solid rgba(0,0,0,0.08)',
+                        border: selectedIdx === idx ? '1px solid var(--color-brand-peach)' : '1px solid rgba(0,0,0,0.08)',
                       }}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -252,7 +252,7 @@ export default function AddIngredientModal({
                       </div>
                       <div className="flex items-baseline justify-between gap-2 mt-0.5">
                         <span className="text-xs text-gray-600 truncate">{titleCase(query.trim())}</span>
-                        <span className="text-sm font-bold shrink-0" style={{ color: '#7c4a2d', fontVariantNumeric: 'tabular-nums' }}>
+                        <span className="text-sm font-bold shrink-0" style={{ color: 'var(--color-brand-bark-soft)', fontVariantNumeric: 'tabular-nums' }}>
                           ${m.suggestedPrice.toFixed(2)}{m.suggestedUnit ? ` /${m.suggestedUnit}` : ''}
                         </span>
                       </div>
@@ -293,7 +293,7 @@ export default function AddIngredientModal({
                           key={t}
                           onClick={() => { setType(t); setCategory(''); }}
                           className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold capitalize transition-colors"
-                          style={{ background: type === t ? '#fbcdad' : 'rgba(0,0,0,0.05)', color: type === t ? '#333' : '#6b7280' }}
+                          style={{ background: type === t ? 'var(--color-brand-peach)' : 'rgba(0,0,0,0.05)', color: type === t ? '#333' : 'var(--color-ink-label)' }}
                         >{t}</button>
                       ))}
                     </div>
@@ -318,7 +318,7 @@ export default function AddIngredientModal({
                   onClick={submit}
                   disabled={!canSubmit}
                   className="w-full px-4 py-2.5 rounded-lg text-sm font-bold disabled:opacity-40 transition-colors"
-                  style={{ background: '#fbcdad', color: '#333' }}
+                  style={{ background: 'var(--color-brand-peach)', color: '#333' }}
                 >{submitting ? 'Adding…' : 'Add to Supplier Prices'}</button>
               </div>
             )}

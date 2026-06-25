@@ -38,7 +38,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: 'linear-gradient(135deg, #e8eeff 0%, #fff8f0 40%, #f0fdf4 100%)' }}>
       <form onSubmit={submit} className="w-full max-w-xs flex flex-col items-center gap-5">
         <h1 className="text-4xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif', fontWeight: 700, fontStyle: 'italic' }}>
-          TIGER <span style={{ color: '#fbcdad' }}>OS</span>
+          TIGER <span style={{ color: 'var(--color-brand-peach)' }}>OS</span>
         </h1>
         <input
           ref={inputRef}
@@ -55,7 +55,7 @@ export default function Login() {
           type="submit"
           disabled={submitting}
           className="w-full text-xs uppercase tracking-widest px-5 py-3 rounded-xl font-semibold disabled:opacity-40"
-          style={{ background: '#fbcdad', color: '#333' }}
+          style={{ background: 'var(--color-brand-peach)', color: '#333' }}
         >
           {submitting ? '…' : 'Enter'}
         </button>
