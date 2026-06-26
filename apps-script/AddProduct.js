@@ -29,27 +29,18 @@ const AP_NOTION_DB_ID    = '8f16358a47e54062b5fe1ce7a7480754';
 const AP_FOOD_SHEET_ID   = '1nZvWNFaQTrJAt-ilYihZjYZKBzHd6x3qIrjFhdNQqAU';
 const AP_COFFEE_SHEET_ID = '1M5VwhnaOjL29rUh3LC4JmL_4oriqIviMvUs7vd-2NTI';
 
-// Inverse maps: ingredient key → A1 cell reference in the matching sheet.
-// Mirrors BRM_FOOD_CELL_TO_KEY / BRM_COFFEE_CELL_TO_KEY from BuildRecipeMap.js
-// (kept duplicated here so AddProduct.js is self-contained for review/test).
-const AP_FOOD_KEY_TO_CELL = (function () {
-  const cellToKey = {
-    'B5':'sourdough','B6':'ciabatta','B7':'potato_bun','B8':'croissant',
-    'D5':'ham','D6':'beef_pastrami','D7':'salami','D8':'tuna','D9':'chicken',
-    'F5':'mozzarella','F6':'swiss_cheese','F7':'taleggio','F8':'american_cheese','F9':'parmesan_grated','F10':'parmesan_block',
-    'H5':'tomato','H6':'sauerkraut','H7':'pickles','H8':'mushrooms_raw','H9':'red_onion','H10':'fennel',
-    'H11':'red_chilli','H12':'jalapeno','H13':'parsley','H14':'dill','H15':'bananas','H16':'eggplant',
-    'H17':'lemon','H18':'carrot','H19':'cucumber','H20':'leni_peppers',
-    'J5':'dijon_mustard','J6':'mayo','J7':'ketchup',
-    'L5':'tuna_mix','L6':'caponata','L7':'mushroom_mix','L8':'schnittas','L9':'basil_pesto','L10':'tiger_sauce','L11':'honey_mustard_mayo',
-    'N5':'butter','N6':'olive_oil','N7':'salt','N8':'pepper','N9':'eggs',
-    'P8':'napkins','P9':'tray',
-    'R5':'plain_flour','R6':'sr_flour','R7':'caster_sugar','R8':'brown_sugar','R9':'bicarb_soda','R10':'cinnamon','R11':'vegetable_oil','R13':'breadcrumbs','R14':'honey','R15':'pinenuts',
-  };
+// Ingredient key → A1 cell reference (food sheet). DERIVED from the single source
+// of truth in IngredientCatalog.js, so AddProduct can never drift from pricing or
+// recipe attribution. Lazy + memoised because the catalog is defined in another
+// file — avoids any file-load-order issue with top-level cross-file references.
+function apFoodKeyToCell_() {
+  if (apFoodKeyToCell_._m) return apFoodKeyToCell_._m;
   const out = {};
-  for (const cell in cellToKey) out[cellToKey[cell]] = cell;
+  FOOD_INGREDIENTS.forEach(function (i) { out[i.key] = ic_colLetter_(i.col) + i.row; });
+  Object.keys(FOOD_RECIPE_ONLY).forEach(function (c) { out[FOOD_RECIPE_ONLY[c]] = c; });
+  apFoodKeyToCell_._m = out;
   return out;
-})();
+}
 
 const AP_COFFEE_KEY_TO_CELL = {
   coffee_beans:'B5', chocolate:'B6', chai:'B7', fbomb:'B8', decaf_beans:'B9', matcha:'B10',
@@ -164,7 +155,7 @@ function addProduct_(payload) {
   }
 
   // Validate every ingredient has a known cell
-  const keyToCell = type === 'food' ? AP_FOOD_KEY_TO_CELL : AP_COFFEE_KEY_TO_CELL;
+  const keyToCell = type === 'food' ? apFoodKeyToCell_() : AP_COFFEE_KEY_TO_CELL;
   for (const ing of ingredients) {
     if (!keyToCell[ing.key]) {
       return { ok: false, error: 'unknown ingredient key: ' + ing.key };
@@ -237,7 +228,7 @@ function addProduct_(payload) {
 //   row N+10+M:                            E="Profit %"         F=Profit/Retail*100
 // ─────────────────────────────────────────────────────────────────────────────
 function apWriteSection_(sheet, startRow, section, type) {
-  const keyToCell = type === 'food' ? AP_FOOD_KEY_TO_CELL : AP_COFFEE_KEY_TO_CELL;
+  const keyToCell = type === 'food' ? apFoodKeyToCell_() : AP_COFFEE_KEY_TO_CELL;
   const headerLabel = type === 'food' ? 'Price Per Mix' : 'Price Per Cup';
   const amountLabel = type === 'food' ? 'Amount Used Per Mix' : 'Amount Used Per Cup';
 

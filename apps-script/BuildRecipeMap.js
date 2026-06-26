@@ -30,40 +30,11 @@ const BRM_COFFEE_CELL_TO_KEY = {
 // Cells in MADE-IN-HOUSE rows (L col, rows 5–13) point at SUB-RECIPES that
 // are expanded recursively after the first pass.
 // ─────────────────────────────────────────────────────────────────────────────
-const BRM_FOOD_CELL_TO_KEY = {
-  // Bread
-  'B5':  'sourdough',          'B6':  'ciabatta',           'B7':  'potato_bun',
-  'B8':  'croissant',
-  // Meats
-  'D5':  'ham',                'D6':  'beef_pastrami',      'D7':  'salami',
-  'D8':  'tuna',               'D9':  'chicken',
-  // Cheese
-  'F5':  'mozzarella',         'F6':  'swiss_cheese',       'F7':  'taleggio',
-  'F8':  'american_cheese',    'F9':  'parmesan_grated',    'F10': 'parmesan_block',
-  // Vegetables
-  'H5':  'tomato',             'H6':  'sauerkraut',         'H7':  'pickles',
-  'H8':  'mushrooms_raw',      'H9':  'red_onion',          'H10': 'fennel',
-  'H11': 'red_chilli',         'H12': 'jalapeno',           'H13': 'parsley',
-  'H14': 'dill',               'H15': 'bananas',            'H16': 'eggplant',
-  'H17': 'lemon',              'H18': 'carrot',             'H19': 'cucumber',
-  'H20': 'leni_peppers',
-  // Sauces (bought-in)
-  'J5':  'dijon_mustard',      'J6':  'mayo',               'J7':  'ketchup',
-  // MADE IN HOUSE — these expand recursively
-  'L5':  'tuna_mix',           'L6':  'caponata',           'L7':  'mushroom_mix',
-  'L8':  'schnittas',          'L9':  'basil_pesto',        'L10': 'tiger_sauce',
-  'L11': 'honey_mustard_mayo', 'L12': 'pickled_onions',     'L13': 'fennel_slaw',
-  // Extras
-  'N5':  'butter',             'N6':  'olive_oil',          'N7':  'salt',
-  'N8':  'pepper',             'N9':  'eggs',
-  // Packaging
-  'P8':  'napkins',            'P9':  'tray',
-  // Pantry
-  'R5':  'plain_flour',        'R6':  'sr_flour',           'R7':  'caster_sugar',
-  'R8':  'brown_sugar',        'R9':  'bicarb_soda',        'R10': 'cinnamon',
-  'R11': 'vegetable_oil',      'R13': 'breadcrumbs',        'R14': 'honey',
-  'R15': 'pinenuts',
-};
+// Food-sheet cell → ingredient key. DERIVED from the single source of truth in
+// IngredientCatalog.js (FOOD_INGREDIENTS + FOOD_RECIPE_ONLY) via foodCellToKeyMap_().
+// Add a new ingredient there once and it resolves in BOTH pricing and recipe
+// attribution — no second table to keep in sync. (Made-in-house L-cells expand
+// recursively in the parser below.)
 
 // Made-in-house keys (these get expanded into their sub-recipe ingredients)
 const BRM_MADE_IN_HOUSE = ['tuna_mix', 'caponata', 'mushroom_mix', 'schnittas',
@@ -302,7 +273,7 @@ function brmExtractIngredientsForSection_(formulas, startRow, endRow) {
       if (!matches) continue;
       matches.forEach(function (ref) {
         const clean = ref.replace(/\$/g, '');
-        const key   = BRM_FOOD_CELL_TO_KEY[clean];
+        const key   = foodCellToKeyMap_()[clean];
         if (key) found[key] = true;
       });
     }
@@ -400,7 +371,7 @@ function brmCollectIngredientsTransitive_(formulas, startCells, maxDepth) {
     if (visited[cellRef]) return;
     visited[cellRef] = true;
 
-    const key = BRM_FOOD_CELL_TO_KEY[cellRef];
+    const key = foodCellToKeyMap_()[cellRef];
     if (key) { ingredients[key] = true; return; }
 
     const parsed = cellRef.match(/^([A-Z]+)(\d+)$/);

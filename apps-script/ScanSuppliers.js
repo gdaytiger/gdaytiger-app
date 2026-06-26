@@ -1208,6 +1208,25 @@ function collectUnmappedSkus_() {
   } catch (e) { return []; }
 }
 
+// Drop a SKU from the unmapped cache the moment it's added as a tracked
+// ingredient — so its "NEW SKU" badge clears on the next sync instead of
+// lingering out the 14-day TTL. Called by addCustomIngredient_. Matches on the
+// stored sig; falls back to a supplier+description match if no sig was passed.
+function removeUnmappedSku_(sig, supplier, description) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    let list = JSON.parse(props.getProperty('unmappedSkus') || '[]');
+    const target = sig ? String(sig).toUpperCase()
+      : (supplier && description ? (supplier + '|' + String(description).substring(0, 40)).toUpperCase() : '');
+    if (!target) return false;
+    const before = list.length;
+    list = list.filter(function(s) { return s.sig !== target; });
+    if (list.length === before) return false;
+    props.setProperty('unmappedSkus', JSON.stringify(list));
+    return true;
+  } catch (e) { return false; }
+}
+
 // Maps tracked sheet cells to ingredient keys used by SyncIngredientPrices.gs.
 // Used by the TIGEROS Supplier Prices widget to render drift badges on the
 // matching ingredient card. Cells with no obvious match are null — they still

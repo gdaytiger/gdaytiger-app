@@ -928,9 +928,11 @@ function productMatchesIngredient(productName: string, ingredientKey: string): b
   type Rule = { inc: string[]; exc?: string[] };
   const MAP: Record<string, Rule> = {
     // ── Coffee ────────────────────────────────────────────────────────────────
-    fc_milk_12l:         { inc: ['FC MILK', 'ICED LATTE', 'HOT CHOCOLATE', 'CHAI', 'MOCHA', 'FLAT WHITE', 'LATTE', 'CAPPUCCINO'], exc: ['SOY', 'OAT', 'ALMOND'] },
-    soy_milk_6l:         { inc: ['SOY'] },
-    oat_milk_2l:         { inc: ['OAT', 'ALMOND'] },
+    sungold_jersey_fc:   { inc: ['FC MILK', 'ICED LATTE', 'HOT CHOCOLATE', 'CHAI', 'MOCHA', 'FLAT WHITE', 'LATTE', 'CAPPUCCINO'], exc: ['SOY', 'OAT', 'ALMOND', 'LOWFAT', 'LOW FAT', 'SKINNY'] },
+    sungold_lowfat:      { inc: ['LOWFAT', 'LOW FAT', 'SKINNY'] },
+    happy_soy:           { inc: ['SOY'] },
+    alt_dairy_oat:       { inc: ['OAT'] },
+    alt_dairy_almond:    { inc: ['ALMOND'] },
     coffee_beans:        { inc: ['COFFEE', 'LATTE', 'MOCHA', 'ESPRESSO', 'LONG BLACK', 'FLAT WHITE', 'CAPPUCCINO'], exc: ['HOT CHOCOLATE', 'DECAF'] },
     decaf_beans:         { inc: ['DECAF'] },
     chai:                { inc: ['CHAI'] },
@@ -1004,7 +1006,6 @@ function productMatchesIngredient(productName: string, ingredientKey: string): b
     vegetable_oil:       { inc: ['BANANA BREAD'] },
     breadcrumbs:         { inc: ['CHICKEN SCHNITTA'] },
     honey:               { inc: ['CHICKEN SCHNITTA'] },
-    sungold_milk:        { inc: ['BANANA BREAD', 'CHICKEN SCHNITTA'] },
   };
   const rule = MAP[ingredientKey];
   if (!rule) return false;

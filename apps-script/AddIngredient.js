@@ -294,6 +294,10 @@ function addCustomIngredient_(payload) {
 
   reg.appendRow([key, name, unit || 'unit', supplier, type, category, cols.priceCol, row, new Date()]);
 
+  // If this was added from a "NEW SKU" prompt, clear it from the unmapped cache
+  // now so its badge drops on the next sync rather than waiting out the TTL.
+  try { removeUnmappedSku_(payload.sig, supplier, name); } catch (e) { /* non-fatal */ }
+
   // Push to Notion immediately so the app shows it without waiting for the
   // 30-minute scheduled sync. Best-effort: a sync failure shouldn't fail the add.
   var synced = false;
