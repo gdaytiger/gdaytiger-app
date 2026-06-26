@@ -9,6 +9,13 @@ const STATE_PARENT_ID = '3403c99c0e858113a941c2118b3cdef9';
 
 const VALID_CATEGORIES = ['ORDER', 'ADMIN', 'STAFF', 'MAINTENANCE', 'MERCHANDISE', 'PERSONAL', 'COSTING'];
 
+// Known supplier names always classify as ORDER (skips the AI classifier, which
+// guesses unreliably on bare brand names). Keep in sync with SUPPLIER_LINKS in
+// page.tsx — those names render the task title as a tappable order link.
+const KNOWN_ORDER_SUPPLIERS = new Set([
+  'dench', 'seven seeds', 'noisette', 'redimilk', 'candied', 'little bertha', '5ways',
+]);
+
 // 4 schedule types for the add-task recurrence picker (Today/Weekly/Fortnightly/Monthly).
 // Persistent tasks are created by pinning in the Daily To Do — see /api/pin-task.
 // Note: 'daily' ([D] to all 7 pages) was dropped 16 Jun 2026 — dayTasks.ts still parses existing [D] blocks.
@@ -281,10 +288,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No page for that day' }, { status: 400 });
   }
 
+  // Explicit category wins; then a known supplier forces ORDER; otherwise classify.
+  const presetCategory = (rawCategory as string)
+    || (KNOWN_ORDER_SUPPLIERS.has(text.trim().toLowerCase()) ? 'ORDER' : null);
+
   // Parallelize category classification and page children fetches — previously these ran
   // serially (classify → fetch → insert), adding ~500–800ms. Now they run concurrently.
   const [category, ...childrenPerPage] = await Promise.all([
-    rawCategory ? Promise.resolve(rawCategory as string) : classifyCategory(text.trim()),
+    presetCategory ? Promise.resolve(presetCategory) : classifyCategory(text.trim()),
     ...targetPages.map(pageId => getPageChildren(pageId)),
   ]);
 

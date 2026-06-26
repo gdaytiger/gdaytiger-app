@@ -121,6 +121,7 @@ const SUPPLIER_LINKS: Record<string, string> = {
   'redimilk': 'tel:0397024262',
   'candied': `mailto:hello@candiedbakery.com.au?subject=${encodeURIComponent("G'DAY TIGER Order")}&body=${encodeURIComponent("Hey Guys,\n\nCan we please get\nx Paninis\nx Marshmallow Cookies\nx Candied Pies\nx Brownie Slab\nx Maple Pecan\n\nThanks,\nJono")}`,
   'little bertha': 'https://app.ordermentum.com/retailer/be811b6f-26ab-4115-9cd7-91d26dec6e44/supplier/2bcab476-f259-4c27-985c-3155f4e62d97',
+  '5ways': 'https://www.5ways.com.au/',
 };
 
 const applyServerChecked = (todos: Todo[], date: string, state: Record<string, string[]>): Todo[] => {
