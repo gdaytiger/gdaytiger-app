@@ -126,7 +126,6 @@ const FIVEWAYS_MAP = [
   { match: ['TALEGGIO'],                                    cell: 'F7',  convert: p => p,              note: 'Taleggio /kg' },
   { match: ['ABCS', 'CHEESE YELLOW PROCESS AMERICAN'],      cell: 'F8',  convert: p => r2(p / 2.27),   note: 'Hi Melt American /kg (÷ 2.27 kg)' },
   { match: ['SGGP', 'CHEESE GRANA GRATED', 'SORESI GRANA'],cell: 'F9',  convert: p => p,              note: 'Parmesan Grated Soresi /kg' },
-  { match: ['MCLURES', 'CRINKLE PICKLE', 'PICKLE CRINKLE'],cell: 'H7',  convert: p => p,              note: 'McClures Crinkle Pickles 19L drum' },
   { match: ['MFDM', 'MUSTARD DIJON'],                       cell: 'J5',  convert: p => p,              note: 'Dijon Mustard 2.5kg jar' },
   { match: ['HRD', 'HELLMANS', 'HELLMANN', 'MAYO REAL'],   cell: 'J6',  convert: p => p,              note: 'Hellmans Real Mayo 20kg' },
   { match: ['HEINZ KETCHUP', 'HEINZ TOMATO', 'KETCHUP HEINZ'], cell: 'J7', convert: p => p,           note: 'Heinz Ketchup 4LT' },
