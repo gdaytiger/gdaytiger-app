@@ -98,6 +98,20 @@ var COFFEE_SQUARE_MAP = [
   { squareItem: 'Iced Latte (DINE IN)', modifiers: ['Almond'], variation: 'Large', exactMatch: true,
     recipes: ['TAKEAWAY ALMOND ICED LATTE (LARGE)', 'DINE IN ALMOND ICED LATTE (LARGE)'] },
 
+  // ── Iced Matcha ───────────────────────────────────────────────────────────
+  // Rings as "Iced Latte (DINE IN)" Large + a Matcha modifier (+ milk modifier).
+  // Retail = base Large iced latte + Matcha upcharge + milk upcharge, summed by
+  // the modifier-price logic below. Only the DINE IN (LARGE) recipes exist today;
+  // the TAKEAWAY names are harmlessly skipped until/if those costings are added.
+  { squareItem: 'Iced Latte (DINE IN)', modifiers: ['Matcha'], variation: 'Large', exactMatch: true,
+    recipes: ['DINE IN ICED MATCHA (LARGE)', 'TAKEAWAY ICED MATCHA (LARGE)'] },
+  { squareItem: 'Iced Latte (DINE IN)', modifiers: ['Soy', 'Matcha'], variation: 'Large', exactMatch: true,
+    recipes: ['DINE IN SOY ICED MATCHA (LARGE)', 'TAKEAWAY SOY ICED MATCHA (LARGE)'] },
+  { squareItem: 'Iced Latte (DINE IN)', modifiers: ['Oat', 'Matcha'], variation: 'Large', exactMatch: true,
+    recipes: ['DINE IN OAT ICED MATCHA (LARGE)', 'TAKEAWAY OAT ICED MATCHA (LARGE)'] },
+  { squareItem: 'Iced Latte (DINE IN)', modifiers: ['Almond', 'Matcha'], variation: 'Large', exactMatch: true,
+    recipes: ['DINE IN ALMOND ICED MATCHA (LARGE)', 'TAKEAWAY ALMOND ICED MATCHA (LARGE)'] },
+
   // ── Chai — TODO: add once modifier pricing confirmed ──────────────────────
   // { squareItem: 'TA White', modifiers: ['Chai'],
   //   recipes: ['TAKEAWAY CHAI (SMALL)', 'DINE IN CHAI (SMALL)', ...] },
