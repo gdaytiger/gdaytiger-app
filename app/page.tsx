@@ -1,6 +1,13 @@
 'use client';
 
 import { useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
+import {
+  DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors, closestCenter,
+} from '@dnd-kit/core';
+import {
+  SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import AddProductModal from './components/AddProductModal';
 import AddIngredientModal from './components/AddIngredientModal';
 import LabourCardBody, { type StaffCostData } from './components/LabourCardBody';
@@ -396,13 +403,18 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, onPin, label, context, onContextSave, isSticky }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, onPin, label, context, onContextSave, isSticky, dragHandle, dragDisabled }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
   onDelegate?: () => void;
   onSwipeRight?: () => void;
   onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+  // Reorder grip rendered at the left of the row (wired by SortableCheckItem).
+  dragHandle?: React.ReactNode;
+  // While the reorder grip is held, suppress the row's native drag-to-day so the
+  // two drag systems don't fire at once.
+  dragDisabled?: boolean;
   // Tapping the 📌 button converts this task to a [STICKY:date] persistent task
   // via /api/pin-task. Only offered when !isSticky (already-persistent tasks skip it).
   onPin?: () => void;
@@ -589,8 +601,8 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
 
   return (
     <div ref={containerRef} className="relative overflow-hidden rounded-2xl"
-      draggable={!!onDragStart && !isMobile}
-      onDragStart={!isMobile ? onDragStart : undefined}
+      draggable={!!onDragStart && !isMobile && !dragDisabled}
+      onDragStart={!isMobile && !dragDisabled ? onDragStart : undefined}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -646,6 +658,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         }}
         onClick={() => { if (!didSwipeRef.current) setExpanded(e => !e); didSwipeRef.current = false; }}
       >
+        {dragHandle}
         <div onClick={e => { e.stopPropagation(); onChange(id, !checked); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? 'var(--color-brand-peach)' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid var(--color-brand-peach)' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
           {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
@@ -682,6 +695,56 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           />
         </div>
       )}
+    </div>
+  );
+}
+
+// Wraps a CheckItem with dnd-kit sortable wiring. The whole row is the sortable
+// node, but only the grip is the drag activator — so checkbox taps, body taps, and
+// mobile swipe gestures are untouched. While the grip is held we flip dragDisabled
+// so the row's native HTML5 drag-to-day (desktop) doesn't fire at the same time.
+function SortableCheckItem(props: React.ComponentProps<typeof CheckItem>) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: props.id });
+  const [grabbing, setGrabbing] = useState(false);
+
+  useEffect(() => {
+    if (!grabbing) return;
+    const reset = () => setGrabbing(false);
+    window.addEventListener('mouseup', reset);
+    window.addEventListener('touchend', reset);
+    window.addEventListener('dragend', reset);
+    return () => { window.removeEventListener('mouseup', reset); window.removeEventListener('touchend', reset); window.removeEventListener('dragend', reset); };
+  }, [grabbing]);
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    position: 'relative',
+    zIndex: isDragging ? 20 : undefined,
+    opacity: isDragging ? 0.9 : 1,
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const l = (listeners ?? {}) as any;
+  const handle = (
+    <button
+      ref={setActivatorNodeRef}
+      {...attributes}
+      {...l}
+      onMouseDown={(e) => { e.stopPropagation(); setGrabbing(true); l.onMouseDown?.(e); }}
+      onTouchStart={(e) => { e.stopPropagation(); setGrabbing(true); l.onTouchStart?.(e); }}
+      onClick={(e) => e.stopPropagation()}
+      className="shrink-0 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 transition-colors leading-none"
+      style={{ touchAction: 'none', fontSize: '15px', marginTop: '1px', padding: '0 1px', background: 'none', border: 'none' }}
+      aria-label="Drag to reorder"
+      title="Drag to reorder"
+      tabIndex={-1}
+    >⠿</button>
+  );
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <CheckItem {...props} dragHandle={handle} dragDisabled={grabbing} />
     </div>
   );
 }
@@ -2043,6 +2106,18 @@ export default function Home() {
   // Recurring task IDs moved away from today — suppressed in UI until next refresh/session.
   const [movedRecurringIds, setMovedRecurringIds] = useState<Set<string>>(new Set());
   const [taskContext, setTaskContext] = useState<Record<string, string>>({});
+  // Manual drag-to-reorder. taskOrder maps date → ordered block-ids (unchecked
+  // tasks). orderPending guards a just-dragged date against a stale Notion read
+  // overwriting it (same read-after-write gap as checked-state). sortableIdsRef
+  // holds the ids currently rendered in the sortable list for drag-end math.
+  const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>({});
+  const orderPending = useRef<Record<string, number>>({});
+  const sortableIdsRef = useRef<string[]>([]);
+  const ORDER_PENDING_TTL = 15000;
+  const dndSensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
 
   const [addingShopping, setAddingShopping] = useState(false);
   const [newShoppingText, setNewShoppingText] = useState('');
@@ -2057,6 +2132,48 @@ export default function Home() {
       const d = await fetch('/api/task-context').then(r => r.json());
       setTaskContext(d.context || {});
     } catch {}
+  };
+
+  const fetchTaskOrder = async () => {
+    try {
+      const d = await fetch('/api/task-order').then(r => r.json());
+      const incoming: Record<string, string[]> = d.order || {};
+      setTaskOrder(prev => {
+        const merged = { ...incoming };
+        const now = Date.now();
+        for (const [date, ts] of Object.entries(orderPending.current)) {
+          // A date dragged within the TTL keeps its local order; a stale Notion
+          // read can't undo it. Expired entries fall through to the server value.
+          if (now - ts < ORDER_PENDING_TTL && prev[date]) merged[date] = prev[date];
+          else delete orderPending.current[date];
+        }
+        return merged;
+      });
+    } catch {}
+  };
+
+  // Apply manual order to a task list: ordered ids first (in saved order), then any
+  // task not yet in the order in its original position (stable sort). Checked tasks
+  // are handled separately (they sink to the bottom), so this only orders unchecked.
+  const applyTaskOrder = <T extends { id: string }>(tasks: T[], date: string): T[] => {
+    const order = taskOrder[date];
+    if (!order || !order.length) return tasks;
+    const pos = new Map(order.map((id, i) => [id, i]));
+    return [...tasks].sort((a, b) => (pos.get(a.id) ?? Infinity) - (pos.get(b.id) ?? Infinity));
+  };
+
+  const handleTaskDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const ids = sortableIdsRef.current;
+    const from = ids.indexOf(String(active.id));
+    const to = ids.indexOf(String(over.id));
+    if (from === -1 || to === -1) return;
+    const next = arrayMove(ids, from, to);
+    const date = isViewingOtherDay ? selectedDate! : todayStr;
+    orderPending.current[date] = Date.now();
+    setTaskOrder(prev => ({ ...prev, [date]: next }));
+    fetch('/api/task-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, ids: next }) }).catch(() => {});
   };
 
   const handleContextSave = async (blockId: string, text: string) => {
@@ -2189,6 +2306,7 @@ export default function Home() {
     fetch('/api/tigeros-tasks').then(r => r.json()).then(d => setTigerTasks(d.tasks || [])).catch(() => {});
     fetch('/api/staff-cost').then(r => r.json()).then(d => setStaffCost(d)).catch(() => {});
     fetchTaskContext().catch(() => {});
+    fetchTaskOrder().catch(() => {});
   };
 
   useEffect(() => {
@@ -2610,75 +2728,73 @@ export default function Home() {
           }>
           <div className="space-y-2">
             {(() => {
-              // Group tasks by category
-              const groups: { category: string; tasks: typeof displayedTasks }[] = [];
-              let currentGroup: { category: string; tasks: typeof displayedTasks } | null = null;
+              const orderDate = isViewingOtherDay ? selectedDate! : todayStr;
+              // Flat manual list: keep each task's category (from its header) for the
+              // chip, but drop the category grouping/priority sort — order is whatever
+              // the user has dragged it to. Shopping List is pulled into its own tile.
+              const SHOPPING_CAT = '🛒 SHOPPING LIST';
+              const normal: { id: string; task: typeof displayedTasks[0]; category: string }[] = [];
+              const shoppingItems: typeof displayedTasks = [];
+              let cat = '';
+              let inShopping = false;
               for (const task of displayedTasks) {
                 if (task.isHeader) {
-                  currentGroup = { category: task.text.toUpperCase(), tasks: [] };
-                  groups.push(currentGroup);
-                } else {
-                  if (!currentGroup) { currentGroup = { category: '', tasks: [] }; groups.push(currentGroup); }
-                  currentGroup.tasks.push(task);
+                  const c = task.text.toUpperCase();
+                  inShopping = c === SHOPPING_CAT;
+                  if (!inShopping) cat = c;
+                  continue;
                 }
+                if (inShopping) shoppingItems.push(task);
+                else normal.push({ id: task.id, task, category: cat });
               }
-              // Pull the Shopping List out so it renders as its own section at the bottom
-              const SHOPPING_CAT = '🛒 SHOPPING LIST';
-              const shoppingGroup = groups.find(g => g.category === SHOPPING_CAT) || null;
-              const normalGroups = groups.filter(g => g.category !== SHOPPING_CAT);
-              // Sort groups by priority, uncategorised last
-              normalGroups.sort((a, b) => {
-                const ai = CATEGORY_ORDER.indexOf(a.category);
-                const bi = CATEGORY_ORDER.indexOf(b.category);
-                return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+              // Unchecked tasks render in the saved manual order (unknown tasks fall to
+              // the end); checked tasks sink to the bottom and aren't draggable.
+              const orderedUnchecked = applyTaskOrder(normal.filter(n => !n.task.checked), orderDate);
+              const checkedItems = normal.filter(n => n.task.checked);
+              sortableIdsRef.current = orderedUnchecked.map(n => n.id);
+
+              const itemProps = (task: typeof displayedTasks[0], category: string) => ({
+                id: task.id,
+                text: withLiveReviewMargin(task.text, reviewMarginMap),
+                checked: task.checked,
+                label: category || undefined,
+                context: taskContext[task.id],
+                onContextSave: handleContextSave,
+                isSticky: task.isSticky,
+                onChange: (id: string, checked: boolean) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined, task.isSticky),
+                onDelete: (id: string) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring),
+                onSwipeRight: () => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky),
+                onDragStart: (e: React.DragEvent<HTMLDivElement>) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined, isSticky: task.isSticky })); e.dataTransfer.effectAllowed = 'move'; },
+                onPin: !isViewingOtherDay && !task.isSticky ? () => handlePinTask(task.id, task.text) : undefined,
               });
-              // Checked tasks sink to the absolute bottom of the list (across all categories).
-              // Persistent (📌) tasks — [STICKY] and "Review pricing" follow-ups — group
-              // together just above the shopping/checked sections, keeping their own
-              // category label rather than their in-list position.
-              const checkedBucket: { task: typeof displayedTasks[0]; category: string }[] = [];
-              const stickyBucket: { task: typeof displayedTasks[0]; category: string }[] = [];
-              const uncheckedGroups = normalGroups.map(g => ({
-                ...g,
-                tasks: g.tasks.filter(t => {
-                  if (t.checked) { checkedBucket.push({ task: t, category: g.category }); return false; }
-                  if (t.isSticky) { stickyBucket.push({ task: t, category: g.category }); return false; }
-                  return true;
-                }),
-              })).filter(g => g.tasks.length > 0);
-              const renderTask = (task: typeof displayedTasks[0], category: string) => (
-                <CheckItem key={task.id} id={task.id} text={withLiveReviewMargin(task.text, reviewMarginMap)} checked={task.checked} label={category || undefined} context={taskContext[task.id]} onContextSave={handleContextSave} isSticky={task.isSticky}
-                  onChange={(id, checked) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined, task.isSticky)}
-                  onDelete={(id) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring)}
-                  onSwipeRight={() => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky)}
-                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined, isSticky: task.isSticky })); e.dataTransfer.effectAllowed = 'move'; }}
-                  onPin={!isViewingOtherDay && !task.isSticky ? () => handlePinTask(task.id, task.text) : undefined} />
-              );
-              const elements = [
-                ...uncheckedGroups.flatMap(group => group.tasks.map(task => renderTask(task, group.category))),
-                ...stickyBucket.map(({ task, category }) => renderTask(task, category)),
-              ];
-              // 🛒 Shopping List — one collapsible tile with a count badge (like the week-ahead rows).
-              // Tap to expand into one tile per item; tick = bought (writes to Notion, won't return).
-              const shoppingItems = shoppingGroup ? shoppingGroup.tasks : [];
-              const shoppingUnchecked = shoppingItems.filter(t => !t.checked);
-              const shoppingChecked = shoppingItems.filter(t => t.checked);
-              const shoppingCount = shoppingUnchecked.length;
+
               const tileStyle = { minHeight: '62px', ...glassTileStyle };
-              // Shopping link row — only shown when there are unchecked items; opens the shopping widget.
-              // Placed above the checked-tasks bucket so it stays visible while there's still shopping to do.
-              if (!isViewingOtherDay && shoppingBadge > 0) elements.push(
-                <div key="shopping" onClick={openShoppingWidget} role="button"
-                  className="rounded-2xl cursor-pointer flex items-center gap-3 px-3"
-                  style={{ ...tileStyle, minHeight: '62px', ...(openWidgets.has('shopping') ? { border: '1.5px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow), var(--glass-ring)' } : {}) }}>
-                  <WidgetIcon name="shopping" chip={28} glyph={17} />
-                  <span className="flex-1 text-sm font-semibold text-gray-800 uppercase">Shopping List</span>
-                  <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{shoppingBadge}</span>
-                  <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('shopping') ? '▼' : '▶'}</span>
-                </div>
+              return (
+                <>
+                  <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
+                    <SortableContext items={sortableIdsRef.current} strategy={verticalListSortingStrategy}>
+                      {orderedUnchecked.map(({ task, category }) => (
+                        <SortableCheckItem key={task.id} {...itemProps(task, category)} />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                  {/* 🛒 Shopping List — collapsible tile with a count badge. Above the
+                      checked bucket so it stays visible while there's shopping to do. */}
+                  {!isViewingOtherDay && shoppingBadge > 0 && (
+                    <div key="shopping" onClick={openShoppingWidget} role="button"
+                      className="rounded-2xl cursor-pointer flex items-center gap-3 px-3"
+                      style={{ ...tileStyle, minHeight: '62px', ...(openWidgets.has('shopping') ? { border: '1.5px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow), var(--glass-ring)' } : {}) }}>
+                      <WidgetIcon name="shopping" chip={28} glyph={17} />
+                      <span className="flex-1 text-sm font-semibold text-gray-800 uppercase">Shopping List</span>
+                      <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{shoppingBadge}</span>
+                      <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('shopping') ? '▼' : '▶'}</span>
+                    </div>
+                  )}
+                  {checkedItems.map(({ task, category }) => (
+                    <CheckItem key={task.id} {...itemProps(task, category)} />
+                  ))}
+                </>
               );
-              elements.push(...checkedBucket.map(({ task, category }) => renderTask(task, category)));
-              return elements;
             })()}
           </div>
         </Card>
