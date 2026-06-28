@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
 import {
-  DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors, closestCenter,
+  DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
+  closestCenter, pointerWithin, useDroppable, type CollisionDetection,
 } from '@dnd-kit/core';
 import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
@@ -403,18 +404,12 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onDragStart, onPin, label, context, onContextSave, isSticky, dragHandle, dragDisabled }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, label, context, onContextSave, isSticky }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
   onDelegate?: () => void;
   onSwipeRight?: () => void;
-  onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
-  // Reorder grip rendered at the left of the row (wired by SortableCheckItem).
-  dragHandle?: React.ReactNode;
-  // While the reorder grip is held, suppress the row's native drag-to-day so the
-  // two drag systems don't fire at once.
-  dragDisabled?: boolean;
   // Tapping the 📌 button converts this task to a [STICKY:date] persistent task
   // via /api/pin-task. Only offered when !isSticky (already-persistent tasks skip it).
   onPin?: () => void;
@@ -601,8 +596,6 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
 
   return (
     <div ref={containerRef} className="relative overflow-hidden rounded-2xl"
-      draggable={!!onDragStart && !isMobile && !dragDisabled}
-      onDragStart={!isMobile && !dragDisabled ? onDragStart : undefined}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -658,7 +651,6 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         }}
         onClick={() => { if (!didSwipeRef.current) setExpanded(e => !e); didSwipeRef.current = false; }}
       >
-        {dragHandle}
         <div onClick={e => { e.stopPropagation(); onChange(id, !checked); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? 'var(--color-brand-peach)' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid var(--color-brand-peach)' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
           {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
@@ -699,54 +691,32 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   );
 }
 
-// Wraps a CheckItem with dnd-kit sortable wiring. The whole row is the sortable
-// node, but only the grip is the drag activator — so checkbox taps, body taps, and
-// mobile swipe gestures are untouched. While the grip is held we flip dragDisabled
-// so the row's native HTML5 drag-to-day (desktop) doesn't fire at the same time.
+// Wraps a CheckItem with dnd-kit sortable wiring. The whole tile is the drag
+// activator (same feel as dragging a task to another day). A plain click/tap still
+// works because MouseSensor needs 6px of movement and TouchSensor a ~200ms hold
+// before a drag starts, so checkbox taps, expand taps, and mobile swipes survive.
 function SortableCheckItem(props: React.ComponentProps<typeof CheckItem>) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: props.id });
-  const [grabbing, setGrabbing] = useState(false);
-
-  useEffect(() => {
-    if (!grabbing) return;
-    const reset = () => setGrabbing(false);
-    window.addEventListener('mouseup', reset);
-    window.addEventListener('touchend', reset);
-    window.addEventListener('dragend', reset);
-    return () => { window.removeEventListener('mouseup', reset); window.removeEventListener('touchend', reset); window.removeEventListener('dragend', reset); };
-  }, [grabbing]);
-
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     position: 'relative',
     zIndex: isDragging ? 20 : undefined,
     opacity: isDragging ? 0.9 : 1,
+    cursor: 'grab',
   };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const l = (listeners ?? {}) as any;
-  const handle = (
-    <button
-      ref={setActivatorNodeRef}
-      {...attributes}
-      {...l}
-      onMouseDown={(e) => { e.stopPropagation(); setGrabbing(true); l.onMouseDown?.(e); }}
-      onTouchStart={(e) => { e.stopPropagation(); setGrabbing(true); l.onTouchStart?.(e); }}
-      onClick={(e) => e.stopPropagation()}
-      className="shrink-0 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 transition-colors leading-none"
-      style={{ touchAction: 'none', fontSize: '15px', marginTop: '1px', padding: '0 1px', background: 'none', border: 'none' }}
-      aria-label="Drag to reorder"
-      title="Drag to reorder"
-      tabIndex={-1}
-    >⠿</button>
-  );
-
   return (
-    <div ref={setNodeRef} style={style}>
-      <CheckItem {...props} dragHandle={handle} dragDisabled={grabbing} />
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <CheckItem {...props} />
     </div>
   );
+}
+
+// Droppable wrapper for a Week Ahead day row — a dragged task dropped here moves to
+// that day. Exposes isOver so the row can highlight while a task hovers over it.
+function DroppableDay({ date, children }: { date: string; children: (isOver: boolean) => React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `day:${date}` });
+  return <div ref={setNodeRef}>{children(isOver)}</div>;
 }
 
 // Shopping quantities are encoded in the item text as a trailing "×N" (or "xN"),
@@ -2102,7 +2072,6 @@ export default function Home() {
   const [priceDrift, setPriceDrift] = useState<PriceDriftData | null>(null);
   const [marginReview, setMarginReview] = useState<MarginReviewData | null>(null);
   const [paymentFees, setPaymentFees] = useState<PaymentFeesData | null>(null);
-  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   // Recurring task IDs moved away from today — suppressed in UI until next refresh/session.
   const [movedRecurringIds, setMovedRecurringIds] = useState<Set<string>>(new Set());
   const [taskContext, setTaskContext] = useState<Record<string, string>>({});
@@ -2113,6 +2082,9 @@ export default function Home() {
   const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>({});
   const orderPending = useRef<Record<string, number>>({});
   const sortableIdsRef = useRef<string[]>([]);
+  // id → move-to-day metadata for the currently rendered daily tasks, used when a
+  // task is dropped onto a Week Ahead day row.
+  const taskMetaRef = useRef<Map<string, { text: string; isRecurring?: boolean; category: string; isSticky?: boolean }>>(new Map());
   const ORDER_PENDING_TTL = 15000;
   const dndSensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -2162,18 +2134,41 @@ export default function Home() {
     return [...tasks].sort((a, b) => (pos.get(a.id) ?? Infinity) - (pos.get(b.id) ?? Infinity));
   };
 
-  const handleTaskDragEnd = (e: DragEndEvent) => {
+  // Drop zones for day rows are registered with ids like "day:2026-06-30". When the
+  // pointer is over one, treat it as a move-to-day; otherwise fall back to reorder
+  // collision among the sortable tasks.
+  const dndCollision: CollisionDetection = (args) => {
+    const dayHit = pointerWithin(args).find(c => String(c.id).startsWith('day:'));
+    return dayHit ? [dayHit] : closestCenter(args);
+  };
+
+  const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
-    if (!over || active.id === over.id) return;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const fromDate = isViewingOtherDay ? selectedDate! : todayStr;
+
+    // Dropped on a Week Ahead day row → move the task to that day.
+    if (overId.startsWith('day:')) {
+      const targetDate = overId.slice(4);
+      if (targetDate === fromDate) return;
+      const meta = taskMetaRef.current.get(activeId);
+      if (!meta) return;
+      handleMoveToDay(activeId, meta.text, targetDate, meta.isRecurring, fromDate, meta.category || undefined, meta.isSticky);
+      return;
+    }
+
+    // Otherwise reorder within the list.
+    if (activeId === overId) return;
     const ids = sortableIdsRef.current;
-    const from = ids.indexOf(String(active.id));
-    const to = ids.indexOf(String(over.id));
+    const from = ids.indexOf(activeId);
+    const to = ids.indexOf(overId);
     if (from === -1 || to === -1) return;
     const next = arrayMove(ids, from, to);
-    const date = isViewingOtherDay ? selectedDate! : todayStr;
-    orderPending.current[date] = Date.now();
-    setTaskOrder(prev => ({ ...prev, [date]: next }));
-    fetch('/api/task-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, ids: next }) }).catch(() => {});
+    orderPending.current[fromDate] = Date.now();
+    setTaskOrder(prev => ({ ...prev, [fromDate]: next }));
+    fetch('/api/task-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: fromDate, ids: next }) }).catch(() => {});
   };
 
   const handleContextSave = async (blockId: string, text: string) => {
@@ -2716,6 +2711,9 @@ export default function Home() {
 
       <div className="max-w-5xl mx-auto px-5 pb-10 relative">
         {/* ── Stable top section — grid never reflows when widgets open below ── */}
+        {/* One DndContext spans Daily To Do + Week Ahead so a task can be dragged to
+            reorder (drop on another task) or moved (drop on a day row). */}
+        <DndContext sensors={dndSensors} collisionDetection={dndCollision} onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* DAILY TO DO */}
@@ -2747,11 +2745,15 @@ export default function Home() {
                 if (inShopping) shoppingItems.push(task);
                 else normal.push({ id: task.id, task, category: cat });
               }
-              // Unchecked tasks render in the saved manual order (unknown tasks fall to
-              // the end); checked tasks sink to the bottom and aren't draggable.
-              const orderedUnchecked = applyTaskOrder(normal.filter(n => !n.task.checked), orderDate);
+              // Draggable (unchecked, non-pinned) render in the saved manual order;
+              // unknown tasks fall to the end. Pinned (📌) tasks sit at the bottom of
+              // the list and aren't draggable; checked tasks sink below them.
+              const orderedUnchecked = applyTaskOrder(normal.filter(n => !n.task.checked && !n.task.isSticky), orderDate);
+              const stickyItems = normal.filter(n => !n.task.checked && n.task.isSticky);
               const checkedItems = normal.filter(n => n.task.checked);
               sortableIdsRef.current = orderedUnchecked.map(n => n.id);
+              // Metadata for move-to-day drops onto Week Ahead rows.
+              taskMetaRef.current = new Map(normal.map(n => [n.id, { text: n.task.text, isRecurring: n.task.isRecurring, category: n.category, isSticky: n.task.isSticky }]));
 
               const itemProps = (task: typeof displayedTasks[0], category: string) => ({
                 id: task.id,
@@ -2764,20 +2766,21 @@ export default function Home() {
                 onChange: (id: string, checked: boolean) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined, task.isSticky),
                 onDelete: (id: string) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring),
                 onSwipeRight: () => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky),
-                onDragStart: (e: React.DragEvent<HTMLDivElement>) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, text: task.text, isRecurring: task.isRecurring, fromDate: isViewingOtherDay ? selectedDate! : todayStr, category: category || undefined, isSticky: task.isSticky })); e.dataTransfer.effectAllowed = 'move'; },
                 onPin: !isViewingOtherDay && !task.isSticky ? () => handlePinTask(task.id, task.text) : undefined,
               });
 
               const tileStyle = { minHeight: '62px', ...glassTileStyle };
               return (
                 <>
-                  <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
-                    <SortableContext items={sortableIdsRef.current} strategy={verticalListSortingStrategy}>
-                      {orderedUnchecked.map(({ task, category }) => (
-                        <SortableCheckItem key={task.id} {...itemProps(task, category)} />
-                      ))}
-                    </SortableContext>
-                  </DndContext>
+                  <SortableContext items={sortableIdsRef.current} strategy={verticalListSortingStrategy}>
+                    {orderedUnchecked.map(({ task, category }) => (
+                      <SortableCheckItem key={task.id} {...itemProps(task, category)} />
+                    ))}
+                  </SortableContext>
+                  {/* Pinned (📌) tasks — parked at the bottom of the list, not draggable. */}
+                  {stickyItems.map(({ task, category }) => (
+                    <CheckItem key={task.id} {...itemProps(task, category)} />
+                  ))}
                   {/* 🛒 Shopping List — collapsible tile with a count badge. Above the
                       checked bucket so it stays visible while there's shopping to do. */}
                   {!isViewingOtherDay && shoppingBadge > 0 && (
@@ -2804,12 +2807,13 @@ export default function Home() {
           <div className="space-y-2">
             {shifts.length === 0 ? <p className="text-sm text-gray-400 italic">No shifts found</p> : (
               shifts.map(shift => (
-                <RosterRow key={shift.date} shift={shift} isToday={shift.date === todayStr} isHighlighted={selectedDate ? shift.date === selectedDate : shift.date === todayStr} taskCount={dayBadgeCount(shift.date)} onAdd={handleAddTask} onSelectDay={handleSelectDay}
-                  isDragOver={dragOverDate === shift.date}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverDate(shift.date); }}
-                  onDragLeave={() => setDragOverDate(null)}
-                  onDrop={(e) => { e.preventDefault(); setDragOverDate(null); try { const d = JSON.parse(e.dataTransfer.getData('application/json')); handleMoveToDay(d.id, d.text, shift.date, d.isRecurring, d.fromDate, d.category, d.isSticky); } catch { /* ignore */ } }}
-                />
+                <DroppableDay key={shift.date} date={shift.date}>
+                  {(isOver) => (
+                    <RosterRow shift={shift} isToday={shift.date === todayStr} isHighlighted={selectedDate ? shift.date === selectedDate : shift.date === todayStr} taskCount={dayBadgeCount(shift.date)} onAdd={handleAddTask} onSelectDay={handleSelectDay}
+                      isDragOver={isOver}
+                    />
+                  )}
+                </DroppableDay>
               ))
             )}
           </div>
@@ -2827,6 +2831,7 @@ export default function Home() {
         </div>
 
         </div>{/* end stable grid */}
+        </DndContext>
 
         {/* ── Widget panels — open one at a time in a bottom sheet over the dashboard ── */}
         <BottomSheet open={openWidgets.size > 0} onClose={closeWidgets}>
