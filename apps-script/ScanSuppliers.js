@@ -458,6 +458,14 @@ function rescanThisWeek() {
   return scanCoffeeSuppliers(backdated);
 }
 
+// Wider one-off backfill (35 days) — use to capture an item that only appears on
+// an older invoice, e.g. honey (BHS750) last seen 01/12-Jun. Same as
+// rescanThisWeek but a longer window; does NOT touch the last-scan timestamp.
+function rescanLast35Days() {
+  const backdated = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+  return scanCoffeeSuppliers(backdated);
+}
+
 // ─── COFFEE SCANNER ───────────────────────────────────────────────────────────
 
 function scanCoffeeSuppliers(cutoffOverride) {
