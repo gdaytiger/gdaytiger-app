@@ -19,7 +19,7 @@ const BRM_COFFEE_CELL_TO_KEY = {
   'B8':  'fbomb',              'B9': 'decaf_beans',        'B10': 'matcha',
   'D5':  'sungold_jersey_fc',  'D6': 'sungold_lowfat',     'D7': 'happy_soy',
   'D8':  'alt_dairy_oat',      'D9': 'alt_dairy_almond',
-  'F5':  'bundaberg_raw_sugar',
+  'F5':  'bundaberg_raw_sugar', 'F6': 'honey_squeeze',
   'H5':  'cup_small_6oz',      'H6': 'cup_large_12oz',     'H7': 'lid_hot',
   'H8':  'cup_detpak_16oz',    'H9': 'lid_sipper',         'H10': 'straw',
 };
