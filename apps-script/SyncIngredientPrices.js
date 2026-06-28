@@ -33,9 +33,6 @@ function sipCollectPrices_() {
     if (name === 'Coffee' && cost > 30 && !seen['coffee_beans']) {
       ingredients.push({ key: 'coffee_beans', name: 'Golden Gate Espresso Blend (1kg)', price: cost, unit: '1kg', supplier: 'Seven Seeds' });
       seen['coffee_beans'] = true;
-    } else if (name === 'Coffee' && cost > 5 && cost <= 30 && !seen['decaf_beans']) {
-      ingredients.push({ key: 'decaf_beans', name: 'Decaf Beans (1kg)', price: cost, unit: '1kg', supplier: 'Seven Seeds' });
-      seen['decaf_beans'] = true;
     } else if (name === 'Chai' && !seen['chai']) {
       ingredients.push({ key: 'chai', name: 'Chai (1kg)', price: cost, unit: '1kg', supplier: 'Seven Seeds' });
       seen['chai'] = true;
@@ -88,8 +85,10 @@ function sipCollectPrices_() {
   //   B10 Matsu Matcha (parseMatsuText) · F6 B-Honey Squeeze (5Ways BHS750, used in matcha)
   // Keys match CELL_TO_INGREDIENT_KEY so drift badges join correctly.
   const COFFEE_MASTER_CELLS = [
-    { key: 'matcha',        name: 'Matsu Matcha (500g)',    col: 2, row: 10, unit: '500g', supplier: 'Matsu Tea' },
-    { key: 'honey_squeeze', name: 'B-Honey Squeeze (750g)', col: 6, row: 6,  unit: '750g', supplier: '5Ways' },
+    { key: 'fbomb',         name: 'F.Bomb Filter Blend (1kg)', col: 2, row: 8,  unit: '1kg',  supplier: 'Seven Seeds' },
+    { key: 'decaf_beans',   name: 'Decaf Beans (1kg)',         col: 2, row: 9,  unit: '1kg',  supplier: 'Seven Seeds' },
+    { key: 'matcha',        name: 'Matsu Matcha (500g)',       col: 2, row: 10, unit: '500g', supplier: 'Matsu Tea' },
+    { key: 'honey_squeeze', name: 'B-Honey Squeeze (750g)',    col: 6, row: 6,  unit: '750g', supplier: '5Ways' },
   ];
   COFFEE_MASTER_CELLS.forEach(function (c) {
     const price = cc(c.col, c.row);
