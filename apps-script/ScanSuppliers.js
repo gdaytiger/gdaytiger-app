@@ -95,6 +95,7 @@ const COFFEE_CELL_META = {
   D8:  { min: 28,  max: 45,  refreshDays: 21, label: 'Alt.Dairy.Co Oat /carton' },
   D9:  { min: 28,  max: 45,  refreshDays: 21, label: 'Alt.Dairy.Co Almond /carton' },
   F5:  { min: 25,  max: 50,  refreshDays: 30, label: 'Bundaberg Raw Sugar /15KG' },
+  F6:  { min: 8,   max: 20,  refreshDays: 30, label: 'B-Honey Squeeze /750g' },
   // pack — expected units per carton. Sheet prices are stored per this pack
   //        size; the Planetware parser normalises any other pack back to it
   //        and flags the change (see trackPackChange_).
@@ -212,6 +213,11 @@ const PFD_MAP = [
 
 const FIVEWAYS_COFFEE_MAP = [
   { match: ['BRS15'], cell: 'F5', convert: p => p, note: 'Bundaberg Raw Sugar 15KG /bag' },
+  // BHS750 = B-Honey Squeeze 750g bottle, used in matcha. Invoice "Unit Price"
+  // column is per bottle ($11.47) even when ordered by the carton (6 × = $68.82),
+  // and parse5WaysLines reads that column — so write it straight through. The
+  // F6 guard (8–20) rejects any OCR mis-read of the carton total.
+  { match: ['BHS750'], cell: 'F6', convert: p => p, note: 'B-Honey Squeeze 750G /bottle' },
   // H8 Detpak 16oz: item code TBC — add once confirmed on invoice
   // { match: ['???DETPAK???'], cell: 'H8', convert: p => p, note: 'Detpak 16oz x1000' },
 ];
