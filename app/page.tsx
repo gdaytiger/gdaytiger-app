@@ -1243,7 +1243,7 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
               </div>
             );
           })}
-          <p className="text-xs text-right" style={{ color: 'var(--color-ink-muted)' }}>▲ collapse</p>
+          <p className="text-xs text-right" style={{ color: 'var(--color-ink-muted)' }}>▲ COLLAPSE</p>
         </div>
       )}
 
