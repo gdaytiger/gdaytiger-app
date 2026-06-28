@@ -82,6 +82,23 @@ function sipCollectPrices_() {
     }
   });
 
+  // ── Other coffee-sheet master cells read by position ────────────────────────
+  // The row-name loop above doesn't cover these, so they never reached the
+  // dashboard even though the scanner keeps the cells current:
+  //   B10 Matsu Matcha (parseMatsuText) · F6 B-Honey Squeeze (5Ways BHS750, used in matcha)
+  // Keys match CELL_TO_INGREDIENT_KEY so drift badges join correctly.
+  const COFFEE_MASTER_CELLS = [
+    { key: 'matcha',        name: 'Matsu Matcha (500g)',    col: 2, row: 10, unit: '500g', supplier: 'Matsu Tea' },
+    { key: 'honey_squeeze', name: 'B-Honey Squeeze (750g)', col: 6, row: 6,  unit: '750g', supplier: '5Ways' },
+  ];
+  COFFEE_MASTER_CELLS.forEach(function (c) {
+    const price = cc(c.col, c.row);
+    if (price !== null && !seen[c.key]) {
+      ingredients.push({ key: c.key, name: c.name, price: price, unit: c.unit, supplier: c.supplier });
+      seen[c.key] = true;
+    }
+  });
+
   // ── FOOD SHEET ─────────────────────────────────────────────────────────────
   // Supplier map derived from invoice scanner coverage:
   //   Dench      → B5, B6, B8

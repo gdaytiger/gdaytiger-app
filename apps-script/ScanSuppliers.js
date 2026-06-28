@@ -1258,6 +1258,7 @@ const CELL_TO_INGREDIENT_KEY = {
   D7:  'happy_soy',            // Happy Happy Soy Boy 6L
   D8:  'alt_dairy_oat',        // Alternative Dairy Oat 12LT
   D9:  'alt_dairy_almond',     // Alternative Dairy Almond 12LT
+  F6:  'honey_squeeze',        // B-Honey Squeeze 750G (5Ways BHS750, used in matcha)
   F5:  'bundaberg_raw_sugar',  // Bundaberg Raw Sugar 15KG
   H5:  'cup_small_6oz',        // Planetware 6oz Slim Cup /1000
   H6:  'cup_large_12oz',       // Planetware 12oz Slim Cup /1000
