@@ -112,6 +112,28 @@ var COFFEE_SQUARE_MAP = [
   { squareItem: 'Iced Latte (DINE IN)', modifiers: ['Almond', 'Matcha'], variation: 'Large', exactMatch: true,
     recipes: ['DINE IN ALMOND ICED MATCHA (LARGE)', 'TAKEAWAY ALMOND ICED MATCHA (LARGE)'] },
 
+  // ── Hot Matcha ────────────────────────────────────────────────────────────
+  // Rings as a white coffee (TA White small / LG White large) + Matcha modifier
+  // (+ milk). Retail = white base + Matcha + milk upcharges. Each entry writes
+  // the same menu price to both the takeaway and dine-in recipe (like all white
+  // coffees). Small = no suffix, Large = (LARGE).
+  { squareItem: 'TA White', modifiers: ['Matcha'],
+    recipes: ['TAKEAWAY MATCHA', 'DINE IN MATCHA'] },
+  { squareItem: 'LG White', modifiers: ['Matcha'],
+    recipes: ['TAKEAWAY MATCHA (LARGE)', 'DINE IN MATCHA (LARGE)'] },
+  { squareItem: 'TA White', modifiers: ['Soy', 'Matcha'],
+    recipes: ['TAKEAWAY SOY MATCHA', 'DINE IN SOY MATCHA'] },
+  { squareItem: 'LG White', modifiers: ['Soy', 'Matcha'],
+    recipes: ['TAKEAWAY SOY MATCHA (LARGE)', 'DINE IN SOY MATCHA (LARGE)'] },
+  { squareItem: 'TA White', modifiers: ['Oat', 'Matcha'],
+    recipes: ['TAKEAWAY OAT MATCHA', 'DINE IN OAT MATCHA'] },
+  { squareItem: 'LG White', modifiers: ['Oat', 'Matcha'],
+    recipes: ['TAKEAWAY OAT MATCHA (LARGE)', 'DINE IN OAT MATCHA (LARGE)'] },
+  { squareItem: 'TA White', modifiers: ['Almond', 'Matcha'],
+    recipes: ['TAKEAWAY ALMOND MATCHA', 'DINE IN ALMOND MATCHA'] },
+  { squareItem: 'LG White', modifiers: ['Almond', 'Matcha'],
+    recipes: ['TAKEAWAY ALMOND MATCHA (LARGE)', 'DINE IN ALMOND MATCHA (LARGE)'] },
+
   // ── Chai — TODO: add once modifier pricing confirmed ──────────────────────
   // { squareItem: 'TA White', modifiers: ['Chai'],
   //   recipes: ['TAKEAWAY CHAI (SMALL)', 'DINE IN CHAI (SMALL)', ...] },
