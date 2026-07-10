@@ -1355,11 +1355,24 @@ function supplierIcon(name: string): string {
   return hit ? hit.icon : '📦';
 }
 
-function ProductItem({ p, review, weeklyQty, feePct }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number; feePct?: number }) {
-  const mc = p.margin! >= 70 ? 'var(--color-success)' : p.margin! >= 60 ? 'var(--color-warning)' : 'var(--color-danger)';
-  const bar = Math.min(100, Math.max(0, p.margin!));
-  const netMargin = feePct !== undefined ? p.margin! - feePct : null;
+function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverride }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number; feePct?: number; simulate?: boolean; override?: number; onOverride?: (price: number) => void }) {
+  // Cost is fixed; recover it from the live figures (margin = (sell − cost)/sell).
+  const cost = (p.sellPrice !== null && p.margin !== null) ? p.sellPrice * (1 - p.margin / 100) : null;
+  const simPrice = override ?? p.sellPrice ?? 0;
+  const edited   = !!simulate && override !== undefined && p.sellPrice !== null && Math.abs(simPrice - p.sellPrice) > 0.001;
+  const simMargin = (simulate && cost !== null && simPrice > 0) ? (simPrice - cost) / simPrice * 100 : (p.margin ?? 0);
+  const shown    = simulate ? simMargin : (p.margin ?? 0);
+  const dMargin  = simMargin - (p.margin ?? 0);
+
+  const mc = shown >= 70 ? 'var(--color-success)' : shown >= 60 ? 'var(--color-warning)' : 'var(--color-danger)';
+  const bar = Math.min(100, Math.max(0, shown));
+  const netMargin = feePct !== undefined ? shown - feePct : null;
   const netColor  = netMargin !== null ? (netMargin >= 70 ? 'var(--color-success)' : netMargin >= 60 ? 'var(--color-warning)' : 'var(--color-danger)') : mc;
+
+  // Change in weekly takings at the simulated price (7-day Square volume, GST-inc).
+  const weeklyDelta = (edited && weeklyQty !== undefined && p.sellPrice !== null) ? (simPrice - p.sellPrice) * weeklyQty : null;
+  const bump = (d: number) => onOverride?.(Math.max(0, Math.round((simPrice + d) * 100) / 100));
+
   return (
     <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0" style={{ ...glassTileStyle }}>
       <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -1367,42 +1380,71 @@ function ProductItem({ p, review, weeklyQty, feePct }: { p: CostingProduct; revi
           style={{ fontFamily: '"stolzl", sans-serif', textTransform: 'uppercase' }}>
           {p.name.toUpperCase()}
         </p>
-        {netMargin !== null ? (
-          <div className="flex flex-col items-end shrink-0 gap-px">
-            <span className="text-xs text-gray-400 leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}
-              title="Gross margin (before card fees)">
-              {p.margin!.toFixed(1)}%
+        <div className="flex items-center gap-1.5 shrink-0">
+          {edited && (
+            <span className="text-xs font-black leading-none" style={{ color: dMargin >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}
+              title={`Margin change vs current ${(p.margin ?? 0).toFixed(1)}%`}>
+              {dMargin >= 0 ? '▲' : '▼'}{Math.abs(dMargin).toFixed(1)}
             </span>
-            <span className="text-base font-black leading-tight" style={{ color: netColor, fontVariantNumeric: 'tabular-nums' }}
-              title="Net margin after Square card processing fees">
-              {netMargin.toFixed(1)}%
+          )}
+          {netMargin !== null ? (
+            <div className="flex flex-col items-end gap-px">
+              <span className="text-xs text-gray-400 leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}
+                title="Gross margin (before card fees)">
+                {shown.toFixed(1)}%
+              </span>
+              <span className="text-base font-black leading-tight" style={{ color: netColor, fontVariantNumeric: 'tabular-nums' }}
+                title="Net margin after Square card processing fees">
+                {netMargin.toFixed(1)}%
+              </span>
+              <span style={{ fontSize: '8px', color: 'var(--color-ink-muted)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1 }}>net</span>
+            </div>
+          ) : (
+            <span className="text-base font-black leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
+              {shown.toFixed(1)}%
             </span>
-            <span style={{ fontSize: '8px', color: 'var(--color-ink-muted)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1 }}>net</span>
-          </div>
-        ) : (
-          <span className="text-base font-black shrink-0 leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
-            {p.margin!.toFixed(1)}%
-          </span>
-        )}
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-2">
-        {p.sellPrice !== null && (
-          <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>${p.sellPrice.toFixed(2)}</span>
+        {simulate && p.sellPrice !== null ? (
+          <span className="inline-flex items-center gap-1 shrink-0">
+            <button onClick={() => bump(-0.10)} className="w-6 h-6 rounded-md flex items-center justify-center text-sm leading-none"
+              style={{ background: 'rgba(0,0,0,0.07)', color: '#374151' }} aria-label="Lower price 10c">−</button>
+            <span className="text-xs font-bold" style={{ minWidth: '44px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: edited ? 'var(--color-ink)' : '#6b7280' }}>
+              ${simPrice.toFixed(2)}
+            </span>
+            <button onClick={() => bump(0.10)} className="w-6 h-6 rounded-md flex items-center justify-center text-sm leading-none"
+              style={{ background: 'rgba(0,0,0,0.07)', color: '#374151' }} aria-label="Raise price 10c">+</button>
+          </span>
+        ) : (
+          p.sellPrice !== null && (
+            <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>${p.sellPrice.toFixed(2)}</span>
+          )
         )}
         <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.07)' }}>
-          <div className="h-full rounded-full" style={{ width: `${bar}%`, background: mc, transition: 'width 0.6s ease' }} />
+          <div className="h-full rounded-full" style={{ width: `${bar}%`, background: mc, transition: 'width 0.3s ease' }} />
         </div>
-        {weeklyQty !== undefined && (
-          <span className="text-xs text-gray-400 shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}
-            title={`Sold ${weeklyQty} in the last 7 days (Square)`}>
-            {weeklyQty}/wk
+        {weeklyDelta !== null ? (
+          <span className="text-xs font-black shrink-0" style={{ color: weeklyDelta >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}
+            title="Approx change in weekly takings at this price (× 7-day Square volume, GST-inc)">
+            {weeklyDelta >= 0 ? '+' : '−'}${Math.abs(weeklyDelta).toFixed(0)}/wk
           </span>
-        )}
-        {review && (
-          <span className="text-xs font-black shrink-0" style={{ color: 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}
-            title={`Earning ~$${Math.round(review.shortfall)}/wk less than at the 70% target margin`}>
-            −${Math.round(review.shortfall)}/wk
-          </span>
+        ) : (
+          <>
+            {weeklyQty !== undefined && (
+              <span className="text-xs text-gray-400 shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}
+                title={`Sold ${weeklyQty} in the last 7 days (Square)`}>
+                {weeklyQty}/wk
+              </span>
+            )}
+            {review && !simulate && (
+              <span className="text-xs font-black shrink-0" style={{ color: 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}
+                title={`Earning ~$${Math.round(review.shortfall)}/wk less than at the 70% target margin`}>
+                −${Math.round(review.shortfall)}/wk
+              </span>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -1432,21 +1474,63 @@ function ProductSearch({ value, onChange, placeholder }: { value: string; onChan
 }
 
 function ProductColumn({ items, height = 272, fill, reviews, sales, feePct }: { items: CostingProduct[]; height?: number; fill?: boolean; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number>; feePct?: number }) {
+  // Non-destructive price simulator: nothing here writes to Square or the sheet —
+  // it just recomputes margins in the browser against hypothetical prices.
+  const [simulate, setSimulate] = useState(false);
+  const [overrides, setOverrides] = useState<Record<string, number>>({});
+  const hasOverrides = Object.keys(overrides).length > 0;
+
+  const newMarginOf = (p: CostingProduct) => {
+    const key  = p.name.toUpperCase().trim();
+    const cost = (p.sellPrice !== null && p.margin !== null) ? p.sellPrice * (1 - p.margin / 100) : null;
+    const price = overrides[key] ?? p.sellPrice ?? 0;
+    return (cost !== null && price > 0) ? (price - cost) / price * 100 : (p.margin ?? 0);
+  };
+  const curAvg = items.length ? items.reduce((s, p) => s + (p.margin ?? 0), 0) / items.length : null;
+  const simAvg = items.length ? items.reduce((s, p) => s + newMarginOf(p), 0) / items.length : null;
+
   const list = items.map(p => {
     const key = p.name.toUpperCase().trim();
-    return <ProductItem key={p.id} p={p} review={reviews?.get(key)} weeklyQty={sales?.get(key)} feePct={feePct} />;
+    return <ProductItem key={p.id} p={p} review={reviews?.get(key)} weeklyQty={sales?.get(key)} feePct={feePct}
+      simulate={simulate} override={overrides[key]} onOverride={(price) => setOverrides(o => ({ ...o, [key]: price }))} />;
   });
+
+  const controls = (
+    <div className="flex items-center gap-2 pb-1.5 flex-wrap">
+      <button onClick={() => setSimulate(s => !s)}
+        className="text-xs font-semibold px-2 py-1 rounded-lg transition-colors"
+        style={{ background: simulate ? 'rgba(217,119,6,0.14)' : 'rgba(0,0,0,0.06)', color: simulate ? '#78350f' : '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}
+        title="Preview margins at hypothetical prices — nothing is saved">
+        {simulate ? '✓ SIMULATING' : '⇅ SIMULATE'}
+      </button>
+      {simulate && curAvg !== null && simAvg !== null && (
+        <span className="text-xs text-gray-500" style={{ fontVariantNumeric: 'tabular-nums' }} title="Category average margin (current → simulated)">
+          avg <span className="font-bold text-gray-700">{curAvg.toFixed(1)}%</span>
+          {hasOverrides && (<><span className="text-gray-300"> → </span><span className="font-bold" style={{ color: simAvg >= curAvg ? 'var(--color-success)' : 'var(--color-danger)' }}>{simAvg.toFixed(1)}%</span></>)}
+        </span>
+      )}
+      {simulate && hasOverrides && (
+        <button onClick={() => setOverrides({})}
+          className="text-xs font-semibold px-2 py-1 rounded-lg ml-auto"
+          style={{ background: 'rgba(0,0,0,0.06)', color: '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}>RESET</button>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex-1 min-w-0">
       {items.length === 0 ? (
         <p className="text-xs text-gray-400 italic">No matches</p>
       ) : fill ? (
         // In the bottom sheet the sheet itself scrolls, so render the list inline.
-        <div className="pr-1" style={{ paddingTop: '6px' }}>{list}</div>
+        <div className="pr-1" style={{ paddingTop: '6px' }}>{controls}{list}</div>
       ) : (
-        <div className="relative" style={{ height: `${height}px` }}>
-          <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
-          <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>{list}</div>
+        <div>
+          {controls}
+          <div className="relative" style={{ height: `${height}px` }}>
+            <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
+            <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>{list}</div>
+          </div>
         </div>
       )}
     </div>
