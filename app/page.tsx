@@ -1411,7 +1411,7 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
           <span className="inline-flex items-center gap-1 shrink-0">
             <button onClick={() => bump(-0.10)} className="w-6 h-6 rounded-md flex items-center justify-center text-sm leading-none"
               style={{ background: 'rgba(0,0,0,0.07)', color: '#374151' }} aria-label="Lower price 10c">−</button>
-            <span className="text-xs font-bold" style={{ minWidth: '44px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: edited ? 'var(--color-ink)' : '#6b7280' }}>
+            <span className="text-xs font-bold" style={{ minWidth: '44px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: edited ? 'var(--color-ink)' : 'var(--color-ink-muted)' }}>
               ${simPrice.toFixed(2)}
             </span>
             <button onClick={() => bump(0.10)} className="w-6 h-6 rounded-md flex items-center justify-center text-sm leading-none"
