@@ -11,3 +11,9 @@ updates:
       all-dependencies:
         patterns:
           - "*"
+    ignore:
+      # TS 7 is the new Go-based compiler rewrite — broke the Next.js
+      # Turbopack build worker when Dependabot bumped it (2026-07-12 PR).
+      # Revisit once Next.js officially supports TS 7.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
