@@ -27,7 +27,9 @@ Always deploy via the included script — merges current branch into `main`, pus
 bash deploy.sh
 ```
 
-Live in ~30 seconds. To roll back: **vercel.com → your project → Deployments → Promote** any previous deployment.
+`deploy.sh` also does a clasp push of the Apps Script. Live in ~30 seconds. To roll back: **vercel.com → your project → Deployments → Promote** any previous deployment.
+
+From a **sandbox** session, use `ship.sh` instead — it clones to a temp dir and pushes via a PAT in `.env.ship`, dodging the mount git lock that blocks a direct push. (clasp / Apps Script still can't be pushed from the sandbox.)
 
 ---
 
@@ -100,6 +102,8 @@ Live margin view from Notion Costings DB. Sorted worst→best margin. Add-produc
 
 **Made-in-house components are hidden from these tiles.** Any Costings row whose **Notes** contains `made in house` or `component of` (case-insensitive) is treated as a sub-recipe (e.g. Fennel Slaw, Pickled Onions) and excluded from both columns — it's tracked in the Supplier Prices widget instead. Convention: when costing a sub-recipe as its own row, put "made in house" or "component of …" in its Notes field. Filter lives in `app/page.tsx` (`isComponent`).
 
+**Price simulator (added 10 Jul 2026).** Each column has an "⇅ SIMULATE" toggle. While active, every tile gets ±10c bump buttons that recompute gross + net margin live in the browser against the hypothetical sell price (cost is backed out from the current sell price + margin, then held fixed). Column header shows category avg margin current → simulated. The weekly-shortfall chip is replaced by a weekly-takings-delta chip (Δprice × 7-day Square qty) for any edited tile. RESET clears all overrides. Entirely client-side state (`ProductColumn` in `app/page.tsx`) — no write to Square, the costings sheet, or Notion, so it's safe to play with mid-service.
+
 #### Sales attribution — POS + online (Mr Yum), and modifier handling
 
 `MarginReview.js` joins 7 days of Square sales to costings to produce the `N/wk` and `−$/wk` figures. Counter (Square POS) **and** online (Mr Yum / me&u) orders land in the **same Square location** (`G'DAY TIGER`, `NTXJ6XDXK8MNY`) and the **same order feed**, so the script reads both together — online is *not* a separate location or data source. Sales are bucketed by item **name** (normalised), then each bucket is attributed to exactly one costing.
@@ -121,7 +125,7 @@ Three alias layers make the matching robust (all near the top of `MarginReview.j
 **Diagnostics** (run from the Apps Script editor, project `G'DAY TIGER Costings`): `printAllBuckets()` dumps every sales bucket (item · variation · modifier → qty); `printAllModifiers()` lists every modifier name seen in 7 days. Log counts `N flagged / N unmatched` from `runWeeklyMarginReview()` are **display-capped** — trust `greenCount` and `totalShortfall` as the real signals that something changed.
 
 ### 📦 Supplier Prices
-Ingredient-level price tracking, grouped into collapsible supplier tiles with search. Cards show ingredient, supplier, price/unit, affected-product count. 7-day delta shown red/green. "Add ingredient from invoice" via `/api/find-ingredient-price`. Data from `SyncIngredientPrices` → Notion JSON block.
+Ingredient-level price tracking, grouped into **collapsible supplier tiles** with search, **uppercase SKU labels**, and a reserved **scrollbar-gutter** so opening/scrolling doesn't reflow width. Cards show ingredient, supplier, price/unit, affected-product count. 7-day delta shown red/green. "Add ingredient from invoice" via `/api/find-ingredient-price` (clears the badge on add). F.Bomb, decaf, matcha (B10) and squeeze honey (F6) are surfaced via direct sheet-cell reads. Data from `SyncIngredientPrices` → Notion JSON block.
 
 ### 🚀 Tiger OS Updates
 TIGER OS backlog tracker. Tasks + subtasks from Notion Backlog DB (`657d36eb15e84269b85765e20096c6be`). Reuses Projects UI patterns for subtask toggle/add. Badge shows open-task count. Version number + What's New come from `app/lib/version.ts`, auto-generated from git log by `scripts/gen-version.mjs` (gitignored — do not hand-edit).
@@ -161,6 +165,7 @@ Daily/weekly **staff cost %** = labour cost ÷ gross sales (the winter staff-cos
 | `/api/todos` | PATCH | Toggle project/personal todo checked state |
 | `/api/checked-state` | GET/POST | Read/write daily task checked state (Notion JSON block) |
 | `/api/add-task` | POST | Add task to Notion day page; optional `context` field; Haiku category classify |
+| `/api/task-order` | GET/POST | Read/write the Daily To Do manual drag-to-reorder map (JSON in a `yaml`-tagged code block on the OS page, kept separate from the `json` checked-state block) |
 | `/api/task-context` | GET/POST | Read/write per-task context notes (keyed by block ID) |
 | `/api/delete-task` | DELETE | Delete Notion block |
 | `/api/add-shopping` | POST | Add item to Shopping List page (with `×N` qty) |
@@ -237,12 +242,13 @@ SalesDaily → Square Orders → sales by Melbourne trading day → sales_daily 
 
 | File | Purpose |
 |---|---|
+| `IngredientCatalog.js` | **Single source of truth for FOOD-sheet ingredients** (`FOOD_INGREDIENTS`: key, name, col, row, unit, supplier). Both `SyncIngredientPrices.js` and `BuildRecipeMap.js` read it — add a row here and it resolves for both pricing and attribution (no more "0 affected" from editing two tables). Includes the Milk D5–D9 fix. |
 | `SaveInvoicesToDrive.js` | Gmail watcher — saves supplier PDF attachments to Drive, labels `invoice-saved` |
-| `ScanSuppliers.js` | Reads Drive/Gmail PDFs → writes ingredient prices to Food + Coffee sheets |
+| `ScanSuppliers.js` | Reads Drive/Gmail PDFs → writes ingredient prices to Food + Coffee sheets. 5Ways scanner auto-captures B-Honey Squeeze (BHS750) → COFFEE F6. `rescanLast35Days()` backfill helper. |
 | `SyncCostingsToNotion.js` | Pushes Sell Price + Profit % + Cost (Total+Wastage) to Notion Costings DB (30 min). Cost added Jun 2026 — food + coffee. |
-| `SyncSquarePrices.js` | Pulls live Square retail prices → Coffee Costings sheet (hourly) |
-| `SyncIngredientPrices.js` | Writes ingredient prices as chunked JSON to Notion OS page (30 min) |
-| `BuildRecipeMap.js` | Parses FOOD sheet formulas → ingredient→product map → `recipe_map` Notion block (daily) |
+| `SyncSquarePrices.js` | Pulls live Square retail prices → Coffee Costings sheet (hourly). Includes hot + iced matcha retail (dine-in + takeaway). |
+| `SyncIngredientPrices.js` | Writes ingredient prices as chunked JSON to Notion OS page (30 min). Reads ingredient list from `IngredientCatalog.js`. |
+| `BuildRecipeMap.js` | Parses FOOD sheet formulas → ingredient→product map → `recipe_map` Notion block (daily). Reads ingredient list from `IngredientCatalog.js`; squeeze honey (F6) → iced matcha. |
 | `MarginReview.js` | Joins 7 days of Square item sales (POS + Mr Yum online, same feed) against Notion Costings DB, ranks underperforming recipes by weekly $ impact → `margin_review` Notion block (Mondays 6am). Attribution via `MR_RECOGNISED_MODS` + `MR_MOD_ALIASES` (modifier names) + `MR_NAME_ALIASES` (item/recipe names); each bucket → exactly one costing, channels auto-merge by resolved product. `installMarginReview()` one-off setup; `printMarginReview()` previews; `printAllBuckets()` / `printAllModifiers()` diagnose gaps. See "Sales attribution" above. |
 | `PaymentFeeTracker.js` | Reads Square Payments API → writes daily Collected/Fees/Count rows to "Payment Fees" tab in Coffee Costings sheet → computes rolling 365-day blended fee % → writes `payment_fees` JSON block to Notion OS page. Run `installPaymentFeeTracker()` once to set up triggers (backfill + daily). `printPaymentFeeSummary()` to verify. |
 | `SalesDaily.js` | Polls Square Orders daily (~12:30am), buckets sales by Melbourne trading day → `sales_daily` JSON block to Notion OS page. Mirrors PaymentFeeTracker (sheet accumulator + self-deleting backfill stepper). Paired with `/api/labour` → `/api/staff-cost` for daily staff cost %. |

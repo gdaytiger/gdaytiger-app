@@ -3,8 +3,10 @@ import { requireSession } from '@/app/lib/auth';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// Opus calls can run a few seconds on the longer-context project chat. Vercel's
+// Project chat calls can run a few seconds on longer context. Vercel's
 // default ceiling is 10s, which has been borderline — raise to 30s.
+// Switched from claude-opus-4-8 to claude-sonnet-5 (15 Jul 2026) — same
+// task profile at ~40-60% of the cost, no quality loss expected here.
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
@@ -28,7 +30,7 @@ Respond helpfully to whatever Jonathan asks about this task. If it's a research 
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-8',
+      model: 'claude-sonnet-5',
       max_tokens: 1024,
       system: systemPrompt,
       messages,

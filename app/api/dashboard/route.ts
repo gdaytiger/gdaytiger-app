@@ -60,7 +60,11 @@ async function getWeather() {
   }
 }
 
-async function getCheckedState(): Promise<Record<string, string[]>> {
+// Both getCheckedState and getPersonalTodos need every block on the OS page —
+// they used to each paginate it separately (2x the Notion calls for the same
+// page on every dashboard load). Fetched once here and shared by both.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getOSPageBlocks(): Promise<any[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let allBlocks: any[] = [];
   let cursor: string | undefined;
@@ -70,6 +74,11 @@ async function getCheckedState(): Promise<Record<string, string[]>> {
     allBlocks = allBlocks.concat(data.results || []);
     cursor = data.has_more ? data.next_cursor : undefined;
   } while (cursor);
+  return allBlocks;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getCheckedState(allBlocks: any[]): Record<string, string[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const codeBlock = allBlocks.find((b: any) => b.type === 'code' && b.code?.language === 'json');
   if (codeBlock) {
@@ -192,17 +201,8 @@ async function getProjects() {
   return projects;
 }
 
-async function getPersonalTodos() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let allBlocks: any[] = [];
-  let cursor: string | undefined;
-  do {
-    const url = `/blocks/${NOTION_PAGE_ID}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ''}`;
-    const data = await notionFetch(url);
-    allBlocks = allBlocks.concat(data.results || []);
-    cursor = data.has_more ? data.next_cursor : undefined;
-  } while (cursor);
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getPersonalTodos(allBlocks: any[]) {
   const todos = [];
   let inPersonal = false;
   for (const b of allBlocks) {
@@ -222,15 +222,18 @@ export async function GET() {
   const dayOfWeek = today.getDay();
   const todayStr = formatYMD(today);
 
-  const [weather, dailyTasks, projects, personalTodos, checkedState, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates }] = await Promise.all([
+  const [weather, dailyTasks, projects, osPageBlocks, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates }] = await Promise.all([
     getWeather(),
     getDailyTasks(dayOfWeek, today),
     getProjects(),
-    getPersonalTodos(),
-    getCheckedState(),
+    getOSPageBlocks(),
     getShoppingTasks(),
     fetchCarryAndStickyCandidates(today),
   ]);
+
+  // Derived in memory from the single OS-page fetch above — no extra Notion calls.
+  const personalTodos = getPersonalTodos(osPageBlocks);
+  const checkedState = getCheckedState(osPageBlocks);
 
   // Inject any [CARRY] tasks from past days that haven't been checked off yet.
   // Carry if the task ID hasn't been checked on ANY date in the retention window

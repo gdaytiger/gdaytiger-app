@@ -52,7 +52,7 @@ For "new", matchProjectId is "". For "existing", projectName must be the exact e
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-8',
+      model: 'claude-sonnet-5',
       max_tokens: 512,
       system: systemPrompt,
       messages: [{ role: 'user', content: ideaText.trim() }],
