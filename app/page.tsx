@@ -132,6 +132,8 @@ const SUPPLIER_LINKS: Record<string, string> = {
   '5ways': 'https://www.5ways.com.au/',
   'sciclunas': 'https://app.fresho.com/marketplace/products?company_id=82cf0122-77fc-43e9-aca1-68e2e87638e8&mode=buy&supplier_id=329089f3-dc98-4fb8-98c6-b21004264717',
   "scicluna's": 'https://app.fresho.com/marketplace/products?company_id=82cf0122-77fc-43e9-aca1-68e2e87638e8&mode=buy&supplier_id=329089f3-dc98-4fb8-98c6-b21004264717',
+  'mörk': 'https://app.ordermentum.com/retailer/be811b6f-26ab-4115-9cd7-91d26dec6e44/supplier/80cb587e-5134-486b-b18a-d94d4957ffc0',
+  'mork': 'https://app.ordermentum.com/retailer/be811b6f-26ab-4115-9cd7-91d26dec6e44/supplier/80cb587e-5134-486b-b18a-d94d4957ffc0',
 };
 
 const applyServerChecked = (todos: Todo[], date: string, state: Record<string, string[]>): Todo[] => {

@@ -14,7 +14,7 @@ const VALID_CATEGORIES = ['ORDER', 'ADMIN', 'STAFF', 'MAINTENANCE', 'MERCHANDISE
 // page.tsx — those names render the task title as a tappable order link.
 const KNOWN_ORDER_SUPPLIERS = new Set([
   'dench', 'seven seeds', 'noisette', 'redimilk', 'candied', 'little bertha', '5ways',
-  'sciclunas', "scicluna's",
+  'sciclunas', "scicluna's", 'mörk', 'mork',
 ]);
 
 // 4 schedule types for the add-task recurrence picker (Today/Weekly/Fortnightly/Monthly).
