@@ -783,9 +783,20 @@ function parse5WaysLines(text) {
     if (priceRe.test(lines[i])) prLines.push(parseFloat(lines[i])); else break;
   }
 
+  // Product-name column sits between the type codes and the item codes (interleaved
+  // with quantity + pack-size lines and the odd note/levy). Names start with a
+  // letter and aren't a size/qty (those start with a digit or a unit word) or junk.
+  // If the extracted name count lines up with the codes, pair positionally; if not,
+  // fall back to codes so a misparse can never attach a WRONG name.
+  const SIZE_RE = /^\d|^(?:KG|LT|ML|GM)\b/i;
+  const JUNK_RE = /request|fuel levy|alternate|delivery|item code|unit price|ex-gst|amount|line total|^page\b/i;
+  const names = lines.slice(tcStart + n, icStart)
+    .filter(function (l) { return l && !SIZE_RE.test(l) && !JUNK_RE.test(l) && !SKIP[l.toUpperCase()]; });
+  const useNames = names.length === icLines.length;
+
   for (let i = 0; i < icLines.length; i++) {
     const price = prLines[i] || 0; if (price <= 0) continue;
-    items.push({ itemCode: icLines[i], description: icLines[i], unitPrice: price });
+    items.push({ itemCode: icLines[i], description: useNames ? names[i] : icLines[i], unitPrice: price });
   }
   return items;
 }
@@ -1267,6 +1278,14 @@ function recordUnmappedItems_(supplier, items, matched, log, ignore) {
     log.push('  NEW SKU (' + supplier + '): ' + desc + ' $' + item.unitPrice);
     recordUnmappedSku_(supplier, desc, item.unitPrice);
   });
+}
+
+// One-shot: wipe all stored unmapped SKUs. Run after a parser change (e.g. the
+// 5Ways code→name enrichment) so stale entries don't linger out their TTL next to
+// the new ones. Next scan + syncDriftToNotion() repopulates cleanly.
+function clearUnmappedSkus() {
+  PropertiesService.getScriptProperties().deleteProperty('unmappedSkus');
+  Logger.log('Cleared all stored unmapped SKUs.');
 }
 
 function collectUnmappedSkus_() {
