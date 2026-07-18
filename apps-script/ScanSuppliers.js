@@ -317,6 +317,10 @@ function scanFoodSuppliers(cutoffOverride) {
           }
         });
       });
+      recordUnmappedItems_('5Ways', items, function (it) {
+        return FIVEWAYS_MAP.some(function (m) { return matchesAny(it.itemCode, m.match); })
+            || FIVEWAYS_COFFEE_MAP.some(function (m) { return matchesAny(it.itemCode, m.match); });
+      }, log);
     });
   } catch(e) { log.push('ERROR (5Ways): ' + e.message); }
 
@@ -353,8 +357,10 @@ function scanFoodSuppliers(cutoffOverride) {
       items.forEach(item => {
         const map = UNCLES_MAP.find(m => matchesAny(item.description, m.match));
         if (map) { if (updateIfChanged(sheet, map.cell, map.convert(item.unitPrice), map.note, log)) updates++; }
-        else { log.push(`  NO MAP: ${item.description} $${item.unitPrice}`); }
       });
+      recordUnmappedItems_("Uncle's", items, function (it) {
+        return UNCLES_MAP.some(function (m) { return matchesAny(it.description, m.match); });
+      }, log);
     });
   } catch(e) { log.push('ERROR (Uncles): ' + e.message); }
 
@@ -393,6 +399,11 @@ function scanFoodSuppliers(cutoffOverride) {
           }
         });
       });
+      recordUnmappedItems_('Dench', items, function (it) {
+        return DENCH_MAP.some(function (m) {
+          return matchesAny((it.itemCode || '').toUpperCase(), m.match) || matchesAny(it.description, m.match);
+        });
+      }, log);
     });
   } catch(e) { log.push('ERROR (Dench): ' + e.message); }
 
@@ -629,6 +640,9 @@ function scanPfdFromGmail_(cutoff, log) {
         }
       });
     });
+    recordUnmappedItems_('PFD Foods', items, function (it) {
+      return PFD_MAP.some(function (m) { return matchesAny(it.description, m.match); });
+    }, log);
   }
 
   if (Object.keys(needed).length > 0)
@@ -1189,8 +1203,9 @@ function clearPackChange(cell) {
 // lines (deduped, capped) so the dashboard can surface "new SKU on an invoice
 // that isn't wired to any ingredient cell".
 
-const UNMAPPED_SKU_TTL_DAYS = 14;
-const UNMAPPED_SKU_CAP      = 20;
+const UNMAPPED_SKU_TTL_DAYS      = 14;
+const UNMAPPED_SKU_CAP           = 60;  // global ceiling across all suppliers
+const UNMAPPED_SKU_PER_SUPPLIER  = 10;  // fairness cap: one supplier can't evict others
 
 function recordUnmappedSku_(supplier, description, price) {
   if (!description || description.length < 4) return;
@@ -1209,8 +1224,35 @@ function recordUnmappedSku_(supplier, description, price) {
                   price: price, date: new Date().toISOString() });
     }
     list.sort(function(a, b) { return b.date.localeCompare(a.date); });
+
+    // Per-supplier fairness — keep only the newest N of each supplier so a single
+    // high-volume invoice can't flood the cap and evict other suppliers' new SKUs.
+    const perCount = {};
+    list = list.filter(function(s) {
+      perCount[s.supplier] = (perCount[s.supplier] || 0) + 1;
+      return perCount[s.supplier] <= UNMAPPED_SKU_PER_SUPPLIER;
+    });
     props.setProperty('unmappedSkus', JSON.stringify(list.slice(0, UNMAPPED_SKU_CAP)));
   } catch (e) { /* never let bookkeeping break a scan */ }
+}
+
+// Shared "new SKU" detector for the line-item parsers. ADDITIVE — call it AFTER
+// the existing price-capture loop; it never touches capture. For each parsed
+// invoice line, `matched(item)` returns true when the line corresponds to a
+// tracked cell (checked against the supplier's map directly, so already-captured
+// items don't falsely flag). Anything unmatched (and not in `ignore`) is recorded
+// as an unmapped SKU. Only wire this into suppliers whose invoice lines are mostly
+// trackable ingredients — NOT supermarket receipts (Woolies) where most lines are
+// untracked, and NOT the fixed-product coffee parsers with messy OCR.
+function recordUnmappedItems_(supplier, items, matched, log, ignore) {
+  (items || []).forEach(function (item) {
+    const desc = String(item.description || item.itemCode || '').trim();
+    if (desc.length < 4) return;
+    if (matched(item)) return;
+    if (ignore && matchesAny(desc, ignore)) { log.push('  IGNORED (' + supplier + '): ' + desc); return; }
+    log.push('  NEW SKU (' + supplier + '): ' + desc + ' $' + item.unitPrice);
+    recordUnmappedSku_(supplier, desc, item.unitPrice);
+  });
 }
 
 function collectUnmappedSkus_() {
