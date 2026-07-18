@@ -733,6 +733,20 @@ function printAbicorInvoiceText() {
   Logger.log('--- END ---');
 }
 
+// Diagnostic: dump the newest 5Ways invoice's raw Apps Script OCR so we can see
+// where the product-description column sits and enrich parse5WaysLines to return
+// names, not just item codes. Run from the editor, then paste the log.
+function print5WaysInvoiceText() {
+  const cutoff = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+  const files  = getSortedPdfs(FOLDER_5WAYS, 'TAX INVOICE', cutoff);  // oldest→newest
+  if (!files.length) { Logger.log('No 5Ways invoices in last 35 days'); return; }
+  const f = files[files.length - 1];  // newest
+  Logger.log('File: ' + f.getName());
+  Logger.log('--- OCR TEXT ---');
+  Logger.log(extractPdfText(f.getId()) || '(conversion failed)');
+  Logger.log('--- END ---');
+}
+
 // ─── PARSERS: COMPLEX SUPPLIERS ───────────────────────────────────────────────
 
 // 5Ways — column-based OCR layout
