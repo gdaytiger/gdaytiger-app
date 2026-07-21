@@ -95,6 +95,8 @@ interface CostingProduct {
   cost: number | null;
   sellPrice: number | null;
   profitPct: number | null;
+  prevMargin: number | null;
+  marginChangedAt: string | null;
   margin: number | null;
   marginDollar: number | null;
   lastReviewedStr: string | null;
@@ -1375,6 +1377,22 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
   const weeklyDelta = (edited && weeklyQty !== undefined && p.sellPrice !== null) ? (simPrice - p.sellPrice) * weeklyQty : null;
   const bump = (d: number) => onOverride?.(Math.max(0, Math.round((simPrice + d) * 100) / 100));
 
+  // "was X%" — prior gross GP before the last supplier cost/price change moved it.
+  // Only on the real (non-simulated) view; hidden once GP is back to unchanged.
+  const curGross    = p.margin ?? 0;
+  const showPrevGp  = !simulate && p.prevMargin != null && Math.abs(p.prevMargin - curGross) >= 0.05;
+  const gpFell      = p.prevMargin != null && curGross < p.prevMargin;
+  const prevGpTitle = p.prevMargin != null
+    ? `Gross margin was ${p.prevMargin.toFixed(1)}% before the last cost/price change`
+      + (p.marginChangedAt ? ` (${new Date(p.marginChangedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })})` : '')
+    : '';
+  const prevGpTag = showPrevGp ? (
+    <span className="text-[10px] leading-none whitespace-nowrap" title={prevGpTitle}
+      style={{ color: gpFell ? 'var(--color-danger)' : 'var(--color-success)', fontVariantNumeric: 'tabular-nums' }}>
+      {gpFell ? '▾' : '▴'} was {p.prevMargin!.toFixed(1)}%
+    </span>
+  ) : null;
+
   return (
     <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0" style={{ ...glassTileStyle }}>
       <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -1391,8 +1409,9 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
           )}
           {netMargin !== null ? (
             <div className="flex flex-col items-end gap-px">
-              <span className="text-xs text-gray-400 leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}
+              <span className="flex items-center gap-1 text-xs text-gray-400 leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}
                 title="Gross margin (before card fees)">
+                {prevGpTag}
                 {shown.toFixed(1)}%
               </span>
               <span className="text-base font-black leading-tight" style={{ color: netColor, fontVariantNumeric: 'tabular-nums' }}
@@ -1402,9 +1421,12 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
               <span style={{ fontSize: '8px', color: 'var(--color-ink-muted)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1 }}>net</span>
             </div>
           ) : (
-            <span className="text-base font-black leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
-              {shown.toFixed(1)}%
-            </span>
+            <div className="flex items-center gap-1">
+              {prevGpTag}
+              <span className="text-base font-black leading-none" style={{ color: mc, fontVariantNumeric: 'tabular-nums' }}>
+                {shown.toFixed(1)}%
+              </span>
+            </div>
           )}
         </div>
       </div>

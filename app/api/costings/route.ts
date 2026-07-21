@@ -31,6 +31,11 @@ export async function GET() {
     const sellPrice = p.properties['Sell Price']?.number ?? null;
     // Profit % is synced directly by GAS — use it as primary source
     const profitPct = p.properties['Profit %']?.number ?? null;
+    // Prior gross GP% + when it last moved (written by SyncCostingsToNotion.js only
+    // when a supplier cost/price change shifts the margin). Powers the "was X%"
+    // tag on the tile; persists until GP changes again.
+    const prevMargin = p.properties['Prev Profit %']?.number ?? null;
+    const marginChangedAt = p.properties['Profit Changed']?.date?.start ?? null;
     const lastReviewedStr = p.properties['Last Reviewed']?.date?.start ?? null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const notes = (p.properties.Notes?.rich_text || []).map((r: any) => r.plain_text).join('');
@@ -45,7 +50,7 @@ export async function GET() {
       daysSinceReview = Math.floor((today.getTime() - lastReviewed.getTime()) / (1000 * 60 * 60 * 24));
       needsReview = daysSinceReview > REVIEW_DAYS;
     }
-    return { id: p.id, name, category, cost, sellPrice, profitPct, margin, marginDollar, lastReviewedStr, daysSinceReview, needsReview, notes };
+    return { id: p.id, name, category, cost, sellPrice, profitPct, prevMargin, marginChangedAt, margin, marginDollar, lastReviewedStr, daysSinceReview, needsReview, notes };
   });
   return NextResponse.json({ products });
 }
