@@ -13,11 +13,18 @@ type Match = {
 };
 
 type SearchResponse = { ok: boolean; error?: string; matches?: Match[]; count?: number; note?: string };
-type AddResponse = { ok: boolean; error?: string; name?: string; supplier?: string; synced?: boolean };
+type AddResponse = { ok: boolean; error?: string; name?: string; supplier?: string; synced?: boolean; scannerWired?: boolean };
 
 // Title-case a raw query for the default ingredient name.
 function titleCase(s: string) {
   return s.trim().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// 5Ways' invoice OCR only exposes a reliable item CODE (e.g. "KFF"), not the
+// product name, so it needs a different prompt/default to every other supplier
+// (which match on description text and can default straight from the search).
+function is5Ways(supplierName: string) {
+  return /5\s*ways/i.test(supplierName);
 }
 
 // Keep only the most recent invoice per supplier. Matches arrive newest-first
@@ -67,6 +74,7 @@ export default function AddIngredientModal({
   const [type, setType] = useState<'food' | 'coffee'>('food');
   const [category, setCategory] = useState('');
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [matchKeyword, setMatchKeyword] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +117,8 @@ export default function AddIngredientModal({
           setSupplier(m0.supplier);
           setPrice(String(m0.suggestedPrice));
           if (m0.suggestedUnit) setUnit(m0.suggestedUnit);
+          // 5Ways matches on item code, not name — leave blank so it's a deliberate entry.
+          setMatchKeyword(is5Ways(m0.supplier) ? '' : titleCase(q));
         }
       }
     } catch (e) {
@@ -134,6 +144,7 @@ export default function AddIngredientModal({
     setPrice(String(chosenPrice ?? m.suggestedPrice));
     if (m.suggestedUnit) setUnit(m.suggestedUnit);
     if (!name) setName(titleCase(query));
+    setMatchKeyword(is5Ways(m.supplier) ? '' : titleCase(query.trim()));
   };
 
   const canSubmit = name.trim().length >= 2 && Number(price) > 0 && !!category && !submitting;
@@ -151,6 +162,7 @@ export default function AddIngredientModal({
           type,
           category,
           sig: prefill?.sig ?? '',
+          matchKeyword: matchKeyword.trim(),
         }),
       });
       const data: AddResponse = await res.json();
@@ -193,6 +205,9 @@ export default function AddIngredientModal({
             <p className="text-sm font-semibold text-gray-800">Added &ldquo;{done.name}&rdquo;{done.supplier ? ` (${done.supplier})` : ''}.</p>
             <p className="text-xs text-gray-500 mt-1">
               {done.synced ? 'It now appears in Supplier Prices.' : 'It will appear after the next price sync (~30 min).'}
+            </p>
+            <p className="text-[10px] text-gray-400 mt-1">
+              {done.scannerWired ? 'Wired into the invoice scanner — future invoices will auto-update this price.' : 'Not wired to the scanner — this price won’t auto-update from future invoices.'}
             </p>
             <button onClick={onClose} className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Done</button>
           </div>
@@ -284,6 +299,25 @@ export default function AddIngredientModal({
                     <input value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="e.g. 5Ways" className={`${inputCls} mt-1`} style={inputStyle} />
                   </div>
                 </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                    Scanner match {is5Ways(supplier) ? '(5Ways item code)' : '(optional)'}
+                  </label>
+                  <input
+                    value={matchKeyword}
+                    onChange={e => setMatchKeyword(e.target.value)}
+                    placeholder={is5Ways(supplier) ? 'e.g. KFF — check the invoice' : 'e.g. bacon'}
+                    className={`${inputCls} mt-1`}
+                    style={inputStyle}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1 leading-snug">
+                    {is5Ways(supplier)
+                      ? '5Ways matches invoices by item code, not product name — find it printed on the invoice (e.g. "KFF"). Leave blank to skip auto-updates.'
+                      : 'Lets future invoices from this supplier auto-update this price. Leave blank to skip — only works for suppliers we already scan (5Ways, Sciclunas, Uncle’s, Woolworths, Dench, PFD Foods, Trio Supplies).'}
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Costings sheet</label>

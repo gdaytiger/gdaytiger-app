@@ -298,12 +298,46 @@ function addCustomIngredient_(payload) {
   // now so its badge drops on the next sync rather than waiting out the TTL.
   try { removeUnmappedSku_(payload.sig, supplier, name); } catch (e) { /* non-fatal */ }
 
+  // Wire this ingredient into the invoice scanner going forward, if the widget
+  // supplied a match keyword/item code. Optional — no keyword, no row written,
+  // and the price just stays a manual top-up like before. See ScanSuppliers.js
+  // "DYNAMIC SCANNER MAP" for how this gets picked up (no code deploy needed).
+  var scannerWired = false;
+  var matchKeyword = (payload.matchKeyword || '').toString().trim();
+  if (matchKeyword) {
+    try {
+      var cellRef = ic_colLetter_(cols.priceCol) + row;
+      appendScannerMapRow_(type, supplier, matchKeyword, cellRef, name);
+      scannerWired = true;
+    } catch (e) { Logger.log('appendScannerMapRow_ failed: ' + e.message); }
+  }
+
   // Push to Notion immediately so the app shows it without waiting for the
   // 30-minute scheduled sync. Best-effort: a sync failure shouldn't fail the add.
   var synced = false;
   try { syncIngredientPrices(); synced = true; } catch (e) { synced = false; }
 
-  return { ok: true, key: key, name: name, price: price, unit: unit || 'unit', supplier: supplier, type: type, category: category, synced: synced };
+  return { ok: true, key: key, name: name, price: price, unit: unit || 'unit', supplier: supplier, type: type, category: category, synced: synced, scannerWired: scannerWired };
+}
+
+// ── SCANNER MAP WRITER ───────────────────────────────────────────────────────
+// Appends a row to the "ScannerMap" tab (FOOD sheet) that ScanSuppliers.js reads
+// and merges into its static match rules at scan time. Creates the tab on first use.
+function igGetScannerMapSheet_() {
+  var ss = SpreadsheetApp.openById(SS_FOOD);
+  var sheet = ss.getSheetByName(SCANNER_MAP_TAB);
+  if (!sheet) {
+    sheet = ss.insertSheet(SCANNER_MAP_TAB);
+    sheet.appendRow(['Type', 'Supplier', 'Match', 'Cell', 'Note', 'Added']);
+  }
+  return sheet;
+}
+
+function appendScannerMapRow_(type, supplier, matchKeyword, cellRef, note) {
+  var sheet = igGetScannerMapSheet_();
+  sheet.appendRow([type, supplier, matchKeyword, cellRef, note, new Date()]);
+  // Any cached read this run is now stale — force the next scan to re-read.
+  try { loadScannerMapRows_._rows = null; } catch (e) { /* fn may not be loaded in this exec context */ }
 }
 
 // Reader used by SyncIngredientPrices.sipCollectPrices_ to merge custom items.

@@ -224,6 +224,51 @@ const FIVEWAYS_COFFEE_MAP = [
   // { match: ['???DETPAK???'], cell: 'H8', convert: p => p, note: 'Detpak 16oz x1000' },
 ];
 
+// ─── DYNAMIC SCANNER MAP (custom ingredients added via the Supplier Prices "+" widget) ─
+// The widget (AddIngredient.js → addCustomIngredient_) can register a new match rule
+// at runtime by appending a row to the "ScannerMap" tab in the FOOD sheet — no code
+// deploy needed for it to start auto-updating. Static *_MAP arrays above are never
+// mutated; these rows are merged in ON TOP of them, per-supplier, at scan time.
+// Tab columns: Type (food/coffee) | Supplier | Match | Cell | Note | Added
+//
+// LIMITATION: only works for suppliers this scanner already ingests (5Ways, Sciclunas,
+// Uncle's, Woolworths, Dench, PFD Foods, Trio Supplies) — the Supplier field typed into
+// the widget must match one of those names. It also only covers suppliers whose parser
+// matches on a simple description or item-code keyword; the bespoke Coffee parsers
+// (Seven Seeds, Mörk, Matsu, Redi Milk, Planetware) aren't wired to this yet.
+const SCANNER_MAP_TAB = 'ScannerMap';
+
+function loadScannerMapRows_() {
+  if (loadScannerMapRows_._rows) return loadScannerMapRows_._rows;
+  const rows = [];
+  try {
+    const sheet = SpreadsheetApp.openById(SS_FOOD).getSheetByName(SCANNER_MAP_TAB);
+    if (sheet) {
+      const data = sheet.getDataRange().getValues();
+      for (let r = 1; r < data.length; r++) {
+        const type     = (String(data[r][0] || 'food').trim().toLowerCase()) || 'food';
+        const supplier = String(data[r][1] || '').trim();
+        const match    = String(data[r][2] || '').trim();
+        const cell     = String(data[r][3] || '').trim();
+        const note     = String(data[r][4] || '').trim();
+        if (!supplier || !match || !cell) continue;
+        rows.push({ type, supplier, match, cell, note: note || (supplier + ' (custom, via widget)') });
+      }
+    }
+  } catch (e) { Logger.log('loadScannerMapRows_ error: ' + e.message); }
+  loadScannerMapRows_._rows = rows;
+  return rows;
+}
+
+// Returns entries shaped like a static MAP row so they can be .concat()-ed straight
+// onto FIVEWAYS_MAP / SCICLUNAS_MAP / etc. before the matching loop runs.
+function scannerMapEntriesFor_(supplierName, type) {
+  const t = (type || 'food').toLowerCase();
+  return loadScannerMapRows_()
+    .filter(r => r.type === t && r.supplier.toLowerCase() === supplierName.toLowerCase())
+    .map(r => ({ match: [r.match], cell: r.cell, convert: p => p, note: r.note }));
+}
+
 // ─── NEWER SUPPLIERS (Drive, label-search via updateSheetPrice_) ──────────────
 // These use folder names under DRIVE_ROOT_FOLDER rather than hardcoded folder IDs.
 // updateSheetPrice_ searches both sheets by label text — no cell address needed.
@@ -303,6 +348,14 @@ function scanFoodSuppliers(cutoffOverride) {
                `Cutoff: ${cutoff.toLocaleString('en-AU')}`, ''];
   let updates = 0;
 
+  // Dynamic match rules from the Supplier Prices widget — merged on top of the
+  // static maps below, per supplier. See "DYNAMIC SCANNER MAP" note above.
+  const fiveWaysEffective   = FIVEWAYS_MAP.concat(scannerMapEntriesFor_('5Ways', 'food'));
+  const sciclunasEffective  = SCICLUNAS_MAP.concat(scannerMapEntriesFor_('Sciclunas', 'food'));
+  const unclesEffective     = UNCLES_MAP.concat(scannerMapEntriesFor_("Uncle's", 'food'));
+  const woolworthsEffective = WOOLWORTHS_MAP.concat(scannerMapEntriesFor_('Woolworths', 'food'));
+  const denchEffective      = DENCH_MAP.concat(scannerMapEntriesFor_('Dench', 'food'));
+
   // ── 5Ways (TAX INVOICE PDFs)
   log.push('--- 5WAYS FOODSERVICE ---');
   try {
@@ -313,7 +366,7 @@ function scanFoodSuppliers(cutoffOverride) {
       const items = parse5WaysLines(text);
       const seen  = {};
       items.forEach(item => {
-        FIVEWAYS_MAP.forEach(map => {
+        fiveWaysEffective.forEach(map => {
           if (!seen[map.cell] && matchesAny(item.itemCode, map.match)) {
             seen[map.cell] = true;
             if (updateIfChanged(sheet, map.cell, map.convert(item.unitPrice), map.note, log)) updates++;
@@ -321,7 +374,7 @@ function scanFoodSuppliers(cutoffOverride) {
         });
       });
       recordUnmappedItems_('5Ways', items, function (it) {
-        return FIVEWAYS_MAP.some(function (m) { return matchesAny(it.itemCode, m.match); })
+        return fiveWaysEffective.some(function (m) { return matchesAny(it.itemCode, m.match); })
             || FIVEWAYS_COFFEE_MAP.some(function (m) { return matchesAny(it.itemCode, m.match); });
       }, log);
     });
@@ -336,7 +389,7 @@ function scanFoodSuppliers(cutoffOverride) {
       const text  = extractPdfText(f.getId()); if (!text) return;
       const items = parseSciclunasLines(text);
       items.forEach(item => {
-        const map = SCICLUNAS_MAP.find(m => matchesAny(item.description, m.match));
+        const map = sciclunasEffective.find(m => matchesAny(item.description, m.match));
         if (map) { if (updateIfChanged(sheet, map.cell, map.convert(item.unitPrice, item.unit), map.note, log)) updates++; }
         else if (matchesAny(item.description, SCICLUNAS_IGNORE)) {
           log.push(`  IGNORED (untracked soup veg): ${item.description}`);
@@ -358,11 +411,11 @@ function scanFoodSuppliers(cutoffOverride) {
       const text  = extractPdfText(f.getId()); if (!text) return;
       const items = parseUnclesLines(text);
       items.forEach(item => {
-        const map = UNCLES_MAP.find(m => matchesAny(item.description, m.match));
+        const map = unclesEffective.find(m => matchesAny(item.description, m.match));
         if (map) { if (updateIfChanged(sheet, map.cell, map.convert(item.unitPrice), map.note, log)) updates++; }
       });
       recordUnmappedItems_("Uncle's", items, function (it) {
-        return UNCLES_MAP.some(function (m) { return matchesAny(it.description, m.match); });
+        return unclesEffective.some(function (m) { return matchesAny(it.description, m.match); });
       }, log);
     });
   } catch(e) { log.push('ERROR (Uncles): ' + e.message); }
@@ -376,7 +429,7 @@ function scanFoodSuppliers(cutoffOverride) {
       const text  = extractPdfText(f.getId()); if (!text) return;
       const items = parseWoolworthsLines(text);
       items.forEach(item => {
-        const map = WOOLWORTHS_MAP.find(m => matchesAny(item.description, m.match));
+        const map = woolworthsEffective.find(m => matchesAny(item.description, m.match));
         if (!map) return;
         const price = map.convertWithDesc ? map.convertWithDesc(item.unitPrice, item.description) : map.convert(item.unitPrice);
         if (price && updateIfChanged(sheet, map.cell, price, map.note, log)) updates++;
@@ -394,7 +447,7 @@ function scanFoodSuppliers(cutoffOverride) {
       const text  = extractPdfText(f.getId()); if (!text) return;
       const items = parseDenchLines(text);
       items.forEach(item => {
-        DENCH_MAP.forEach(map => {
+        denchEffective.forEach(map => {
           if (seen[map.cell]) return;
           if (matchesAny(item.itemCode.toUpperCase(), map.match) || matchesAny(item.description, map.match)) {
             seen[map.cell] = true;
@@ -403,7 +456,7 @@ function scanFoodSuppliers(cutoffOverride) {
         });
       });
       recordUnmappedItems_('Dench', items, function (it) {
-        return DENCH_MAP.some(function (m) {
+        return denchEffective.some(function (m) {
           return matchesAny((it.itemCode || '').toUpperCase(), m.match) || matchesAny(it.description, m.match);
         });
       }, log);
@@ -625,8 +678,9 @@ function scanPfdFromGmail_(cutoff, log) {
   messages.sort((a, b) => b.getDate() - a.getDate());
   log.push(`${messages.length} email(s)`);
 
+  const pfdEffective = PFD_MAP.concat(scannerMapEntriesFor_('PFD Foods', 'food'));
   const needed = {};
-  PFD_MAP.forEach(m => { needed[m.cell] = true; });
+  pfdEffective.forEach(m => { needed[m.cell] = true; });
 
   for (const msg of messages) {
     if (Object.keys(needed).length === 0) break;
@@ -637,7 +691,7 @@ function scanPfdFromGmail_(cutoff, log) {
     const items   = parsePfdSalesOrderText_(text, log);
 
     items.forEach(item => {
-      PFD_MAP.forEach(map => {
+      pfdEffective.forEach(map => {
         if (!needed[map.cell]) return;
         if (!matchesAny(item.description, map.match)) return;
         const price = map.convert(item.unitPrice, item.uom);
@@ -648,7 +702,7 @@ function scanPfdFromGmail_(cutoff, log) {
       });
     });
     recordUnmappedItems_('PFD Foods', items, function (it) {
-      return PFD_MAP.some(function (m) { return matchesAny(it.description, m.match); });
+      return pfdEffective.some(function (m) { return matchesAny(it.description, m.match); });
     }, log);
   }
 
@@ -678,6 +732,8 @@ function scanAbicorFromGmail_(log) {
   const coffeeSheet = SpreadsheetApp.openById(SS_COFFEE).getSheetByName(SHEET_COFFEE);
   let updates = 0;
 
+  const abicorFoodEffective = ABICOR_MAP.concat(scannerMapEntriesFor_('Trio Supplies', 'food'));
+
   // Confirmed format (Apr 2026): "...product desc... GST $ tax $ unitPrice $ extended"
   const blob = text.replace(/\r/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ');
   const re   = /GST\s+\$\s*([\d.]+)\s+\$\s*([\d.]+)\s+\$\s*([\d.]+)/g;
@@ -693,9 +749,9 @@ function scanAbicorFromGmail_(log) {
   }
   log.push(`  ${items.length} line(s) parsed`);
 
-  // Food sheet items (Napkins → P8, Trays → P9)
+  // Food sheet items (Napkins → P8, Trays → P9, + any widget-added custom items)
   items.forEach(item => {
-    ABICOR_MAP.forEach(map => {
+    abicorFoodEffective.forEach(map => {
       if (!matchesAny(item.description, map.match)) return;
       const price = map.convert(item.unitPrice);
       if (price > 0 && updateIfChanged(sheet, map.cell, price, map.note, log)) updates++;
@@ -714,7 +770,7 @@ function scanAbicorFromGmail_(log) {
   // Log unmatched lines for future mapping
   items.forEach(item => {
     if (item.unitPrice <= 0.50) return;
-    const inFoodMap   = ABICOR_MAP.some(map => matchesAny(item.description, map.match));
+    const inFoodMap   = abicorFoodEffective.some(map => matchesAny(item.description, map.match));
     const inCoffeeMap = ABICOR_COFFEE_MAP.some(map => matchesAny(item.description, map.match));
     if (!inFoodMap && !inCoffeeMap) {
       log.push(`  NO MAP: ${item.description.substring(0, 80)} | $${item.unitPrice}`);

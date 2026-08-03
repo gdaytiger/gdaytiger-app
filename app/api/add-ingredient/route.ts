@@ -15,6 +15,8 @@ type Body = {
   type?: 'food' | 'coffee';   // which costing sheet
   category?: string;          // which category column within that sheet
   sig?: string;               // unmapped-SKU id, when added from a NEW SKU prompt
+  matchKeyword?: string;      // invoice item code / description keyword — wires this
+                              // ingredient into the recurring invoice scanner if supplied
 };
 
 export async function POST(req: NextRequest) {
@@ -63,6 +65,7 @@ export async function POST(req: NextRequest) {
         type,
         category,
         sig: (body.sig || '').toString(),
+        matchKeyword: (body.matchKeyword || '').toString().trim(),
       }),
       cache: 'no-store',
     });
