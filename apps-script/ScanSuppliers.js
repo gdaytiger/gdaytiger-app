@@ -94,6 +94,7 @@ const COFFEE_CELL_META = {
   D7:  { min: 15,  max: 30,  refreshDays: 21, label: 'Happy Soy /1L' },
   D8:  { min: 28,  max: 45,  refreshDays: 21, label: 'Alt.Dairy.Co Oat /carton' },
   D9:  { min: 28,  max: 45,  refreshDays: 21, label: 'Alt.Dairy.Co Almond /carton' },
+  D10: { min: 15,  max: 35,  refreshDays: 14, label: 'DVDL Thick Cream 3LT (capture)' },
   F5:  { min: 25,  max: 50,  refreshDays: 30, label: 'Bundaberg Raw Sugar /15KG' },
   F6:  { min: 8,   max: 20,  refreshDays: 30, label: 'B-Honey Squeeze /750g' },
   // pack — expected units per carton. Sheet prices are stored per this pack
@@ -108,6 +109,7 @@ const COFFEE_CELL_META = {
 
 const FOOD_CELL_META = {
   R12: { min: 3,  max: 6,   refreshDays: 14, label: 'Sungold FC 2LT (cross-write)' },
+  N12: { min: 15, max: 35,  refreshDays: 14, label: 'DVDL Thick Cream 3LT (cross-write)' },
   R15: { min: 30, max: 80,  refreshDays: 60, label: 'Pinenuts /1kg', manual: true }, // never appears on a scanned invoice — maintained by hand in FOOD COSTINGS
   // Add ranges for other Food sheet cells incrementally as needed.
 };
@@ -121,6 +123,7 @@ const FIVEWAYS_MAP = [
   { match: ['PPCOH', 'PROSCIUTTO COTTO'],                   cell: 'D5',  convert: p => p,              note: 'Prosciutto Cotto /kg' },
   { match: ['PHSS', 'SALAMI SOPRESSATA'],                   cell: 'D7',  convert: p => p,              note: 'Salami Sopressata /kg' },
   { match: ['SMT', 'SOMARE', 'TUNA', 'ALBACORE'],          cell: 'D8',  convert: p => p,              note: 'Tuna 425g tin /unit' },
+  { match: ['KFF', 'KAISER FLEISCH', 'G/F KAISER FLEISCH'], cell: 'D10', convert: p => p,              note: 'G/F Kaiser Fleisch Smoked Pork /kg (avg 2kg)' },
   { match: ['FCM', 'CHEESE MOZZ BLOCK FLORIDIA'],           cell: 'F5',  convert: p => r2(p / 15),     note: 'Mozz Floridia /kg (CTN ÷ 15 kg)' },
   { match: ['MSCS', 'CHEESE SLICE SWISS MAINLAND'],         cell: 'F6',  convert: p => p,              note: 'Mainland Swiss /1 kg pack' },
   { match: ['TALEGGIO'],                                    cell: 'F7',  convert: p => p,              note: 'Taleggio /kg' },
@@ -544,6 +547,10 @@ function scanCoffeeSuppliers(cutoffOverride) {
       // Cross-write Sungold Full Cream to FOOD sheet R12
       if (prices['D5'] && foodSheet) {
         validateAndUpdate(foodSheet, 'R12', prices['D5'], 'Redi Milk Sungold Full Cream 2LT (FOOD)', log, FOOD_CELL_META);
+      }
+      // Cross-write DVDL Thick Cream to FOOD sheet N12 (used in food recipes; D10 is the coffee-side capture cell)
+      if (prices['D10'] && foodSheet) {
+        validateAndUpdate(foodSheet, 'N12', prices['D10'], 'Redi Milk DVDL Thick Cream 3LT (FOOD)', log, FOOD_CELL_META);
       }
     });
   } catch(e) { log.push('ERROR (Redi Milk): ' + e.message); }
@@ -1079,7 +1086,8 @@ function parseRediMilkText(text, log) {
     D6: 'SUNGOLD LOWFAT',
     D7: 'HAPPY HAPPY SOY',
     D8: 'ALT.DAIRY.CO OAT',
-    D9: 'ALT.DAIRY.CO ALMOND'
+    D9: 'ALT.DAIRY.CO ALMOND',
+    D10: 'DVDL THICK CREAM'
   };
   Object.keys(RM_KEYWORDS).forEach(cell => {
     const price = findUnitPrice(RM_KEYWORDS[cell]);
@@ -1095,7 +1103,50 @@ function parseRediMilkText(text, log) {
   // genuinely share a price, hence "verify" rather than "rejected".
   flagRediMilkBleed_(text, results, RM_KEYWORDS, log);
 
+  // New-SKU alarm: Redi Milk is the one supplier whose parser captures only a
+  // fixed keyword list, so a brand-new product on the invoice is dropped without
+  // a trace (that's how DVDL Thick Cream went unnoticed). Record anything that
+  // looks like a product row but matches none of the known keywords.
+  flagRediMilkNewSkus_(text, RM_KEYWORDS, log);
+
   return results;
+}
+
+// New-SKU detector — records (and logs) any Redi Milk invoice line that looks
+// like a product row but matches none of RM_KEYWORDS, so it surfaces on the
+// dashboard via recordUnmappedSku_ → syncDriftToNotion instead of vanishing.
+// Conservative by design: only lines starting with a short numeric supplier ID
+// (1–3 digits) that carry a 2-dp unit price and aren't a footer/summary row.
+// Records only; never blocks the scan.
+function flagRediMilkNewSkus_(text, keywords, log) {
+  if (!text) return;
+  const known = Object.keys(keywords).map(function (c) { return keywords[c].toUpperCase(); });
+  // Footer/summary rows that slip through the uppercase filter (belt & braces).
+  const IGNORE = /fuel|levy|total|balance|gst|eft|bsb|cba|account|bank|paid|outstanding|transaction|surcharge|previous|docket|adjustment|reference|printed|page|amount|terms|customer|week|delivery|invoice|remittance/i;
+  // OCR concatenates all product rows onto one line, so work on the collapsed blob.
+  const blob = text.replace(/\r/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ');
+  // A product row reads: <supplierId 1-3 digits> [<qty><unit>] <PRODUCT NAME> <numbers...>.
+  // Names are ALL CAPS (footer rows are mixed case, so uppercase-only excludes
+  // them). The name ends at the first " (" (pack) or " <digit>" (qty column).
+  const rowRe = /\b(\d{1,3})\s+(?:\d+\s?(?:LT|ML|KG|GM|L)\s+)?([A-Z][A-Z0-9.\-\/&' ]{2,38}?)\s+(?=[\d(])/g;
+  const seen = {};
+  let m;
+  while ((m = rowRe.exec(blob)) !== null) {
+    const name = m[2].trim();
+    if (name.length < 3) continue;
+    const up = name.toUpperCase();
+    if (IGNORE.test(up)) continue;
+    if (known.some(function (k) { return up.indexOf(k) !== -1 || k.indexOf(up) !== -1; })) continue; // already mapped
+    if (seen[up]) continue;
+    seen[up] = true;
+    // Unit price = first 2-dp value after the name (excludes the 4-dp SC% column).
+    const after = blob.substring(m.index + m[0].length, m.index + m[0].length + 120);
+    const pm = after.match(/\d+\.\d{2}(?!\d)/);
+    const price = pm ? parseFloat(pm[0]) : null;
+    if (!price || !(price > 0.5 && price < 500)) continue;
+    if (log) log.push('  NEW SKU (Redi Milk): ' + name + ' $' + price);
+    recordUnmappedSku_('Redi Milk', name, price);
+  }
 }
 
 // Soft detector — see note in parseRediMilkText. Logs only, never throws.
@@ -1341,6 +1392,7 @@ const CELL_TO_INGREDIENT_KEY = {
   H10: 'straw',                // Trio Paper Straw 2500
   // FOOD sheet
   R12: 'sungold_jersey_fc',    // Sungold FC 2LT cross-write — same ingredient as D5
+  N12: 'dvdl_thick_cream',     // DVDL Thick Cream 3LT — Redi Milk cross-write from D10
   R15: 'pinenuts',             // Pinenuts Kernel 1KG (5Ways)
 };
 

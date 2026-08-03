@@ -17,6 +17,7 @@ const FOOD_INGREDIENTS = [
     { key: 'salami',             name: 'Salami (kg)',                       col: 4,  row: 7,  unit: 'kg',        supplier: '5Ways' },
     { key: 'tuna',               name: 'Tuna (425g tin)',                   col: 4,  row: 8,  unit: '425g tin',  supplier: '5Ways' },
     { key: 'chicken',            name: 'Chicken (kg)',                      col: 4,  row: 9,  unit: 'kg',        supplier: 'PFD Foods' },
+    { key: 'kaiser_fleisch',     name: 'G/F Kaiser Fleisch Smoked Pork (kg)', col: 4, row: 10, unit: 'kg',      supplier: '5Ways' },
     // ── CHEESE ───────────────────────────────────────────────────────────────
     { key: 'mozzarella',         name: 'Mozzarella (kg)',                   col: 6,  row: 5,  unit: 'kg',        supplier: '5Ways' },
     { key: 'swiss_cheese',       name: 'Swiss Cheese (34pk)',               col: 6,  row: 6,  unit: '34pk',      supplier: '5Ways' },
@@ -60,6 +61,7 @@ const FOOD_INGREDIENTS = [
     { key: 'salt',               name: 'Sea Salt (25kg)',                   col: 14, row: 7,  unit: '25kg',      supplier: '5Ways' },
     { key: 'pepper',             name: 'Pepper (1kg)',                      col: 14, row: 8,  unit: '1kg',       supplier: '5Ways' },
     { key: 'eggs',               name: 'Eggs (15doz box)',                  col: 14, row: 9,  unit: '15doz box', supplier: 'Sciclunas' },
+    { key: 'dvdl_thick_cream',   name: 'DVDL Thick Cream (3L)',             col: 14, row: 12, unit: '3L',        supplier: 'Redi Milk' },
     // ── PACKAGING ────────────────────────────────────────────────────────────
     { key: 'napkins',            name: 'Napkins (2000pk)',                  col: 16, row: 8,  unit: '2000pk',    supplier: 'Abicor' },
     { key: 'tray',               name: 'Paper Tray (150pk)',                col: 16, row: 9,  unit: '150pk',     supplier: 'Abicor' },
