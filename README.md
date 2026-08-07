@@ -8,12 +8,12 @@ G'Day Tiger internal operations dashboard. Built on Next.js, deployed on Vercel,
 
 | Layer | Tool / Version |
 |---|---|
-| Framework | Next.js 16.2.9 (App Router, TypeScript) |
+| Framework | Next.js 16.2.10 (App Router, TypeScript) |
 | UI | React 19.2.7, Tailwind CSS v4 |
 | Hosting | Vercel (auto-deploys from `main`) |
 | Primary DB | Notion (via REST API) |
 | Roster | Deputy API |
-| AI | Anthropic API — `claude-opus-4-8` (Projects chat + brain-dump), `claude-haiku-4-5-20251001` (task classify) |
+| AI | Anthropic API — `claude-sonnet-5` (Projects chat + brain-dump, switched from `claude-opus-4-8` 15 Jul 2026), `claude-haiku-4-5-20251001` (task classify) |
 | Automation | Google Apps Script (linked to Food Costings sheet) |
 | Fonts | Stolzl (labels), Bodoni PT (headings) |
 
@@ -40,7 +40,6 @@ Two persistent cards at the top (Daily To Do + Week Ahead), then a **7-tile laun
 | Tile | Widget |
 |---|---|
 | 🛒 Shopping List | Standalone shopping list (own launcher tile) |
-| 🎯 Projects | Brain Dump capture + Ongoing Projects |
 | 📦 Supplier Prices | Ingredient-level price tracking with 7-day drift |
 | ☕ Coffee Costings | Coffee products, sorted worst→best margin |
 | 🥪 Food Costings | Food products, sorted worst→best margin |
@@ -71,7 +70,7 @@ Notion day pages. Swipe right = defer to tomorrow; swipe left = delete (one-off 
 
 **Add-task recurrence picker** (single row): Today / Weekly / Fortnightly / Monthly. "Today" writes `[YYYY-MM-DD]`. "Daily" (`[D]`) was removed from the picker 16 Jun 2026. Persistent tasks are created via the pin button, not the picker.
 
-**Pin button (📌):** Appears on hover/focus on any non-sticky task in today’s Daily To Do (not available on other-day views). Tap to convert the task to `[STICKY:today]` — rewrites the Notion block via `/api/pin-task`. The task then shows every day from that date until ticked off. Already-pinned tasks show a static 📌 badge instead.
+**Pin button (📌):** Appears on hover/focus on any non-sticky task in today’s Daily To Do (not available on other-day views). Tap to convert the task to `[STICKY:today]` **and** promote it to an "ongoing project" — `/api/pin-task` rewrites the Notion block *and* creates a linked page in the Projects DB, encoding its ID in the prefix as `[STICKY:date:projectId]`. Already-pinned tasks show a static 📌 badge, a peach highlight (same recipe as the Week Ahead today/selected row), and — if linked to a project — a done/total subtask count. Tapping a project-linked pinned row expands its checklist as sibling tiles underneath (add/toggle subtasks inline); ticking the pinned task itself marks the linked project `Done` via `/api/project-status` so it drops out cleanly. The standalone Projects widget (brain-dump capture, status cycling, archive) was removed — pinning a Daily To Do task is now the only way to create a project.
 
 **Review pricing to-dos:** Any task whose text starts with “Review pricing” (e.g. `Review pricing – Beef Sandwich (58.3%)`) is auto-pinned by the dashboard (`isReviewPricingTask()` in `dayTasks.ts`) and has its percentage swapped at render time for the current live margin from `costings` (30-min Notion sync). No prefix needed in Notion — the dashboard injects `isSticky` and the live margin at load time.
 
@@ -83,9 +82,6 @@ Standalone launcher tile. Sourced from dedicated Shopping List Notion page (`368
 ### 📅 The Week Ahead
 Deputy roster for 7 days — shift times + area. Task count badge per day. Tap day = view/add tasks inline. Add panel supports recurring options (Today/Weekly/Fortnightly/Monthly); recurring tasks deletable from here.
 
-### 🎯 Projects (+ Brain Dump)
-Brain Dump capture at top: free-text idea → `/api/braindump-analyze` (Opus) decides new project vs new action on existing → structured draft. Projects from Notion Projects DB. Status cycles In Progress → Blocked → On Hold → Done. Swipe-left archives (→ Notion trash, recoverable 30 days). Claude-logo button on an action = deep-link handoff to full Claude (Cowork on desktop; clipboard on mobile).
-
 ### ☕ Coffee Costings / 🥪 Food Costings
 Live margin view from Notion Costings DB. Sorted worst→best margin. Add-product button → AddProductModal.
 
@@ -95,6 +91,8 @@ Live margin view from Notion Costings DB. Sorted worst→best margin. Add-produc
 - Where the recipe is under the 70% target: `−$X/wk` shortfall (from margin review)
 
 **Card header (MarginBadges):** `Avg XX.X% → YY.Y% [after Z.ZZ% card]` — gross average, then net after the live Square blended fee rate. Badge is green-tinted when using live data, grey when still on the static fallback.
+
+**"was X%" prior-GP tag (added 21 Jul 2026, Apps Script side deployed 8 Aug 2026).** When a supplier cost/price change actually moves a product's gross margin, the tile shows a small `▴/▾ was X%` tag next to the gross % — the margin before that last change. Reads `Prev Profit %` (number) + `Profit Changed` (date) from the Notion Costings DB (`app/api/costings/route.ts`), written by `SyncCostingsToNotion.js` only on the run where GP actually shifts (so the tag persists until the next real change, not every sync). Both Notion properties exist on the Costings DB and the write side is clasp-deployed — live end to end.
 
 **Card fee rate:** Live rolling rate from `PaymentFeeTracker.js` (reads `payment_fees` Notion block via `/api/payment-fees`). Falls back to static `MERCHANT_FEE_PCT = 1.02%` constant until ≥30 days of live data have backfilled. Current live rate: ~1.04%.
 
@@ -170,14 +168,14 @@ Daily/weekly **staff cost %** = labour cost ÷ gross sales (the winter staff-cos
 | `/api/delete-task` | DELETE | Delete Notion block |
 | `/api/add-shopping` | POST | Add item to Shopping List page (with `×N` qty) |
 | `/api/check-shopping` | PATCH | Update Notion `to_do.checked` for a shopping item (persists across reloads) |
-| `/api/pin-task` | PATCH | Convert an existing daily task to `[STICKY:today]` — rewrites the Notion block |
+| `/api/pin-task` | PATCH | Convert an existing daily task to `[STICKY:today]` and create+link a Projects DB page for it (ongoing project) |
 | `/api/update-shopping` | PATCH | Rewrite a shopping item's text (adjust qty) |
 | `/api/add-project-action` | POST | Add to_do block to a project |
 | `/api/project-status` | PATCH | Update project status |
 | `/api/archive-project` | POST | Move project page to Notion trash (recoverable 30 days) |
-| `/api/braindump` | POST | Create new project from brain dump |
-| `/api/braindump-analyze` | POST | Opus: classify brain dump as new project vs action on existing |
-| `/api/claude-assist` | POST | Opus chat for project actions |
+| `/api/braindump` | POST | Create new project from brain dump. **Orphaned** — no UI calls this since the Projects widget was removed (8 Aug 2026); pinning a Daily To Do task is the only project-creation path now. Candidate for deletion. |
+| `/api/braindump-analyze` | POST | Sonnet 5 (was Opus): classify brain dump as new project vs action on existing. **Orphaned**, same as above. |
+| `/api/claude-assist` | POST | Sonnet 5 (was Opus) chat for project actions |
 | `/api/add-product` | POST | AddProduct Apps Script web app: writes costings sheet + Notion row |
 | `/api/add-ingredient` | POST | Adds custom ingredient via AddProduct web app |
 | `/api/find-ingredient-price` | POST | Proxies invoice-price keyword search to AddProduct web app |
@@ -204,13 +202,13 @@ Daily/weekly **staff cost %** = labour cost ÷ gross sales (the winter staff-cos
 | `ANTHROPIC_API_KEY` | `/api/claude-assist`, `/api/braindump-analyze`, `/api/add-task` |
 | `SQUARE_ACCESS_TOKEN` | `PaymentFeeTracker.js` + `SalesDaily.js` (Apps Script — Square Payments / Orders API) |
 | `APP_PASSWORD` | Verified by `/api/login` |
-| `SESSION_TOKEN` | Value of `gdt_session` cookie; `middleware.ts` gates the whole app |
+| `SESSION_TOKEN` | Value of `gdt_session` cookie; `proxy.ts` gates the whole app |
 
 ---
 
 ## Auth
 
-Password → `gdt_session` cookie (30 days, `sameSite: lax` for iOS PWA). `middleware.ts` gates the entire app.
+Password → `gdt_session` cookie (30 days, `sameSite: lax` for iOS PWA). `proxy.ts` gates the entire app (renamed from `middleware.ts` under the Next 16 convention, 15 Jun 2026). Each mutating route also re-checks the session directly via `requireSession()` in `app/lib/auth.ts` as defence-in-depth against proxy-bypass advisories.
 
 ---
 
@@ -228,7 +226,7 @@ SyncSquarePrices (hourly) → live Square retail prices → Coffee Costings shee
 BuildRecipeMap (daily) → recipe_map JSON → Notion OS page
 SyncIngredientPrices (30 min) → ingredient_prices JSON → Notion OS page
 MarginReview (Mondays 6am) → margin_review JSON → Notion OS page → TIGER OS costing tiles
-TakeawayCupCounter (daily) → Planetware cup reorder at 10,000 cups
+TakeawayCupCounter (daily) → [STICKY] "Planetware" pin in Daily To Do (ORDER) at 8,000 cups
 PaymentFeeTracker → Square Payments API → "Payment Fees" tab (Coffee Costings sheet)
                                         → payment_fees JSON → Notion OS page → TIGER OS net margin
   ├─ installPaymentFeeTracker() → sets up triggers (run once)
@@ -244,15 +242,15 @@ SalesDaily → Square Orders → sales by Melbourne trading day → sales_daily 
 |---|---|
 | `IngredientCatalog.js` | **Single source of truth for FOOD-sheet ingredients** (`FOOD_INGREDIENTS`: key, name, col, row, unit, supplier). Both `SyncIngredientPrices.js` and `BuildRecipeMap.js` read it — add a row here and it resolves for both pricing and attribution (no more "0 affected" from editing two tables). Includes the Milk D5–D9 fix. |
 | `SaveInvoicesToDrive.js` | Gmail watcher — saves supplier PDF attachments to Drive, labels `invoice-saved` |
-| `ScanSuppliers.js` | Reads Drive/Gmail PDFs → writes ingredient prices to Food + Coffee sheets. 5Ways scanner auto-captures B-Honey Squeeze (BHS750) → COFFEE F6. `rescanLast35Days()` backfill helper. |
-| `SyncCostingsToNotion.js` | Pushes Sell Price + Profit % + Cost (Total+Wastage) to Notion Costings DB (30 min). Cost added Jun 2026 — food + coffee. |
+| `ScanSuppliers.js` | Reads Drive/Gmail PDFs → writes ingredient prices to Food + Coffee sheets. 5Ways scanner auto-captures B-Honey Squeeze (BHS750) → COFFEE F6. `rescanLast35Days()` backfill helper. **New-SKU detection (18 Jul 2026):** `recordUnmappedItems_()` now runs for 5Ways, Uncle's, Dench and PFD Foods — any invoice line that doesn't match a tracked cell is logged and surfaces as a "NEW SKU" prompt on the Supplier Prices widget; a per-supplier fair cap (`UNMAPPED_SKU_PER_SUPPLIER = 10`, global ceiling raised to 60) stops one high-line-count invoice evicting other suppliers' unmapped SKUs. 5Ways parser now enriches unmapped lines with the product name (not just item code) when the OCR name-column count lines up with the code count; falls back to codes otherwise. `print5WaysInvoiceText()` diagnostic + `clearUnmappedSkus()` one-shot reset added to support that parser work. American cheese (F8) re-mapped to new SKU `RDAB` ("Hi Melt U.S.A Burger"), old `ABCS` kept as a legacy match. |
+| `SyncCostingsToNotion.js` | Pushes Sell Price + Profit % + Cost (Total+Wastage) to Notion Costings DB (30 min). Cost added Jun 2026 — food + coffee. Also writes `Prev Profit %` + `Profit Changed` only when GP moves this run, powering the "was X%" tile tag (deployed 8 Aug 2026) — see Coffee Costings section above. |
 | `SyncSquarePrices.js` | Pulls live Square retail prices → Coffee Costings sheet (hourly). Includes hot + iced matcha retail (dine-in + takeaway). |
 | `SyncIngredientPrices.js` | Writes ingredient prices as chunked JSON to Notion OS page (30 min). Reads ingredient list from `IngredientCatalog.js`. |
 | `BuildRecipeMap.js` | Parses FOOD sheet formulas → ingredient→product map → `recipe_map` Notion block (daily). Reads ingredient list from `IngredientCatalog.js`; squeeze honey (F6) → iced matcha. |
 | `MarginReview.js` | Joins 7 days of Square item sales (POS + Mr Yum online, same feed) against Notion Costings DB, ranks underperforming recipes by weekly $ impact → `margin_review` Notion block (Mondays 6am). Attribution via `MR_RECOGNISED_MODS` + `MR_MOD_ALIASES` (modifier names) + `MR_NAME_ALIASES` (item/recipe names); each bucket → exactly one costing, channels auto-merge by resolved product. `installMarginReview()` one-off setup; `printMarginReview()` previews; `printAllBuckets()` / `printAllModifiers()` diagnose gaps. See "Sales attribution" above. |
 | `PaymentFeeTracker.js` | Reads Square Payments API → writes daily Collected/Fees/Count rows to "Payment Fees" tab in Coffee Costings sheet → computes rolling 365-day blended fee % → writes `payment_fees` JSON block to Notion OS page. Run `installPaymentFeeTracker()` once to set up triggers (backfill + daily). `printPaymentFeeSummary()` to verify. |
 | `SalesDaily.js` | Polls Square Orders daily (~12:30am), buckets sales by Melbourne trading day → `sales_daily` JSON block to Notion OS page. Mirrors PaymentFeeTracker (sheet accumulator + self-deleting backfill stepper). Paired with `/api/labour` → `/api/staff-cost` for daily staff cost %. |
-| `TakeawayCupCounter.js` | Polls Square Orders daily, tallies Planetware cups. At 10,000, appends reorder to Shopping List. Counter start: 2026-06-01. |
+| `TakeawayCupCounter.js` | Polls Square Orders daily, tallies Planetware cups. At 8,000 (was 10,000 until 8 Aug 2026), appends a `[STICKY]` "Planetware" pin to today's Daily To Do (ORDER category) — not the Shopping List. Renders as a tappable `tel:0410469212` link (`SUPPLIER_LINKS` in `page.tsx`); order-context detail lives in the task's context field. Counter start: 2026-06-01. |
 | `AddProduct.js` / `AddIngredient.js` | Web-app endpoints backing in-app Add Product / Add Ingredient modals |
 | `BackupCostings.js` | Costings sheet backup |
 

@@ -37,10 +37,13 @@ function syncCostingsToNotion() {
     const costSame = (values.cost == null) || (product.currentCost != null && Math.abs(product.currentCost - values.cost) < 0.005);
     if (sellSame && pctSame && costSame) return;
 
-    const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, values.cost, NOTION_KEY);
+    // Only record "changed from" when GP actually moved this run.
+    const prevPct = pctSame ? null : product.currentPct;
+    const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, values.cost, NOTION_KEY, prevPct);
     Utilities.sleep(300);
     if (result.ok) {
-      updated.push('✓ ' + product.name + ' — $' + values.sellPrice.toFixed(2) + ', ' + values.profitPct.toFixed(1) + '%');
+      const chg = prevPct != null ? ' (was ' + prevPct.toFixed(1) + '%)' : '';
+      updated.push('✓ ' + product.name + ' — $' + values.sellPrice.toFixed(2) + ', ' + values.profitPct.toFixed(1) + '%' + chg);
     } else {
       missed.push('NOTION ERROR for "' + product.name + '": ' + result.error);
     }
@@ -183,18 +186,26 @@ function extractSheetValues(data, sectionRow) {
   return { sellPrice: sellPrice, profitPct: profitPct, cost: totalWastage };
 }
 
-function updateNotionPage(pageId, sellPrice, profitPct, cost, notionKey) {
+// prevPct: pass the OLD Notion Profit % here ONLY when the gross margin actually
+// moved this run (i.e. a supplier cost/price change shifted GP). When non-null it
+// records "Prev Profit %" + "Profit Changed" so the TIGER OS tile can show what
+// the margin changed from. Pass null when GP is unchanged so the last real change
+// is preserved (window = until it changes again).
+function updateNotionPage(pageId, sellPrice, profitPct, cost, notionKey, prevPct) {
+  var props = {
+    'Sell Price': { number: Math.round(sellPrice * 100) / 100 },
+    'Profit %':   { number: Math.round(profitPct * 10)  / 10  },
+  };
+  if (cost != null && isFinite(cost)) props['Cost'] = { number: Math.round(cost * 100) / 100 };
+  if (prevPct != null && isFinite(prevPct)) {
+    props['Prev Profit %']  = { number: Math.round(prevPct * 10) / 10 };
+    props['Profit Changed'] = { date: { start: new Date().toISOString() } };
+  }
   const res = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + pageId, {
     method: 'patch',
     headers: { 'Authorization': 'Bearer ' + notionKey,
                'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
-    payload: JSON.stringify({
-      properties: {
-        'Sell Price': { number: Math.round(sellPrice * 100) / 100 },
-        'Profit %':   { number: Math.round(profitPct * 10)  / 10  },
-        ...(cost != null && isFinite(cost) ? { 'Cost': { number: Math.round(cost * 100) / 100 } } : {}),
-      },
-    }),
+    payload: JSON.stringify({ properties: props }),
     muteHttpExceptions: true,
   });
   const data = JSON.parse(res.getContentText());
@@ -242,10 +253,13 @@ function syncCoffeeToNotion() {
     const costSame = (values.cost == null) || (product.currentCost != null && Math.abs(product.currentCost - values.cost) < 0.005);
     if (sellSame && pctSame && costSame) return;
 
-    const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, values.cost, NOTION_KEY);
+    // Only record "changed from" when GP actually moved this run.
+    const prevPct = pctSame ? null : product.currentPct;
+    const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, values.cost, NOTION_KEY, prevPct);
     Utilities.sleep(300);
     if (result.ok) {
-      updated.push('✓ ' + product.name + ' — $' + values.sellPrice.toFixed(2) + ', ' + values.profitPct.toFixed(1) + '%');
+      const chg = prevPct != null ? ' (was ' + prevPct.toFixed(1) + '%)' : '';
+      updated.push('✓ ' + product.name + ' — $' + values.sellPrice.toFixed(2) + ', ' + values.profitPct.toFixed(1) + '%' + chg);
     } else {
       missed.push('NOTION ERROR for "' + product.name + '": ' + result.error);
     }
