@@ -414,7 +414,7 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, label, context, onContextSave, isSticky, subtasks, onToggleSubtask, onAddSubtask }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
@@ -429,12 +429,16 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   // True when task is a [STICKY] block or auto-pinned (e.g. "Review pricing" text).
   // Shows a static 📌 badge instead of the tappable pin button.
   isSticky?: boolean;
-  // When present (even empty), this row is a pinned "ongoing project" — its checklist
-  // from the linked Projects DB page. Tapping the row expands the checklist (and a
-  // chevron + done-count show) instead of the free-text context editor.
-  subtasks?: Todo[];
-  onToggleSubtask?: (blockId: string, checked: boolean) => void;
-  onAddSubtask?: (text: string) => void;
+  // Done/total for a pinned "ongoing project" row's linked checklist — display only.
+  // The checklist itself renders as sibling tiles below (see the Daily To Do render),
+  // not nested inside this tile.
+  subtaskCount?: { done: number; total: number };
+  // Overrides the default tap-to-expand-context behaviour — used by pinned "ongoing
+  // project" rows to toggle their sibling checklist instead of the context editor.
+  onRowClick?: () => void;
+  // Peach highlight (same recipe as the Week Ahead "today/selected" row) — marks
+  // pinned tasks as visually distinct from the rest of the list.
+  highlight?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
@@ -448,10 +452,6 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [localContext, setLocalContext] = useState(context ?? '');
-  const [addingSub, setAddingSub] = useState(false);
-  const [newSubText, setNewSubText] = useState('');
-  const isProject = subtasks !== undefined;
-  const submitSub = () => { if (newSubText.trim()) { onAddSubtask?.(newSubText.trim()); setNewSubText(''); setAddingSub(false); } };
   const THRESHOLD = 90;
 
   // Reset the local draft when the incoming context prop changes. Done during
@@ -620,7 +620,12 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ userSelect: 'none', minHeight: '62px', ...glassTileStyle }}
+      style={{
+        userSelect: 'none', minHeight: '62px',
+        ...(highlight
+          ? { background: 'rgba(251,205,173,0.12)', border: '1px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow)' }
+          : glassTileStyle),
+      }}
     >
       {/* Right swipe reveal — tomorrow */}
       {canSwipeRight && (
@@ -669,7 +674,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           transition: swiping ? 'none' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
           willChange: 'transform',
         }}
-        onClick={() => { if (!didSwipeRef.current) setExpanded(e => !e); didSwipeRef.current = false; }}
+        onClick={() => { if (!didSwipeRef.current) { if (onRowClick) onRowClick(); else setExpanded(e => !e); } didSwipeRef.current = false; }}
       >
         <div onClick={e => { e.stopPropagation(); onChange(id, !checked); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? 'var(--color-brand-peach)' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid var(--color-brand-peach)' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
           {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -688,39 +693,12 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         </div>
         {isSticky && <span className="shrink-0 text-xs mt-0.5 leading-none" title="Persistent — stays until ticked off">📌</span>}
         {!isSticky && !checked && onPin && <button onClick={e => { e.stopPropagation(); onPin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-60 hover:!opacity-100 mt-0.5" aria-label="Pin task" title="Make persistent — stays until ticked off" style={{ fontSize: '13px' }}>📌</button>}
-        {isProject && subtasks!.length > 0 && <span className="shrink-0 text-xs text-gray-400 tabular-nums mt-0.5">{subtasks!.filter(s => s.checked).length}/{subtasks!.length}</span>}
-        {isProject && <span className="shrink-0 text-gray-400" style={{ fontSize: '10px', width: '10px' }}>{expanded ? '▼' : '▶'}</span>}
-        {context && !expanded && !isProject && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
+        {subtaskCount && subtaskCount.total > 0 && <span className="shrink-0 text-xs text-gray-400 tabular-nums mt-0.5">{subtaskCount.done}/{subtaskCount.total}</span>}
+        {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
         {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
         {!isMobile && onDelete && <button onClick={e => { e.stopPropagation(); onDelete(id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Delete" title="Delete">✕</button>}
       </div>
-      {expanded && isProject && (
-        <div className="px-4 pb-3 space-y-2" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
-          onMouseDown={e => e.stopPropagation()}
-          onClick={e => e.stopPropagation()}>
-          <div className="pt-2 space-y-2">
-            {subtasks!.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No subtasks yet</p>
-            ) : (
-              subtasks!.map(s => (
-                <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} onChange={(sid, schecked) => onToggleSubtask?.(sid, schecked)} />
-              ))
-            )}
-            {addingSub ? (
-              <div className="flex gap-2 mt-1">
-                <input value={newSubText} onChange={e => setNewSubText(e.target.value)} autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter') submitSub(); if (e.key === 'Escape') { setAddingSub(false); setNewSubText(''); } }}
-                  placeholder="New subtask..." className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                <button onClick={submitSub} disabled={!newSubText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
-                <button onClick={() => { setAddingSub(false); setNewSubText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
-              </div>
-            ) : (
-              <button onClick={() => setAddingSub(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors uppercase">+ Add subtask</button>
-            )}
-          </div>
-        </div>
-      )}
-      {expanded && !isProject && (
+      {expanded && !onRowClick && (
         <div className="px-4 pb-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
           onMouseDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}>
@@ -756,6 +734,33 @@ function SortableCheckItem(props: React.ComponentProps<typeof CheckItem>) {
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       <CheckItem {...props} />
+    </div>
+  );
+}
+
+// Tile-sized "+ Add subtask" row for a pinned "ongoing project" — same rounded-2xl /
+// glassTileStyle / 62px recipe as CheckItem, so it sits flush as a sibling tile below
+// the checklist rather than looking like a squeezed-in inline form.
+function AddSubtaskRow({ onAdd }: { onAdd: (text: string) => void }) {
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState('');
+  const submit = () => { if (text.trim()) { onAdd(text.trim()); setText(''); setAdding(false); } };
+  if (!adding) {
+    return (
+      <div onClick={() => setAdding(true)} role="button"
+        className="rounded-2xl cursor-pointer flex items-center px-3"
+        style={{ minHeight: '62px', ...glassTileStyle }}>
+        <span className="text-sm text-gray-400 uppercase">+ Add subtask</span>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-2xl flex items-center gap-2 px-3" style={{ minHeight: '62px', ...glassTileStyle }}>
+      <input value={text} onChange={e => setText(e.target.value)} autoFocus
+        onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setAdding(false); setText(''); } }}
+        placeholder="NEW SUBTASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+      <button onClick={submit} disabled={!text.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
+      <button onClick={() => { setAdding(false); setText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
     </div>
   );
 }
@@ -2176,6 +2181,10 @@ export default function Home() {
   const [staffCost, setStaffCost] = useState<StaffCostData>(null);
   const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // Which pinned "ongoing project" rows have their checklist expanded (sibling
+  // tiles below, not nested inside the row) — see the Daily To Do render.
+  const [expandedPins, setExpandedPins] = useState<Set<string>>(new Set());
+  const togglePinExpanded = (id: string) => setExpandedPins(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   // Which of the four launcher widgets are expanded to full cards. Empty = all
   // collapsed to square tiles (resets every load by design).
   const [openWidgets, setOpenWidgets] = useState<Set<string>>(new Set());
@@ -2902,11 +2911,13 @@ export default function Home() {
                 onDelete: (id: string) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring),
                 onSwipeRight: () => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky),
                 onPin: !isViewingOtherDay && !task.isSticky ? () => handlePinTask(task.id, task.text) : undefined,
-                // Pinned tasks with a linked Projects DB page ("ongoing projects") get
-                // an expandable checklist instead of the free-text context editor.
-                subtasks: task.subtasks,
-                onToggleSubtask: task.projectId ? (blockId: string, checked: boolean) => toggleProjectSubtask(task.projectId!, blockId, checked) : undefined,
-                onAddSubtask: task.projectId ? (text: string) => handleAddSubtaskToPinned(task.projectId!, text) : undefined,
+                // Pinned tasks are highlighted (peach, same recipe as the Week Ahead
+                // today/selected row) so they stand out from the rest of the list.
+                highlight: task.isSticky,
+                // Pinned tasks with a linked Projects DB page ("ongoing projects") show
+                // a done/total badge; the checklist itself renders as sibling tiles
+                // below the row (see stickyItems render), not nested inside it.
+                subtaskCount: task.projectId ? { done: (task.subtasks || []).filter(s => s.checked).length, total: (task.subtasks || []).length } : undefined,
               });
 
               const tileStyle = { minHeight: '62px', ...glassTileStyle };
@@ -2917,10 +2928,28 @@ export default function Home() {
                       <SortableCheckItem key={task.id} {...itemProps(task, category)} />
                     ))}
                   </SortableContext>
-                  {/* Pinned (📌) tasks — parked at the bottom of the list, not draggable. */}
-                  {stickyItems.map(({ task, category }) => (
-                    <CheckItem key={task.id} {...itemProps(task, category)} />
-                  ))}
+                  {/* Pinned (📌) tasks — parked at the bottom of the list, not draggable,
+                      highlighted. Ones linked to a Projects DB page ("ongoing projects")
+                      expand into their checklist as sibling tiles underneath. */}
+                  {stickyItems.map(({ task, category }) => {
+                    if (!task.projectId) {
+                      return <CheckItem key={task.id} {...itemProps(task, category)} />;
+                    }
+                    const isOpen = expandedPins.has(task.id);
+                    return (
+                      <div key={task.id} className="space-y-2">
+                        <CheckItem {...itemProps(task, category)} onRowClick={() => togglePinExpanded(task.id)} />
+                        {isOpen && (
+                          <>
+                            {(task.subtasks || []).map(s => (
+                              <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} onChange={(sid, schecked) => toggleProjectSubtask(task.projectId!, sid, schecked)} />
+                            ))}
+                            <AddSubtaskRow onAdd={t => handleAddSubtaskToPinned(task.projectId!, t)} />
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                   {/* 🛒 Shopping List — collapsible tile with a count badge. Above the
                       checked bucket so it stays visible while there's shopping to do. */}
                   {!isViewingOtherDay && shoppingBadge > 0 && (
