@@ -50,16 +50,6 @@ interface Project {
   todos: Todo[];
 }
 
-// Editable draft produced from a brain-dump (by AI or manually) before it's
-// committed either as a new project or as actions on an existing one.
-interface ProjectDraft {
-  mode: 'new' | 'existing';
-  projectName: string;
-  matchProjectId: string;
-  matchProjectName: string;
-  actions: string[];
-}
-
 // TIGER OS Backlog — manual to-do tasks (Update widget). Subtasks reuse Todo.
 interface BacklogTask {
   id: string;
@@ -2173,10 +2163,6 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [braindump, setBraindump] = useState('');
-  const [analyzing, setAnalyzing] = useState(false);
-  const [draft, setDraft] = useState<ProjectDraft | null>(null);
-  const [promoting, setPromoting] = useState(false);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [staffCost, setStaffCost] = useState<StaffCostData>(null);
   const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
@@ -2667,7 +2653,7 @@ export default function Home() {
     window.location.assign(`claude://cowork/new?q=${encodeURIComponent(prompt)}&folder=${encodeURIComponent(REPO_FOLDER)}`);
   };
 
-  const toggleTodo = async (blockId: string, checked: boolean, section: 'daily' | 'project' | 'personal' | 'week', projectId?: string, date?: string, isSticky?: boolean) => {
+  const toggleTodo = async (blockId: string, checked: boolean, section: 'daily' | 'personal' | 'week', date?: string, isSticky?: boolean) => {
     if (blockId.startsWith('header-')) return;
     if (section === 'daily') {
       const linkedProjectId = data?.dailyTasks.find(t => t.id === blockId)?.projectId;
@@ -2686,9 +2672,6 @@ export default function Home() {
       // Persistent tasks tick off permanently (_sticky_done) even from another day's
       // view, matching the Daily To Do — otherwise they'd resurface the next day.
       syncCheckedState(blockId, isSticky ? '_sticky_done' : date, checked);
-    } else if (section === 'project' && projectId) {
-      setData(prev => prev ? { ...prev, projects: prev.projects.map(p => p.id === projectId ? { ...p, todos: p.todos.map(t => t.id === blockId ? { ...t, checked } : t) } : p) } : prev);
-      await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
     } else if (section === 'personal') {
       setData(prev => prev ? { ...prev, personalTodos: prev.personalTodos.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
       await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
@@ -2711,65 +2694,6 @@ export default function Home() {
     if (!text.trim()) return;
     await fetch('/api/add-project-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, text: text.trim() }) });
     await refreshAfterMutation({ dashboard: true });
-  };
-
-  // ── Brain-dump capture ──────────────────────────────────────────────
-  // Ask the AI to turn the raw dump into an editable draft (name + actions,
-  // new-vs-existing routing). Falls back to a manual new-project draft on error.
-  const handleAnalyze = async () => {
-    const idea = braindump.trim();
-    if (!idea || !data) return;
-    setAnalyzing(true);
-    try {
-      const res = await fetch('/api/braindump-analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ideaText: idea, existingProjects: data.projects.map(p => ({ id: p.id, name: p.name })) }),
-      });
-      const d = await res.json();
-      if (!res.ok || d.error) throw new Error(d.error || 'analyze failed');
-      setDraft({
-        mode: d.mode === 'existing' ? 'existing' : 'new',
-        projectName: d.projectName || idea,
-        matchProjectId: d.matchProjectId || '',
-        matchProjectName: d.matchProjectName || '',
-        actions: (d.actions?.length ? d.actions : ['']),
-      });
-    } catch {
-      // AI unavailable — drop into a manual draft rather than blocking capture.
-      setDraft({ mode: 'new', projectName: idea, matchProjectId: '', matchProjectName: '', actions: [''] });
-    }
-    setAnalyzing(false);
-  };
-
-  // Skip AI, edit by hand.
-  const handleManualDraft = () => {
-    const idea = braindump.trim();
-    if (!idea) return;
-    setDraft({ mode: 'new', projectName: idea, matchProjectId: '', matchProjectName: '', actions: ['', '', ''] });
-  };
-
-  const updateDraft = (patch: Partial<ProjectDraft>) => setDraft(prev => prev ? { ...prev, ...patch } : prev);
-  const setDraftAction = (i: number, val: string) => setDraft(prev => prev ? { ...prev, actions: prev.actions.map((a, idx) => idx === i ? val : a) } : prev);
-  const addDraftAction = () => setDraft(prev => prev ? { ...prev, actions: [...prev.actions, ''] } : prev);
-  const removeDraftAction = (i: number) => setDraft(prev => prev ? { ...prev, actions: prev.actions.filter((_, idx) => idx !== i) } : prev);
-  const cancelDraft = () => { setDraft(null); };
-
-  // Commit the draft: append to an existing project, or create a new one.
-  const handleCreateProject = async () => {
-    if (!draft) return;
-    const actions = draft.actions.map(a => a.trim()).filter(Boolean);
-    if (draft.mode === 'existing') {
-      if (!draft.matchProjectId || actions.length === 0) return;
-      setPromoting(true);
-      await fetch('/api/add-project-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: draft.matchProjectId, texts: actions }) });
-    } else {
-      if (!draft.projectName.trim()) return;
-      setPromoting(true);
-      await fetch('/api/braindump', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectName: draft.projectName.trim(), nextActions: actions, ideaText: braindump }) });
-    }
-    await refreshAfterMutation({ dashboard: true });
-    setBraindump(''); setDraft(null); setPromoting(false);
   };
 
   if (loading) return (
@@ -2907,7 +2831,7 @@ export default function Home() {
                 context: taskContext[task.id],
                 onContextSave: handleContextSave,
                 isSticky: task.isSticky,
-                onChange: (id: string, checked: boolean) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', undefined, isViewingOtherDay ? selectedDate! : undefined, task.isSticky),
+                onChange: (id: string, checked: boolean) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isSticky),
                 onDelete: (id: string) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring),
                 onSwipeRight: () => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky),
                 onPin: !isViewingOtherDay && !task.isSticky ? () => handlePinTask(task.id, task.text) : undefined,
@@ -2991,7 +2915,6 @@ export default function Home() {
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
         <div className="md:col-span-2 grid grid-cols-3 md:grid-cols-6 gap-3">
           <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />
-          <LauncherTile icon={<WidgetIcon name="projects" chip={48} glyph={26} />} title="Projects" active={openWidgets.has('projects')} onClick={() => toggleWidget('projects')} />
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
           <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
           <LauncherTile icon={<WidgetIcon name="food" chip={48} glyph={26} />} title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
@@ -3058,56 +2981,6 @@ export default function Home() {
               )}
             </div>
           </Card>
-        </div>
-
-        {/* PROJECTS — always in DOM */}
-        <div style={{ display: openWidgets.has('projects') ? 'block' : 'none' }}>
-        <Card bare icon={<WidgetIcon name="projects" chip={28} glyph={17} />} title="Projects" onCollapse={() => toggleWidget('projects')}>
-         <div className="uppercase">
-          {/* ── Capture zone ── */}
-          {!draft ? (
-            <div className="space-y-2 mb-3">
-              <textarea value={braindump} onChange={e => setBraindump(e.target.value)} placeholder="Drop an idea" style={{ ...TILE_STYLE, minHeight: '62px' }} className="w-full rounded-2xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 uppercase resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" rows={1} />
-              {braindump.trim() && (
-                <div className="flex gap-2 items-center">
-                  <button onClick={handleAnalyze} disabled={analyzing} className="text-xs disabled:opacity-50 px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>{analyzing ? 'Drafting…' : '✨ Draft with AI'}</button>
-                  <button onClick={handleManualDraft} disabled={analyzing} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2 uppercase transition-colors">Skip → manual</button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-2 mb-3 rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
-              <p className="text-xs text-gray-400 italic">&ldquo;{braindump}&rdquo;</p>
-              {/* new vs existing toggle */}
-              <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(0,0,0,0.04)' }}>
-                <button onClick={() => updateDraft({ mode: 'new' })} className={`flex-1 text-xs py-1.5 rounded-md font-semibold uppercase transition-colors ${draft.mode === 'new' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}>New project</button>
-                <button onClick={() => updateDraft({ mode: 'existing', matchProjectId: draft.matchProjectId || data.projects[0]?.id || '' })} disabled={data.projects.length === 0} className={`flex-1 text-xs py-1.5 rounded-md font-semibold uppercase transition-colors disabled:opacity-40 ${draft.mode === 'existing' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}>Add to existing</button>
-              </div>
-              {draft.mode === 'new' ? (
-                <input value={draft.projectName} onChange={e => updateDraft({ projectName: e.target.value })} placeholder="Project name" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }} className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
-              ) : (
-                <select value={draft.matchProjectId} onChange={e => updateDraft({ matchProjectId: e.target.value })} style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }} className="w-full rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all">
-                  {data.projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              )}
-              {draft.actions.map((action, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <input value={action} onChange={e => setDraftAction(i, e.target.value)} placeholder={`Next action ${i + 1}`} style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }} className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
-                  <button onClick={() => removeDraftAction(i)} className="text-gray-300 hover:text-gray-500 transition-colors text-lg leading-none shrink-0">&times;</button>
-                </div>
-              ))}
-              <button onClick={addDraftAction} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">+ Add action</button>
-              <div className="flex gap-2 pt-1">
-                <button onClick={handleCreateProject} disabled={promoting || (draft.mode === 'new' ? !draft.projectName.trim() : (!draft.matchProjectId || draft.actions.every(a => !a.trim())))} className="text-xs disabled:opacity-40 px-4 py-2 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>{promoting ? (draft.mode === 'existing' ? 'Adding…' : 'Creating…') : (draft.mode === 'existing' ? 'Add Actions' : 'Create Project')}</button>
-                <button onClick={cancelDraft} className="text-xs text-gray-400 hover:text-gray-600 px-3 py-2 transition-colors font-bold uppercase tracking-wider">Cancel</button>
-              </div>
-            </div>
-          )}
-          <p className="text-xs text-gray-400 italic normal-case">
-            Pin a Daily To Do task (📌) to turn it into an ongoing project — it&rsquo;ll show there as an expandable row with its own checklist.
-          </p>
-         </div>
-        </Card>
         </div>
 
         {/* TIGER OS UPDATES — always in DOM */}
