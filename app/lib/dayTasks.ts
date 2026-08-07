@@ -55,15 +55,19 @@ export type ParsedTask = {
   isSticky?: boolean;
 };
 
-// [STICKY] or [STICKY:YYYY-MM-DD] text — persistent one-off task. Skipped here
-// (handled by /api/dashboard's cross-page scan, same approach as [CARRY] but with
-// no retention window: once ticked off it's recorded permanently in the checked-state
-// JSON under "_sticky_done" and never resurfaces). The optional date is the day the
-// task was added from — it "starts showing" from that date onward (today < date
-// means not visible yet). Older [STICKY] blocks with no date show immediately, same
-// as before.
+// [STICKY], [STICKY:YYYY-MM-DD], or [STICKY:YYYY-MM-DD:projectId] text — persistent
+// one-off task. Skipped here (handled by /api/dashboard's cross-page scan, same
+// approach as [CARRY] but with no retention window: once ticked off it's recorded
+// permanently in the checked-state JSON under "_sticky_done" and never resurfaces).
+// The optional date is the day the task was added from — it "starts showing" from
+// that date onward (today < date means not visible yet). Older [STICKY] blocks with
+// no date show immediately, same as before. The optional trailing projectId (a
+// Notion page UUID) links the pin to a page in the Projects DB, created by
+// /api/pin-task — its child to_do checklist renders as expandable subtasks on the
+// pinned row in Daily To Do ("ongoing project" behaviour). Absent on older pins
+// made before this existed; those still show as plain (non-expandable) pins.
 export const STICKY_PREFIX = '[STICKY]';
-export const STICKY_PREFIX_RE = /^\[STICKY(?::(\d{4}-\d{2}-\d{2}))?\]\s*/;
+export const STICKY_PREFIX_RE = /^\[STICKY(?::(\d{4}-\d{2}-\d{2}))?(?::([0-9a-fA-F-]{32,36}))?\]\s*/;
 
 // Tasks whose text starts with "Review pricing" are margin-review follow-ups
 // surfaced by the Coffee/Food Costings card (e.g. "Review pricing – Beef Sandwich

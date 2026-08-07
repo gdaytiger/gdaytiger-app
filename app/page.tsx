@@ -35,6 +35,12 @@ interface Todo {
   // /api/check-shopping), NOT from the date-keyed server state. applyServerChecked
   // must skip these so it doesn't reset them to unchecked on every refresh.
   isShopping?: boolean;
+  // Linked Notion Projects DB page — set when this task was pinned (📌) and a
+  // project was created for it (see handlePinTask / /api/pin-task). Its checklist
+  // arrives pre-attached as `subtasks` from /api/dashboard, and renders inline as
+  // an expandable "ongoing project" on the pinned row in Daily To Do.
+  projectId?: string;
+  subtasks?: Todo[];
 }
 
 interface Project {
@@ -408,7 +414,7 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, label, context, onContextSave, isSticky }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, label, context, onContextSave, isSticky, subtasks, onToggleSubtask, onAddSubtask }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
@@ -423,6 +429,12 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   // True when task is a [STICKY] block or auto-pinned (e.g. "Review pricing" text).
   // Shows a static 📌 badge instead of the tappable pin button.
   isSticky?: boolean;
+  // When present (even empty), this row is a pinned "ongoing project" — its checklist
+  // from the linked Projects DB page. Tapping the row expands the checklist (and a
+  // chevron + done-count show) instead of the free-text context editor.
+  subtasks?: Todo[];
+  onToggleSubtask?: (blockId: string, checked: boolean) => void;
+  onAddSubtask?: (text: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
@@ -436,6 +448,10 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [localContext, setLocalContext] = useState(context ?? '');
+  const [addingSub, setAddingSub] = useState(false);
+  const [newSubText, setNewSubText] = useState('');
+  const isProject = subtasks !== undefined;
+  const submitSub = () => { if (newSubText.trim()) { onAddSubtask?.(newSubText.trim()); setNewSubText(''); setAddingSub(false); } };
   const THRESHOLD = 90;
 
   // Reset the local draft when the incoming context prop changes. Done during
@@ -672,11 +688,39 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         </div>
         {isSticky && <span className="shrink-0 text-xs mt-0.5 leading-none" title="Persistent — stays until ticked off">📌</span>}
         {!isSticky && !checked && onPin && <button onClick={e => { e.stopPropagation(); onPin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-60 hover:!opacity-100 mt-0.5" aria-label="Pin task" title="Make persistent — stays until ticked off" style={{ fontSize: '13px' }}>📌</button>}
-        {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
+        {isProject && subtasks!.length > 0 && <span className="shrink-0 text-xs text-gray-400 tabular-nums mt-0.5">{subtasks!.filter(s => s.checked).length}/{subtasks!.length}</span>}
+        {isProject && <span className="shrink-0 text-gray-400" style={{ fontSize: '10px', width: '10px' }}>{expanded ? '▼' : '▶'}</span>}
+        {context && !expanded && !isProject && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
         {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
         {!isMobile && onDelete && <button onClick={e => { e.stopPropagation(); onDelete(id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Delete" title="Delete">✕</button>}
       </div>
-      {expanded && (
+      {expanded && isProject && (
+        <div className="px-4 pb-3 space-y-2" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}>
+          <div className="pt-2 space-y-2">
+            {subtasks!.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">No subtasks yet</p>
+            ) : (
+              subtasks!.map(s => (
+                <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} onChange={(sid, schecked) => onToggleSubtask?.(sid, schecked)} />
+              ))
+            )}
+            {addingSub ? (
+              <div className="flex gap-2 mt-1">
+                <input value={newSubText} onChange={e => setNewSubText(e.target.value)} autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') submitSub(); if (e.key === 'Escape') { setAddingSub(false); setNewSubText(''); } }}
+                  placeholder="New subtask..." className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
+                <button onClick={submitSub} disabled={!newSubText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
+                <button onClick={() => { setAddingSub(false); setNewSubText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
+              </div>
+            ) : (
+              <button onClick={() => setAddingSub(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors uppercase">+ Add subtask</button>
+            )}
+          </div>
+        </div>
+      )}
+      {expanded && !isProject && (
         <div className="px-4 pb-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
           onMouseDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}>
@@ -2132,9 +2176,6 @@ export default function Home() {
   const [staffCost, setStaffCost] = useState<StaffCostData>(null);
   const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [addingActionFor, setAddingActionFor] = useState<string | null>(null);
-  const [newActionText, setNewActionText] = useState('');
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   // Which of the four launcher widgets are expanded to full cards. Empty = all
   // collapsed to square tiles (resets every load by design).
   const [openWidgets, setOpenWidgets] = useState<Set<string>>(new Set());
@@ -2576,19 +2617,6 @@ export default function Home() {
   // Mobile has no chat/Cowork deep link (claude:// is Code-only on phones), so
   // we copy the task to the clipboard and open Claude to paste.
   const REPO_FOLDER = '/Users/gdaytiger/gdaytiger-app';
-  const delegateToClaude = (project: Project, todo: Todo) => {
-    const prompt = `I'm working on my café's project "${project.name}" in TIGER OS. Help me with this action item:\n\n"${todo.text}"`;
-    const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile) {
-      navigator.clipboard?.writeText(prompt).catch(() => {});
-      setDelegateToast('Task copied — paste it into Claude');
-      setTimeout(() => setDelegateToast(null), 4000);
-      window.location.assign('https://claude.ai/new');
-      return;
-    }
-    const url = `claude://cowork/new?q=${encodeURIComponent(prompt)}&folder=${encodeURIComponent(REPO_FOLDER)}`;
-    window.location.assign(url);
-  };
 
   // ── TIGER OS Backlog (Update widget) handlers ──
   const fetchTigerTasks = async () => {
@@ -2630,37 +2658,20 @@ export default function Home() {
     window.location.assign(`claude://cowork/new?q=${encodeURIComponent(prompt)}&folder=${encodeURIComponent(REPO_FOLDER)}`);
   };
 
-  const STATUS_CYCLE = ['In Progress', 'Blocked', 'On Hold', 'Done'];
-  const handleStatusChange = async (projectId: string, currentStatus: string) => {
-    const idx = STATUS_CYCLE.indexOf(currentStatus);
-    const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
-    setData(prev => prev ? { ...prev, projects: prev.projects.map(p => p.id === projectId ? { ...p, status: next } : p) } : prev);
-    if (next === 'Done') setTimeout(() => setData(prev => prev ? { ...prev, projects: prev.projects.filter(p => p.id !== projectId) } : prev), 600);
-    await fetch('/api/project-status', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, status: next }) });
-  };
-
-  // Archive (move to Notion trash). Triggered by swiping the project tile left —
-  // the swipe past threshold is the confirm, same as deleting a task.
-  const handleArchiveProject = async (projectId: string) => {
-    setData(prev => prev ? { ...prev, projects: prev.projects.filter(p => p.id !== projectId) } : prev);
-    await fetch('/api/archive-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId }) });
-  };
-
-  const handleAddProjectAction = async (projectId: string, text: string) => {
-    if (!text.trim()) return;
-    await fetch('/api/add-project-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, text: text.trim() }) });
-    await refreshAfterMutation({ dashboard: true });
-    setAddingActionFor(null);
-    setNewActionText('');
-  };
-
   const toggleTodo = async (blockId: string, checked: boolean, section: 'daily' | 'project' | 'personal' | 'week', projectId?: string, date?: string, isSticky?: boolean) => {
     if (blockId.startsWith('header-')) return;
     if (section === 'daily') {
+      const linkedProjectId = data?.dailyTasks.find(t => t.id === blockId)?.projectId;
       setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
       // Persistent tasks: record completion permanently under "_sticky_done" instead
       // of today's date, so it never resurfaces (no 8-day expiry, unlike a normal tick).
       syncCheckedState(blockId, isSticky ? '_sticky_done' : todayStr, checked);
+      // Ticking off a pinned "ongoing project" task closes out its linked Projects DB
+      // page too, so it drops out of getProjects() (Done is excluded there) and the
+      // row disappears cleanly instead of leaving an orphaned open project behind.
+      if (checked && linkedProjectId) {
+        fetch('/api/project-status', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: linkedProjectId, status: 'Done' }) }).catch(() => {});
+      }
     } else if (section === 'week' && date) {
       setWeekTasks(prev => ({ ...prev, [date]: { ...prev[date], tasks: prev[date].tasks.map(t => t.id === blockId ? { ...t, checked } : t) } }));
       // Persistent tasks tick off permanently (_sticky_done) even from another day's
@@ -2673,6 +2684,24 @@ export default function Home() {
       setData(prev => prev ? { ...prev, personalTodos: prev.personalTodos.map(t => t.id === blockId ? { ...t, checked } : t) } : prev);
       await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
     }
+  };
+
+  // ── Pinned "ongoing project" subtasks (expandable checklist on a Daily To Do
+  // row) — the checklist lives on the linked Projects DB page's child to_do
+  // blocks, found via task.projectId (see /api/dashboard's sticky→project match). ──
+  const toggleProjectSubtask = async (projectId: string, blockId: string, checked: boolean) => {
+    setData(prev => prev ? {
+      ...prev,
+      dailyTasks: prev.dailyTasks.map(t => t.projectId === projectId
+        ? { ...t, subtasks: (t.subtasks || []).map(s => s.id === blockId ? { ...s, checked } : s) }
+        : t),
+    } : prev);
+    await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
+  };
+  const handleAddSubtaskToPinned = async (projectId: string, text: string) => {
+    if (!text.trim()) return;
+    await fetch('/api/add-project-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, text: text.trim() }) });
+    await refreshAfterMutation({ dashboard: true });
   };
 
   // ── Brain-dump capture ──────────────────────────────────────────────
@@ -2771,8 +2800,6 @@ export default function Home() {
     if (!inShoppingSection) dailyTasks.push(t);
   }
   const dailyDone = dailyTasks.filter(t => t.checked).length;
-  const projectsDone = data.projects.flatMap(p => p.todos).filter(t => t.checked).length;
-  const projectsTotal = data.projects.flatMap(p => p.todos).length;
 
   // Live margin lookup for "Review pricing" to-dos — see withLiveReviewMargin.
   // Use costings (30-min Notion sync, all products) rather than marginReview.items
@@ -2875,6 +2902,11 @@ export default function Home() {
                 onDelete: (id: string) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring),
                 onSwipeRight: () => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky),
                 onPin: !isViewingOtherDay && !task.isSticky ? () => handlePinTask(task.id, task.text) : undefined,
+                // Pinned tasks with a linked Projects DB page ("ongoing projects") get
+                // an expandable checklist instead of the free-text context editor.
+                subtasks: task.subtasks,
+                onToggleSubtask: task.projectId ? (blockId: string, checked: boolean) => toggleProjectSubtask(task.projectId!, blockId, checked) : undefined,
+                onAddSubtask: task.projectId ? (text: string) => handleAddSubtaskToPinned(task.projectId!, text) : undefined,
               });
 
               const tileStyle = { minHeight: '62px', ...glassTileStyle };
@@ -2930,7 +2962,7 @@ export default function Home() {
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
         <div className="md:col-span-2 grid grid-cols-3 md:grid-cols-6 gap-3">
           <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />
-          <LauncherTile icon={<WidgetIcon name="projects" chip={48} glyph={26} />} title="Projects" badgeText={`${projectsDone}/${projectsTotal}`} alert={data.projects.some(p => p.status === 'Blocked')} active={openWidgets.has('projects')} onClick={() => toggleWidget('projects')} />
+          <LauncherTile icon={<WidgetIcon name="projects" chip={48} glyph={26} />} title="Projects" active={openWidgets.has('projects')} onClick={() => toggleWidget('projects')} />
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
           <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
           <LauncherTile icon={<WidgetIcon name="food" chip={48} glyph={26} />} title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
@@ -3042,52 +3074,9 @@ export default function Home() {
               </div>
             </div>
           )}
-
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] font-bold tracking-widest uppercase text-gray-400">Ongoing</span>
-            <span className="text-xs text-gray-400">{projectsDone}/{projectsTotal} actions done</span>
-          </div>
-          <div className="space-y-2">
-            {data.projects.length === 0 ? <p className="text-sm text-gray-400 italic">No active projects</p> : (
-              data.projects.map(project => {
-                const isOpen = expandedProjects.has(project.id);
-                const toggleOpen = () => setExpandedProjects(prev => { const n = new Set(prev); if (n.has(project.id)) n.delete(project.id); else n.add(project.id); return n; });
-                const pDone = project.todos.filter(t => t.checked).length;
-                return (
-                <div key={project.id} className="space-y-2">
-                  {/* PROJECT TILE — swipe left to archive, tap to drop down its actions */}
-                  <SwipeToDelete onDelete={() => handleArchiveProject(project.id)} onClick={toggleOpen}>
-                    <div className="px-4 flex items-center gap-2 cursor-pointer" style={{ minHeight: '62px' }}>
-                      <span className="text-sm font-semibold text-gray-900 flex-1 min-w-0">{project.name}</span>
-                      <span className="text-xs text-gray-400 shrink-0">{pDone}/{project.todos.length}</span>
-                      <button onClick={e => { e.stopPropagation(); handleStatusChange(project.id, project.status); }} title="Click to cycle status" className={`text-xs px-2 py-0.5 rounded-full font-medium uppercase transition-colors cursor-pointer shrink-0 ${project.status === 'In Progress' ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : project.status === 'Blocked' ? 'bg-red-100 text-red-600 hover:bg-red-200' : project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' : 'bg-green-100 text-green-600 hover:bg-green-200'}`}>{project.status}</button>
-                      <span className="text-gray-400" style={{ fontSize: '10px', width: '10px', flexShrink: 0 }}>{isOpen ? '▼' : '▶'}</span>
-                    </div>
-                  </SwipeToDelete>
-                  {/* DROPDOWN — action tiles (full width, same size as task tiles) */}
-                  {isOpen && (
-                    <div className="space-y-2">
-                      {project.todos.length === 0 ? <p className="text-xs text-gray-400 italic ml-1">No actions set</p> : (
-                        project.todos.map(todo => (
-                          <CheckItem key={todo.id} id={todo.id} text={todo.text} checked={todo.checked} onChange={(id, checked) => toggleTodo(id, checked, 'project', project.id)} onDelegate={() => delegateToClaude(project, todo)} />
-                        ))
-                      )}
-                      {addingActionFor === project.id ? (
-                        <div className="flex gap-2 mt-1">
-                          <input value={newActionText} onChange={e => setNewActionText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddProjectAction(project.id, newActionText); if (e.key === 'Escape') { setAddingActionFor(null); setNewActionText(''); } }} placeholder="New action..." autoFocus className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                          <button onClick={() => handleAddProjectAction(project.id, newActionText)} disabled={!newActionText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
-                          <button onClick={() => { setAddingActionFor(null); setNewActionText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
-                        </div>
-                      ) : (
-                        <button onClick={() => { setAddingActionFor(project.id); setNewActionText(''); }} className="text-xs text-gray-400 hover:text-gray-600 transition-colors uppercase">+ Add action</button>
-                      )}
-                    </div>
-                  )}
-                </div>
-                );
-              })
-            )}
-          </div>
+          <p className="text-xs text-gray-400 italic normal-case">
+            Pin a Daily To Do task (📌) to turn it into an ongoing project — it&rsquo;ll show there as an expandable row with its own checklist.
+          </p>
          </div>
         </Card>
         </div>

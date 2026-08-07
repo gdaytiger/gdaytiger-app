@@ -107,7 +107,7 @@ async function fetchCarryAndStickyCandidates(today: Date) {
   );
 
   const carry: { id: string; text: string; header: string }[] = [];
-  const sticky: { id: string; text: string; header: string; startDate: string | null }[] = [];
+  const sticky: { id: string; text: string; header: string; startDate: string | null; projectId: string | null }[] = [];
   const seenIds = new Set<string>();
 
   for (const data of pages) {
@@ -139,7 +139,7 @@ async function fetchCarryAndStickyCandidates(today: Date) {
       const stickyMatch = raw.match(STICKY_PREFIX_RE);
       if (stickyMatch) {
         seenIds.add(block.id);
-        sticky.push({ id: block.id, text: raw.replace(STICKY_PREFIX_RE, '').trim(), header: currentHeader, startDate: stickyMatch[1] || null });
+        sticky.push({ id: block.id, text: raw.replace(STICKY_PREFIX_RE, '').trim(), header: currentHeader, startDate: stickyMatch[1] || null, projectId: stickyMatch[2] || null });
       }
     }
   }
@@ -270,8 +270,23 @@ export async function GET() {
   const stickies = stickyCandidates.filter(c =>
     !stickyDone.includes(c.id) && (!c.startDate || c.startDate <= todayStr)
   );
+  // Pinned tasks created via /api/pin-task carry a linked Projects DB page id
+  // (see STICKY_PREFIX_RE). Where that project is still open (getProjects() above
+  // already excludes Status=Done), attach its checklist as `subtasks` so the pinned
+  // row can expand into an "ongoing project" view in Daily To Do. No match (project
+  // completed/archived/older pin with no linked project) just renders as a plain pin.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const projectMap = new Map(projects.map((p: any) => [p.id, p]));
   for (const sticky of stickies) {
-    const stickyTask = { id: sticky.id, text: sticky.text, checked: false, isRecurring: false, isSticky: true };
+    const linkedProject = sticky.projectId ? projectMap.get(sticky.projectId) : undefined;
+    const stickyTask = {
+      id: sticky.id,
+      text: sticky.text,
+      checked: false,
+      isRecurring: false,
+      isSticky: true,
+      ...(linkedProject ? { projectId: sticky.projectId, subtasks: linkedProject.todos } : {}),
+    };
     const headerIdx = dailyTasks.findIndex((t: { isHeader?: boolean; text: string }) => t.isHeader && t.text === sticky.header);
     if (headerIdx !== -1) {
       dailyTasks.splice(headerIdx + 1, 0, stickyTask);
