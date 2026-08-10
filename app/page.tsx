@@ -2691,6 +2691,15 @@ export default function Home() {
     } : prev);
     await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
   };
+  const handleDeleteSubtask = async (projectId: string, blockId: string) => {
+    setData(prev => prev ? {
+      ...prev,
+      dailyTasks: prev.dailyTasks.map(t => t.projectId === projectId
+        ? { ...t, subtasks: (t.subtasks || []).filter(s => s.id !== blockId) }
+        : t),
+    } : prev);
+    await fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) });
+  };
   const handleAddSubtaskToPinned = async (projectId: string, text: string) => {
     if (!text.trim()) return;
     await fetch('/api/add-project-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, text: text.trim() }) });
@@ -2867,7 +2876,12 @@ export default function Home() {
                         {isOpen && (
                           <>
                             {(task.subtasks || []).map(s => (
-                              <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} onChange={(sid, schecked) => toggleProjectSubtask(task.projectId!, sid, schecked)} />
+                              <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked}
+                                onChange={(sid, schecked) => toggleProjectSubtask(task.projectId!, sid, schecked)}
+                                onDelete={(sid) => handleDeleteSubtask(task.projectId!, sid)}
+                                context={taskContext[s.id]}
+                                onContextSave={handleContextSave}
+                              />
                             ))}
                             <AddSubtaskRow onAdd={t => handleAddSubtaskToPinned(task.projectId!, t)} />
                           </>
