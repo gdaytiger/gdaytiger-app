@@ -405,7 +405,7 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, onUnpin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
@@ -414,6 +414,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   // Tapping the 📌 button converts this task to a [STICKY:date] persistent task
   // via /api/pin-task. Only offered when !isSticky (already-persistent tasks skip it).
   onPin?: () => void;
+  // Tapping the 📌 badge on an already-pinned task reverts it to a plain task via
+  // /api/unpin-task. Only offered when isSticky. When present, the static badge
+  // becomes a hover-revealed button (same as onPin); without it, isSticky still
+  // shows the plain non-interactive badge.
+  onUnpin?: () => void;
   label?: string;
   context?: string;
   onContextSave?: (id: string, text: string) => void;
@@ -682,7 +687,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           </div>
           {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
         </div>
-        {isSticky && <span className="shrink-0 text-xs mt-0.5 leading-none opacity-0 group-hover:opacity-100 transition-opacity" title="Persistent — stays until ticked off">📌</span>}
+        {isSticky && (onUnpin ? (
+          <button onClick={e => { e.stopPropagation(); onUnpin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Unpin task" title="Unpin — back to a normal task" style={{ fontSize: '13px' }}>📌</button>
+        ) : (
+          <span className="shrink-0 text-xs mt-0.5 leading-none opacity-0 group-hover:opacity-100 transition-opacity" title="Persistent — stays until ticked off">📌</span>
+        ))}
         {!isSticky && !checked && onPin && <button onClick={e => { e.stopPropagation(); onPin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-60 hover:!opacity-100 mt-0.5" aria-label="Pin task" title="Make persistent — stays until ticked off" style={{ fontSize: '13px' }}>📌</button>}
         {subtaskCount && subtaskCount.total > 0 && <span className="shrink-0 text-xs text-gray-400 tabular-nums mt-0.5">{subtaskCount.done}/{subtaskCount.total}</span>}
         {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
@@ -2550,6 +2559,20 @@ export default function Home() {
       .catch(() => {});
   };
 
+  // Reverse of handlePinTask — strips the [STICKY...] prefix via /api/unpin-task,
+  // reverting to a plain task. If it was an "ongoing project" (had a linked
+  // Projects DB page), that page is archived too (recoverable, 30-day Notion
+  // trash) rather than left orphaned with its checklist invisible everywhere.
+  const handleUnpinTask = (blockId: string, text: string, projectId?: string) => {
+    setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, isSticky: false, projectId: undefined, subtasks: undefined } : t) } : prev);
+    fetch('/api/unpin-task', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, text }) })
+      .then(() => refreshAfterMutation({ dashboard: true }))
+      .catch(() => {});
+    if (projectId) {
+      fetch('/api/archive-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId }) }).catch(() => {});
+    }
+  };
+
   const handleMoveToDay = async (blockId: string, text: string, targetDate: string, isRecurring?: boolean, fromDate?: string, category?: string, isSticky?: boolean) => {
     const sourceDate = fromDate ?? todayStr;
     if (sourceDate === todayStr) {
@@ -2845,6 +2868,11 @@ export default function Home() {
                 onDelete: (id: string) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring),
                 onSwipeRight: () => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky),
                 onPin: !isViewingOtherDay && !task.isSticky ? () => handlePinTask(task.id, task.text) : undefined,
+                // "Review pricing" tasks are auto-pinned by content (isReviewPricingTask in
+                // dayTasks.ts), not by a [STICKY] prefix — unpinning would just get
+                // re-flagged as sticky on the next load, so unpin isn't offered on those.
+                onUnpin: !isViewingOtherDay && task.isSticky && !/^review pricing\b/i.test(task.text.trim())
+                  ? () => handleUnpinTask(task.id, task.text, task.projectId) : undefined,
                 // Pinned tasks are highlighted (peach, same recipe as the Week Ahead
                 // today/selected row) so they stand out from the rest of the list.
                 highlight: task.isSticky,
