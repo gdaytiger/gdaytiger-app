@@ -682,7 +682,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           </div>
           {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
         </div>
-        {isSticky && <span className="shrink-0 text-xs mt-0.5 leading-none" title="Persistent — stays until ticked off">📌</span>}
+        {isSticky && <span className="shrink-0 text-xs mt-0.5 leading-none opacity-0 group-hover:opacity-100 transition-opacity" title="Persistent — stays until ticked off">📌</span>}
         {!isSticky && !checked && onPin && <button onClick={e => { e.stopPropagation(); onPin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-60 hover:!opacity-100 mt-0.5" aria-label="Pin task" title="Make persistent — stays until ticked off" style={{ fontSize: '13px' }}>📌</button>}
         {subtaskCount && subtaskCount.total > 0 && <span className="shrink-0 text-xs text-gray-400 tabular-nums mt-0.5">{subtaskCount.done}/{subtaskCount.total}</span>}
         {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
