@@ -1124,16 +1124,23 @@ function parseRediMilkText(text, log) {
   const results = {};
   const blob    = text.replace(/\r/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ');
 
+  // keyword may be a string OR an array of aliases (Redi Milk renames products,
+  // e.g. Alternative Dairy → Alt.Dairy.Co → ADC). Tries each alias in order and
+  // returns the first that resolves to a plausible unit price.
   function findUnitPrice(keyword) {
-    const idx = blob.toUpperCase().indexOf(keyword.toUpperCase());
-    if (idx === -1) return null;
-    // Cap the window so a missing keyword can't scan half the invoice; the
-    // unit price always sits within ~120 chars of the product name.
-    const after = blob.substring(idx + keyword.length, idx + keyword.length + 120);
-    const nums = after.match(/\d+\.\d{2}(?!\d)/g);   // 2-dp money only; excludes 4-dp SC%
-    if (!nums || nums.length === 0) return null;
-    const price = parseFloat(nums[0]);               // first money value = unit price
-    return (price > 0.5 && price < 500) ? price : null;
+    const aliases = Array.isArray(keyword) ? keyword : [keyword];
+    for (const alias of aliases) {
+      const idx = blob.toUpperCase().indexOf(alias.toUpperCase());
+      if (idx === -1) continue;
+      // Cap the window so a missing keyword can't scan half the invoice; the
+      // unit price always sits within ~120 chars of the product name.
+      const after = blob.substring(idx + alias.length, idx + alias.length + 120);
+      const nums = after.match(/\d+\.\d{2}(?!\d)/g);   // 2-dp money only; excludes 4-dp SC%
+      if (!nums || nums.length === 0) continue;
+      const price = parseFloat(nums[0]);               // first money value = unit price
+      if (price > 0.5 && price < 500) return price;
+    }
+    return null;
   }
 
   // Single source of truth: cell ↔ product keyword.
@@ -1141,8 +1148,12 @@ function parseRediMilkText(text, log) {
     D5: 'SUNGOLD JERSEY',
     D6: 'SUNGOLD LOWFAT',
     D7: 'HAPPY HAPPY SOY',
-    D8: 'ALT.DAIRY.CO OAT',
-    D9: 'ALT.DAIRY.CO ALMOND',
+    // Aliases tried in order; bare 'OAT'/'ALMOND' are a catch-all so a future
+    // brand rename (Alternative Dairy → Alt.Dairy.Co → ADC → ?) still matches.
+    // Safe because no other Redi Milk line contains those words. If they ever add
+    // a SECOND oat/almond product, tighten these back to the specific names.
+    D8: ['ADC OAT', 'ALT.DAIRY.CO OAT', 'OAT'],
+    D9: ['ADC ALMOND', 'ALT.DAIRY.CO ALMOND', 'ALMOND'],
     D10: 'DVDL THICK CREAM'
   };
   Object.keys(RM_KEYWORDS).forEach(cell => {
@@ -1176,7 +1187,11 @@ function parseRediMilkText(text, log) {
 // Records only; never blocks the scan.
 function flagRediMilkNewSkus_(text, keywords, log) {
   if (!text) return;
-  const known = Object.keys(keywords).map(function (c) { return keywords[c].toUpperCase(); });
+  const known = [];
+  Object.keys(keywords).forEach(function (c) {
+    const v = keywords[c];
+    (Array.isArray(v) ? v : [v]).forEach(function (k) { known.push(k.toUpperCase()); });
+  });
   // Footer/summary rows that slip through the uppercase filter (belt & braces).
   const IGNORE = /fuel|levy|total|balance|gst|eft|bsb|cba|account|bank|paid|outstanding|transaction|surcharge|previous|docket|adjustment|reference|printed|page|amount|terms|customer|week|delivery|invoice|remittance/i;
   // OCR concatenates all product rows onto one line, so work on the collapsed blob.
@@ -1216,7 +1231,8 @@ function flagRediMilkBleed_(text, results, keywords, log) {
   });
   Object.keys(results).forEach(cell => {
     const price = results[cell];
-    const kw    = (keywords[cell] || '').toUpperCase();
+    const kwVal = keywords[cell];
+    const kw    = (Array.isArray(kwVal) ? kwVal[0] : (kwVal || '')).toUpperCase();
     const foreign = lineOwners.find(o =>
       Math.abs(o.price - price) < 0.005 && o.desc.toUpperCase().indexOf(kw) === -1);
     if (foreign) {
