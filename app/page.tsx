@@ -738,6 +738,26 @@ function SortableCheckItem(props: React.ComponentProps<typeof CheckItem>) {
   );
 }
 
+// Generic sortable wrapper — makes an arbitrary block (e.g. a pinned "ongoing
+// project" row plus its expanded subtask tiles) draggable as one unit. Same
+// whole-tile drag feel as SortableCheckItem.
+function SortableWrapper({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    position: 'relative',
+    zIndex: isDragging ? 20 : undefined,
+    opacity: isDragging ? 0.9 : 1,
+    cursor: 'grab',
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
+  );
+}
+
 // Tile-sized "+ Add subtask" row for a pinned "ongoing project" — same rounded-2xl /
 // glassTileStyle / 62px recipe as CheckItem, so it sits flush as a sibling tile below
 // the checklist rather than looking like a squeezed-in inline form.
@@ -2236,6 +2256,10 @@ export default function Home() {
   const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>({});
   const orderPending = useRef<Record<string, number>>({});
   const sortableIdsRef = useRef<string[]>([]);
+  // Pinned (📌) tasks reorder among themselves in their own bottom group. Their
+  // order is global (pinned tasks persist across days), stored under PINNED_KEY.
+  const pinnedIdsRef = useRef<string[]>([]);
+  const PINNED_KEY = '_pinned';
   // id → move-to-day metadata for the currently rendered daily tasks, used when a
   // task is dropped onto a Week Ahead day row.
   const taskMetaRef = useRef<Map<string, { text: string; isRecurring?: boolean; category: string; isSticky?: boolean }>>(new Map());
@@ -2292,8 +2316,14 @@ export default function Home() {
   // pointer is over one, treat it as a move-to-day; otherwise fall back to reorder
   // collision among the sortable tasks.
   const dndCollision: CollisionDetection = (args) => {
+    // A day row under the pointer always wins (move-to-day), for any dragged task.
     const dayHit = pointerWithin(args).find(c => String(c.id).startsWith('day:'));
-    return dayHit ? [dayHit] : closestCenter(args);
+    if (dayHit) return [dayHit];
+    // Otherwise keep reorder collisions inside the dragged task's own group, so
+    // pinned tasks only reorder among pinned and normal among normal.
+    const activeId = String(args.active.id);
+    const groupIds = new Set(pinnedIdsRef.current.includes(activeId) ? pinnedIdsRef.current : sortableIdsRef.current);
+    return closestCenter({ ...args, droppableContainers: args.droppableContainers.filter(c => groupIds.has(String(c.id))) });
   };
 
   const handleDragEnd = (e: DragEndEvent) => {
@@ -2313,16 +2343,20 @@ export default function Home() {
       return;
     }
 
-    // Otherwise reorder within the list.
+    // Otherwise reorder within a list. Pinned tasks reorder among pinned (global
+    // PINNED_KEY); everything else reorders within the day list (fromDate key).
+    // Cross-group drops are ignored so pinned and normal tasks stay separated.
     if (activeId === overId) return;
-    const ids = sortableIdsRef.current;
+    const inPinned = pinnedIdsRef.current.includes(activeId);
+    const ids = inPinned ? pinnedIdsRef.current : sortableIdsRef.current;
+    const key = inPinned ? PINNED_KEY : fromDate;
     const from = ids.indexOf(activeId);
     const to = ids.indexOf(overId);
     if (from === -1 || to === -1) return;
     const next = arrayMove(ids, from, to);
-    orderPending.current[fromDate] = Date.now();
-    setTaskOrder(prev => ({ ...prev, [fromDate]: next }));
-    fetch('/api/task-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: fromDate, ids: next }) }).catch(() => {});
+    orderPending.current[key] = Date.now();
+    setTaskOrder(prev => ({ ...prev, [key]: next }));
+    fetch('/api/task-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: key, ids: next }) }).catch(() => {});
   };
 
   const handleContextSave = async (blockId: string, text: string) => {
@@ -2850,9 +2884,11 @@ export default function Home() {
               // unknown tasks fall to the end. Pinned (📌) tasks sit at the bottom of
               // the list and aren't draggable; checked tasks sink below them.
               const orderedUnchecked = applyTaskOrder(normal.filter(n => !n.task.checked && !n.task.isSticky), orderDate);
-              const stickyItems = normal.filter(n => !n.task.checked && n.task.isSticky);
+              // Pinned tasks reorder among themselves in their own group (global order).
+              const stickyItems = applyTaskOrder(normal.filter(n => !n.task.checked && n.task.isSticky), PINNED_KEY);
               const checkedItems = normal.filter(n => n.task.checked);
               sortableIdsRef.current = orderedUnchecked.map(n => n.id);
+              pinnedIdsRef.current = stickyItems.map(n => n.id);
               // Metadata for move-to-day drops onto Week Ahead rows.
               taskMetaRef.current = new Map(normal.map(n => [n.id, { text: n.task.text, isRecurring: n.task.isRecurring, category: n.category, isSticky: n.task.isSticky }]));
 
@@ -2890,33 +2926,38 @@ export default function Home() {
                       <SortableCheckItem key={task.id} {...itemProps(task, category)} />
                     ))}
                   </SortableContext>
-                  {/* Pinned (📌) tasks — parked at the bottom of the list, not draggable,
-                      highlighted. Ones linked to a Projects DB page ("ongoing projects")
-                      expand into their checklist as sibling tiles underneath. */}
-                  {stickyItems.map(({ task, category }) => {
-                    if (!task.projectId) {
-                      return <CheckItem key={task.id} {...itemProps(task, category)} />;
-                    }
-                    const isOpen = expandedPins.has(task.id);
-                    return (
-                      <div key={task.id} className="space-y-2">
-                        <CheckItem {...itemProps(task, category)} onRowClick={() => togglePinExpanded(task.id)} />
-                        {isOpen && (
-                          <>
-                            {(task.subtasks || []).map(s => (
-                              <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked}
-                                onChange={(sid, schecked) => toggleProjectSubtask(task.projectId!, sid, schecked)}
-                                onDelete={(sid) => handleDeleteSubtask(task.projectId!, sid)}
-                                context={taskContext[s.id]}
-                                onContextSave={handleContextSave}
-                              />
-                            ))}
-                            <AddSubtaskRow onAdd={t => handleAddSubtaskToPinned(task.projectId!, t)} />
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {/* Pinned (📌) tasks — parked at the bottom, highlighted, and now
+                      drag-reorderable among themselves (own group, global order). Ones
+                      linked to a Projects DB page ("ongoing projects") expand into their
+                      checklist as sibling tiles underneath and drag as one block. */}
+                  <SortableContext items={pinnedIdsRef.current} strategy={verticalListSortingStrategy}>
+                    {stickyItems.map(({ task, category }) => {
+                      if (!task.projectId) {
+                        return <SortableCheckItem key={task.id} {...itemProps(task, category)} />;
+                      }
+                      const isOpen = expandedPins.has(task.id);
+                      return (
+                        <SortableWrapper key={task.id} id={task.id}>
+                          <div className="space-y-2">
+                            <CheckItem {...itemProps(task, category)} onRowClick={() => togglePinExpanded(task.id)} />
+                            {isOpen && (
+                              <>
+                                {(task.subtasks || []).map(s => (
+                                  <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked}
+                                    onChange={(sid, schecked) => toggleProjectSubtask(task.projectId!, sid, schecked)}
+                                    onDelete={(sid) => handleDeleteSubtask(task.projectId!, sid)}
+                                    context={taskContext[s.id]}
+                                    onContextSave={handleContextSave}
+                                  />
+                                ))}
+                                <AddSubtaskRow onAdd={t => handleAddSubtaskToPinned(task.projectId!, t)} />
+                              </>
+                            )}
+                          </div>
+                        </SortableWrapper>
+                      );
+                    })}
+                  </SortableContext>
                   {/* 🛒 Shopping List — collapsible tile with a count badge. Above the
                       checked bucket so it stays visible while there's shopping to do. */}
                   {!isViewingOtherDay && shoppingBadge > 0 && (
