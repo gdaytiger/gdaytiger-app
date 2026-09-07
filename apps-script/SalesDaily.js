@@ -100,6 +100,7 @@ function runDailySalesUpdate() {
   sdUpsertDailyRows_(sheet, daily);
   sdTrimOldRows_(sheet);
   sdComputeAndWriteSummary_(sheet);
+  try { runFlashExtras(); } catch (e) { Logger.log('flash_extras failed (non-fatal): ' + e); }
 }
 
 // Diagnostic: log the current rolling payload without writing to Notion.
@@ -324,4 +325,147 @@ function sdParseDateKey_(key) { var p = key.split('-'); return new Date(Number(p
 function sdAddDays_(date, days) { var d = new Date(date.getTime()); d.setDate(d.getDate() + days); return d; }
 function sdDeleteTrigger_(fn) {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === fn) ScriptApp.deleteTrigger(t); });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  FLASH EXTRAS — last-complete-week CATEGORY MIX + DAY-PART for the Weekly Flash.
+//  Written as a separate `flash_extras` JSON block on the same TIGEROS OS page,
+//  read by /api/flash-extras. Recomputed each nightly run (small, no accumulator).
+//
+//  Category: order line-items → catalog reporting-category map (ORDERS + CATALOG
+//  scopes, same as the rest of this file — no Reporting-API scope needed).
+//  Day-part: order gross (total − tip) bucketed by Melbourne clock hour.
+//  Week: the last COMPLETE Mon–Sun (matches the app's /api/weekly-flash window).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function runFlashExtras() {
+  var payload = sdBuildFlashExtras_();
+  sdWriteExtrasToNotion_(payload);
+  Logger.log('✓ flash_extras: %s → %s | %s categories, %s hours',
+    payload.week_start, payload.week_end, payload.mix.length, payload.day_part.length);
+}
+
+// Diagnostic — preview without writing to Notion.
+function printFlashExtras() {
+  Logger.log(JSON.stringify(sdBuildFlashExtras_(), null, 2));
+}
+
+// Last complete Mon–Sun as { start:Date(local 00:00), endExcl:Date, startKey, endKey }.
+function sdLastCompleteWeek_() {
+  var todayKey = Utilities.formatDate(new Date(), SD_TZ, 'yyyy-MM-dd');
+  var today = sdParseDateKey_(todayKey);          // local midnight today
+  var dow = today.getDay();                        // 0=Sun..6=Sat
+  var thisMon = sdAddDays_(today, dow === 0 ? -6 : 1 - dow);
+  var start = sdAddDays_(thisMon, -7);             // Monday of last week
+  return { start: start, endExcl: thisMon, startKey: sdDateKey_(start), endKey: sdDateKey_(sdAddDays_(thisMon, -1)) };
+}
+
+// variationId -> reporting-category name, from the catalog.
+function sdBuildCatalogCategoryMap_(token) {
+  var catNames = {}, varToCat = {};
+  function pull(type, handle) {
+    var cursor = null, safety = 0;
+    do {
+      var url = 'https://connect.squareup.com/v2/catalog/list?types=' + type + (cursor ? '&cursor=' + cursor : '');
+      var r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token, 'Square-Version': '2024-06-04' }, muteHttpExceptions: true });
+      if (r.getResponseCode() !== 200) { Logger.log('SD catalog %s failed: %s', type, r.getResponseCode()); return; }
+      var j = JSON.parse(r.getContentText());
+      (j.objects || []).forEach(handle);
+      cursor = j.cursor || null; safety++;
+    } while (cursor && safety < 50);
+  }
+  pull('CATEGORY', function (o) { if (o.type === 'CATEGORY') catNames[o.id] = (o.category_data && o.category_data.name) || 'Uncategorised'; });
+  pull('ITEM', function (o) {
+    if (o.type !== 'ITEM') return;
+    var d = o.item_data || {};
+    var catId = (d.reporting_category && d.reporting_category.id) || d.category_id || (d.categories && d.categories[0] && d.categories[0].id) || null;
+    var catName = catId ? (catNames[catId] || 'Uncategorised') : 'Uncategorised';
+    (d.variations || []).forEach(function (v) { if (v && v.id) varToCat[v.id] = catName; });
+  });
+  return varToCat;
+}
+
+// Orders (with line-items) for a local date window. Mirrors sdFetchDailyTotals_.
+function sdFetchWeekOrders_(startInclusive, endExclusive) {
+  var token = PropertiesService.getScriptProperties().getProperty('SQUARE_ACCESS_TOKEN');
+  var locationId = PropertiesService.getScriptProperties().getProperty(SD_PK_LOCATION) || sdCacheLocation_();
+  var out = [], cursor = null, safety = 0;
+  do {
+    var body = {
+      location_ids: [locationId],
+      query: {
+        filter: { date_time_filter: { created_at: { start_at: startInclusive.toISOString(), end_at: endExclusive.toISOString() } },
+                  state_filter: { states: ['COMPLETED'] } },
+        sort: { sort_field: 'CREATED_AT', sort_order: 'ASC' }
+      }, limit: 500
+    };
+    if (cursor) body.cursor = cursor;
+    var resp = UrlFetchApp.fetch('https://connect.squareup.com/v2/orders/search', {
+      method: 'post', contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token, 'Square-Version': '2024-06-04' },
+      payload: JSON.stringify(body), muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() !== 200) { Logger.log('SD week orders failed: %s', resp.getResponseCode()); break; }
+    var json = JSON.parse(resp.getContentText());
+    out = out.concat(json.orders || []);
+    cursor = json.cursor || null; safety++;
+  } while (cursor && safety < 100);
+  return out;
+}
+
+function sdBuildFlashExtras_() {
+  var token = PropertiesService.getScriptProperties().getProperty('SQUARE_ACCESS_TOKEN');
+  var wk = sdLastCompleteWeek_();
+  var orders = sdFetchWeekOrders_(wk.start, wk.endExcl);
+  var varToCat = sdBuildCatalogCategoryMap_(token);
+
+  var mix = {}, hours = {};
+  orders.forEach(function (o) {
+    var grossCents = ((o.total_money && o.total_money.amount) || 0) - ((o.total_tip_money && o.total_tip_money.amount) || 0);
+    var hr = Number(Utilities.formatDate(new Date(o.created_at), SD_TZ, 'H'));
+    hours[hr] = (hours[hr] || 0) + grossCents / 100;
+    (o.line_items || []).forEach(function (li) {
+      var cat = (li.catalog_object_id && varToCat[li.catalog_object_id]) || 'Uncategorised';
+      var g = (li.gross_sales_money && li.gross_sales_money.amount) || 0;
+      var disc = (li.total_discount_money && li.total_discount_money.amount) || 0;
+      mix[cat] = (mix[cat] || 0) + (g - disc) / 100;
+    });
+  });
+
+  var mixArr = Object.keys(mix).map(function (k) { return { category: k, net: Math.round(mix[k] * 100) / 100 }; })
+    .sort(function (a, b) { return b.net - a.net; });
+  var dpArr = Object.keys(hours).map(function (h) { return { hour: Number(h), net: Math.round(hours[h] * 100) / 100 }; })
+    .sort(function (a, b) { return a.hour - b.hour; });
+
+  return { type: 'flash_extras', updated: new Date().toISOString(), tz: SD_TZ,
+    week_start: wk.startKey, week_end: wk.endKey, mix: mixArr, day_part: dpArr };
+}
+
+function sdWriteExtrasToNotion_(payload) {
+  var key = PropertiesService.getScriptProperties().getProperty('NOTION_API_KEY');
+  if (!key) { Logger.log('SD extras: NOTION_API_KEY not set.'); return; }
+  var json = JSON.stringify(payload);
+  var headers = { 'Authorization': 'Bearer ' + key, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' };
+  var allBlocks = [], cursor = null;
+  do {
+    var url = 'https://api.notion.com/v1/blocks/' + SD_NOTION_PAGE_ID + '/children?page_size=100' + (cursor ? '&start_cursor=' + cursor : '');
+    var res = UrlFetchApp.fetch(url, { headers: headers, muteHttpExceptions: true });
+    var data = JSON.parse(res.getContentText());
+    allBlocks = allBlocks.concat(data.results || []);
+    cursor = data.has_more ? data.next_cursor : null;
+  } while (cursor);
+  var existing = allBlocks.find(function (b) {
+    if (b.type !== 'code') return false;
+    var text = (b.code && b.code.rich_text || []).map(function (r) { return r.plain_text; }).join('');
+    return text.indexOf('"flash_extras"') !== -1;
+  });
+  var chunks = [];
+  for (var i = 0; i < json.length; i += 1900) chunks.push({ type: 'text', text: { content: json.slice(i, i + 1900) } });
+  var blockBody = JSON.stringify({ type: 'code', code: { language: 'json', rich_text: chunks } });
+  if (existing) {
+    UrlFetchApp.fetch('https://api.notion.com/v1/blocks/' + existing.id, { method: 'PATCH', headers: headers, payload: blockBody, muteHttpExceptions: true });
+  } else {
+    UrlFetchApp.fetch('https://api.notion.com/v1/blocks/' + SD_NOTION_PAGE_ID + '/children',
+      { method: 'PATCH', headers: headers, payload: JSON.stringify({ children: [JSON.parse(blockBody)] }), muteHttpExceptions: true });
+  }
 }

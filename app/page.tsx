@@ -12,6 +12,7 @@ import { CSS } from '@dnd-kit/utilities';
 import AddProductModal from './components/AddProductModal';
 import AddIngredientModal from './components/AddIngredientModal';
 import LabourCardBody, { type StaffCostData } from './components/LabourCardBody';
+import WeeklyFlashCard, { type WeeklyFlashData, type FlashExtrasData } from './components/WeeklyFlashCard';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
 import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle } from './lib/theme';
 
@@ -110,10 +111,10 @@ const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
 // ── Widget icons (emoji) ─────────────────────────────────────────────────────
 // One place mapping each widget to its emoji, rendered at a size derived from
 // the caller's chip value. Kept as a component so the set can be swapped later.
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'labour';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'labour' | 'flash';
 
 const WIDGET_ICON_EMOJI: Record<WidgetIconName, string> = {
-  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒', labour: '📊',
+  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒', labour: '📊', flash: '📈',
 };
 
 function WidgetIcon({ name, chip = 28 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -2195,6 +2196,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [staffCost, setStaffCost] = useState<StaffCostData>(null);
+  const [weeklyFlash, setWeeklyFlash] = useState<WeeklyFlashData>(null);
+  const [flashExtras, setFlashExtras] = useState<FlashExtrasData>(null);
   const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   // Which pinned "ongoing project" rows have their checklist expanded (sibling
@@ -2488,6 +2491,8 @@ export default function Home() {
     fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
     fetch('/api/tigeros-tasks').then(r => r.json()).then(d => setTigerTasks(d.tasks || [])).catch(() => {});
     fetch('/api/staff-cost').then(r => r.json()).then(d => setStaffCost(d)).catch(() => {});
+    fetch('/api/weekly-flash').then(r => r.json()).then(d => setWeeklyFlash(d)).catch(() => {});
+    fetch('/api/flash-extras').then(r => r.json()).then(d => setFlashExtras(d)).catch(() => {});
     fetchTaskContext().catch(() => {});
     fetchTaskOrder().catch(() => {});
   };
@@ -3004,6 +3009,7 @@ export default function Home() {
           <LauncherTile icon={<WidgetIcon name="food" chip={48} glyph={26} />} title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Tiger OS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
           <LauncherTile icon={<WidgetIcon name="labour" chip={48} glyph={26} />} title="Labour" badgeText={staffCost?.thisWeek?.staffPct != null ? `${Math.round(staffCost.thisWeek.staffPct)}%` : undefined} alert={staffCost?.thisWeek?.staffPct != null && staffCost.thisWeek.staffPct > staffCost.target} active={openWidgets.has('labour')} onClick={() => toggleWidget('labour')} />
+          <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
         </div>
 
         </div>{/* end stable grid */}
@@ -3086,6 +3092,13 @@ export default function Home() {
         <div style={{ display: openWidgets.has('labour') ? 'block' : 'none' }}>
           <Card bare icon={<WidgetIcon name="labour" chip={28} glyph={17} />} title="Labour" onCollapse={() => toggleWidget('labour')}>
             <LabourCardBody data={staffCost} />
+          </Card>
+        </div>
+
+        {/* WEEKLY FLASH — Monday operational scorecard (sales, labour %, gross margin vs ONA zones) */}
+        <div style={{ display: openWidgets.has('flash') ? 'block' : 'none' }}>
+          <Card bare icon={<WidgetIcon name="flash" chip={28} glyph={17} />} title="Weekly Flash" onCollapse={() => toggleWidget('flash')}>
+            <WeeklyFlashCard data={weeklyFlash} extras={flashExtras} />
           </Card>
         </div>
 
