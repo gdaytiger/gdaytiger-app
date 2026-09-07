@@ -193,7 +193,7 @@ function sdUpsertDailyRows_(sheet, dailyMap) {
   var existing = {};
   if (last >= 2) {
     var vals = sheet.getRange(2, 1, last - 1, 1).getValues();
-    for (var i = 0; i < vals.length; i++) existing[String(vals[i][0])] = i + 2; // row index
+    for (var i = 0; i < vals.length; i++) existing[sdCellDate_(vals[i][0])] = i + 2; // row index
   }
   keys.sort().forEach(function (key) {
     var d = dailyMap[key];
@@ -214,7 +214,7 @@ function sdTrimOldRows_(sheet) {
   // Rows are appended over time but not guaranteed sorted; collect deletions.
   var toDelete = [];
   for (var i = 0; i < vals.length; i++) {
-    if (String(vals[i][0]) < cutoff) toDelete.push(i + 2);
+    if (sdCellDate_(vals[i][0]) < cutoff) toDelete.push(i + 2);
   }
   // Delete bottom-up so indices stay valid.
   toDelete.sort(function (a, b) { return b - a; }).forEach(function (r) { sheet.deleteRow(r); });
@@ -232,7 +232,7 @@ function sdBuildSummary_(sheet) {
     var cutoff = sdDateKey_(sdAddDays_(new Date(), -SD_ROLLING_DAYS));
     var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     vals.forEach(function (v) {
-      var key = String(v[0]);
+      var key = sdCellDate_(v[0]);
       if (!key || key < cutoff) return;
       var gross = Number(v[1]) || 0;
       var parts = key.split('-');
@@ -321,6 +321,7 @@ function sdCacheLocation_() {
 }
 
 function sdDateKey_(date)  { return Utilities.formatDate(date, SD_TZ, 'yyyy-MM-dd'); }
+function sdCellDate_(v) { return (v instanceof Date) ? Utilities.formatDate(v, SD_TZ, 'yyyy-MM-dd') : String(v); }
 function sdParseDateKey_(key) { var p = key.split('-'); return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])); }
 function sdAddDays_(date, days) { var d = new Date(date.getTime()); d.setDate(d.getDate() + days); return d; }
 function sdDeleteTrigger_(fn) {
