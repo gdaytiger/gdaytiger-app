@@ -335,6 +335,8 @@ function sdDeleteTrigger_(fn) {
 //  Category: order line-items → catalog reporting-category map (ORDERS + CATALOG
 //  scopes, same as the rest of this file — no Reporting-API scope needed).
 //  Day-part: order gross (total − tip) bucketed by Melbourne clock hour.
+//  Both mix + day-part are divided by SD_GST_DIVISOR → ex-GST, to match the
+//  net-sales convention used everywhere else in the flash.
 //  Week: the last COMPLETE Mon–Sun (matches the app's /api/weekly-flash window).
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -423,12 +425,12 @@ function sdBuildFlashExtras_() {
   orders.forEach(function (o) {
     var grossCents = ((o.total_money && o.total_money.amount) || 0) - ((o.total_tip_money && o.total_tip_money.amount) || 0);
     var hr = Number(Utilities.formatDate(new Date(o.created_at), SD_TZ, 'H'));
-    hours[hr] = (hours[hr] || 0) + grossCents / 100;
+    hours[hr] = (hours[hr] || 0) + grossCents / 100 / SD_GST_DIVISOR;
     (o.line_items || []).forEach(function (li) {
       var cat = (li.catalog_object_id && varToCat[li.catalog_object_id]) || 'Uncategorised';
       var g = (li.gross_sales_money && li.gross_sales_money.amount) || 0;
       var disc = (li.total_discount_money && li.total_discount_money.amount) || 0;
-      mix[cat] = (mix[cat] || 0) + (g - disc) / 100;
+      mix[cat] = (mix[cat] || 0) + (g - disc) / 100 / SD_GST_DIVISOR;
     });
   });
 
