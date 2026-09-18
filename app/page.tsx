@@ -406,7 +406,7 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, onUnpin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, onUnpin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight, onRename, rawText }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
@@ -436,6 +436,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   // Peach highlight (same recipe as the Week Ahead "today/selected" row) — marks
   // pinned tasks as visually distinct from the rest of the list.
   highlight?: boolean;
+  // Double-tap the task text to edit it in place; commits via /api/rename-task.
+  onRename?: (id: string, text: string) => void;
+  // Undecorated stored text to seed the editor (the `text` prop may carry live
+  // review-margin decoration; rawText is what actually gets written back).
+  rawText?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
@@ -448,6 +453,10 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   const [committed, setCommitted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draftText, setDraftText] = useState('');
+  const lastTextTapRef = useRef(0);
+  const textTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [localContext, setLocalContext] = useState(context ?? '');
   const THRESHOLD = 90;
 
@@ -603,6 +612,33 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
     swipeOffsetRef.current = 0;
   };
 
+  const commitEdit = () => {
+    setEditing(false);
+    const next = draftText.trim();
+    const original = (rawText ?? text).trim();
+    if (next && next !== original) onRename?.(id, next);
+  };
+  // Single tap on the text falls through to the row's expand (after a short
+  // delay); a second tap within the window cancels that and opens the editor.
+  const handleTextTap = (e: React.MouseEvent) => {
+    if (!onRename) return;
+    e.stopPropagation();
+    const now = Date.now();
+    if (now - lastTextTapRef.current < 300) {
+      if (textTapTimerRef.current) { clearTimeout(textTapTimerRef.current); textTapTimerRef.current = null; }
+      lastTextTapRef.current = 0;
+      setDraftText(rawText ?? text);
+      setEditing(true);
+    } else {
+      lastTextTapRef.current = now;
+      if (textTapTimerRef.current) clearTimeout(textTapTimerRef.current);
+      textTapTimerRef.current = setTimeout(() => {
+        textTapTimerRef.current = null;
+        if (onRowClick) onRowClick(); else setExpanded(x => !x);
+      }, 300);
+    }
+  };
+
   if (dismissed) return null;
 
   const absOffset = Math.abs(swipeOffset);
@@ -678,12 +714,26 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm leading-snug">
-            {(() => {
+            {editing ? (
+              <input
+                value={draftText}
+                autoFocus
+                onChange={e => setDraftText(e.target.value)}
+                onPointerDown={e => e.stopPropagation()}
+                onMouseDown={e => e.stopPropagation()}
+                onTouchStart={e => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); setEditing(false); } }}
+                onBlur={commitEdit}
+                className="w-full text-sm font-semibold bg-transparent focus:outline-none border-b text-gray-800"
+                style={{ borderColor: 'var(--color-brand-peach)' }}
+              />
+            ) : (() => {
               const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
               if (supplierUrl && !checked) {
                 return <a href={supplierUrl} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text.toUpperCase()}</a>;
               }
-              return <span className={`transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{text.toUpperCase()}</span>;
+              return <span onClick={onRename ? handleTextTap : undefined} className={`transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'} ${onRename ? 'cursor-text' : ''}`}>{text.toUpperCase()}</span>;
             })()}
           </div>
           {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
@@ -2367,6 +2417,22 @@ export default function Home() {
     await fetch('/api/task-context', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, text }) });
   };
 
+  // Double-tap-to-edit a Daily To Do task's text. Optimistic in the daily / week
+  // view; the route preserves recurrence/pin prefixes and mirrors [D]/[MD:n].
+  const handleRenameTask = async (blockId: string, text: string, section: 'daily' | 'week', date?: string) => {
+    if (!blockId || blockId.startsWith('header-')) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (section === 'daily') {
+      setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === blockId ? { ...t, text: trimmed } : t) } : prev);
+    } else if (section === 'week' && date) {
+      setWeekTasks(prev => prev[date] ? { ...prev, [date]: { ...prev[date], tasks: prev[date].tasks.map(t => t.id === blockId ? { ...t, text: trimmed } : t) } } : prev);
+    }
+    try {
+      await fetch('/api/rename-task', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, text: trimmed }) });
+    } catch { /* optimistic update already applied */ }
+  };
+
   const fetchServerState = async (): Promise<Record<string, string[]>> => {
     try {
       const d = await fetch('/api/checked-state').then(r => r.json());
@@ -2753,6 +2819,22 @@ export default function Home() {
     } : prev);
     await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
   };
+  // Double-tap-to-edit an ongoing-project subtask (a child to_do on the linked
+  // Projects DB page). No recurrence prefix, single block — /api/rename-task
+  // handles it generically.
+  const handleRenameProjectSubtask = async (projectId: string, blockId: string, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setData(prev => prev ? {
+      ...prev,
+      dailyTasks: prev.dailyTasks.map(t => t.projectId === projectId
+        ? { ...t, subtasks: (t.subtasks || []).map(s => s.id === blockId ? { ...s, text: trimmed } : s) }
+        : t),
+    } : prev);
+    try {
+      await fetch('/api/rename-task', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, text: trimmed }) });
+    } catch { /* optimistic update already applied */ }
+  };
   const handleDeleteSubtask = async (projectId: string, blockId: string) => {
     setData(prev => prev ? {
       ...prev,
@@ -2900,6 +2982,8 @@ export default function Home() {
               const itemProps = (task: typeof displayedTasks[0], category: string) => ({
                 id: task.id,
                 text: withLiveReviewMargin(task.text, reviewMarginMap),
+                rawText: task.text,
+                onRename: (rid: string, rtext: string) => handleRenameTask(rid, rtext, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined),
                 checked: task.checked,
                 label: category || undefined,
                 context: taskContext[task.id],
@@ -2949,6 +3033,8 @@ export default function Home() {
                               <>
                                 {(task.subtasks || []).map(s => (
                                   <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked}
+                                    rawText={s.text}
+                                    onRename={(sid, stext) => handleRenameProjectSubtask(task.projectId!, sid, stext)}
                                     onChange={(sid, schecked) => toggleProjectSubtask(task.projectId!, sid, schecked)}
                                     onDelete={(sid) => handleDeleteSubtask(task.projectId!, sid)}
                                     context={taskContext[s.id]}
