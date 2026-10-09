@@ -5,12 +5,12 @@ import { GROSS_MARGIN } from '../../lib/businessMetrics';
 // WEEKLY FLASH — the Monday-morning operational scorecard.
 // Reads Notion code blocks DIRECTLY (no intra-app self-fetch, which returns
 // empty on Vercel): `sales_daily` (net/orders per day) and `labour_weekly`.
-// Benchmarks each metric vs the ONA venue zones and returns the last completed
+// Benchmarks each metric vs benchmark zones and returns the last completed
 // week vs the week before.
 //
 // LABOUR (standard basis, Oct 2026): `labour_weekly` is written nightly by
 // apps-script/LabourWeekly.js from the PAYROLL wage sheet — wages + 12% super
-// ÷ net sales ex-GST. Two figures: line-staff % (benchmarked vs ONA 34–38%)
+// ÷ net sales ex-GST. Two figures: line-staff % (target ≤35%, watch to 38%)
 // and total % incl owner wage (context only). Replaces the old Deputy
 // self-fetch, which returned empty on Vercel and under-counted payroll 16–34%.
 //
@@ -20,7 +20,17 @@ import { GROSS_MARGIN } from '../../lib/businessMetrics';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const NOTION_PAGE_ID = '3403c99c0e858113a941c2118b3cdef9';
-const ZONES = { grossMargin: [65, 75], labour: [34, 38] } as const;
+// Labour = [target max, watch max] for LINE-STAFF % (owner wage excluded).
+// ≤35 on target · 35–38 watch · >38 over. Basis: ATO coffee-shop benchmark for
+// turnover >$600k (27–35%, owner wages excluded) + common 30–35% café guidance,
+// allowing ~1–2pts for award rises since the 2023–24 ATO data. Set Oct 2026.
+const ZONES = { grossMargin: [65, 75], labour: [35, 38] } as const;
+function labourVerdict(v: number | null) {
+  if (v == null) return null;
+  if (v <= ZONES.labour[0]) return 'in';
+  if (v <= ZONES.labour[1]) return 'watch';
+  return 'above';
+}
 const TZ_OFFSET_MS = 10 * 60 * 60 * 1000; // Australia/Melbourne (AEST)
 
 type SalesDay = { date: string; weekday: string; gross: number; net: number; orders: number };
@@ -133,7 +143,7 @@ export async function GET() {
       zones: ZONES,
       scorecard: {
         grossMargin: { value: GROSS_MARGIN.pct, verdict: zoneVerdict(GROSS_MARGIN.pct, ZONES.grossMargin) },
-        labour: { value: feat?.labourPct ?? null, verdict: zoneVerdict(feat?.labourPct ?? null, ZONES.labour) },
+        labour: { value: feat?.labourPct ?? null, verdict: labourVerdict(feat?.labourPct ?? null) },
         salesTrend: { value: salesWoW, verdict: salesWoW == null ? null : (salesWoW >= 0 ? 'up' : 'down') },
       },
       labourTotal: { value: feat?.totalLabourPct ?? null },

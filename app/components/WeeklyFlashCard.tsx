@@ -5,7 +5,7 @@ import React from 'react';
 // Presentational body for the dashboard "Weekly Flash" card.
 // Fed by /api/weekly-flash (sales, labour, margin) + /api/flash-extras
 // (category mix + day-part). The Monday-morning operational scorecard for the
-// last completed week vs the week before, against the ONA benchmark zones.
+// last completed week vs the week before, against benchmark zones (labour: ATO coffee-shop basis, see route).
 
 type WeekMetrics = {
   start: string; end: string;
@@ -145,7 +145,7 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
 
   const gmCol = scorecard.grossMargin.verdict === 'below' ? RED : GREEN;
   const labVerdict = scorecard.labour.verdict;
-  const labCol = labVerdict === 'in' ? GREEN : labVerdict === 'above' ? RED : labVerdict === 'below' ? AMBER : 'var(--color-ink-muted)';
+  const labCol = labVerdict === 'in' ? GREEN : labVerdict === 'above' ? RED : labVerdict === 'watch' ? AMBER : 'var(--color-ink-muted)';
   const dot = (col: string) => col === GREEN ? '🟢' : col === RED ? '🔴' : col === AMBER ? '🟡' : '⚪';
   const gmMonth = grossMargin.month ? ` (${grossMargin.month})` : '';
 
@@ -172,13 +172,13 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
 
       {/* SCORECARD */}
       <div>
-        <SectionLabel>Benchmark scorecard · ONA zones</SectionLabel>
+        <SectionLabel>Benchmark scorecard</SectionLabel>
         <div className="flex flex-col gap-2">
           <ScoreRow label={`Gross margin${gmMonth}`} value={`${grossMargin.pct}%`}
             zone={`${zones.grossMargin[0]}–${zones.grossMargin[1]}%`} color={gmCol} dot={dot(gmCol)} />
           <ScoreRow label="Line-staff labour"
             value={scorecard.labour.value != null ? `${scorecard.labour.value.toFixed(1)}%` : '—'}
-            zone={`${zones.labour[0]}–${zones.labour[1]}%`} color={labCol} dot={dot(labCol)} />
+            zone={`≤${zones.labour[0]}% · watch to ${zones.labour[1]}%`} color={labCol} dot={dot(labCol)} />
           <ScoreRow label="Total labour incl owner"
             value={data.labourTotal?.value != null ? `${data.labourTotal.value.toFixed(1)}%` : '—'}
             zone="context" color="var(--color-ink-label)" dot="⚪" />
