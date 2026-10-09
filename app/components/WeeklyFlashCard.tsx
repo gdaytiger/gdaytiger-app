@@ -11,6 +11,7 @@ type WeekMetrics = {
   start: string; end: string;
   net: number; orders: number; avgSale: number | null;
   labourCost: number | null; labourPct: number | null;
+  totalLabourCost?: number | null; totalLabourPct?: number | null;
   best: { weekday: string; date: string; net: number } | null;
   worst: { weekday: string; date: string; net: number } | null;
 } | null;
@@ -27,7 +28,8 @@ export type WeeklyFlashData = {
     labour: { value: number | null; verdict: string | null };
     salesTrend: { value: number | null; verdict: string | null };
   };
-  meta: { labourBasis: string; pending: string };
+  labourTotal?: { value: number | null };
+  meta: { labourBasis: string; pending: string; labourUpdated?: string | null };
 } | null;
 
 export type FlashExtrasData = {
@@ -175,8 +177,14 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
           <ScoreRow label={`Gross margin${gmMonth}`} value={`${grossMargin.pct}%`}
             zone={`${zones.grossMargin[0]}–${zones.grossMargin[1]}%`} color={gmCol} dot={dot(gmCol)} />
           <ScoreRow label="Line-staff labour"
-            value={scorecard.labour.value != null ? `${Math.round(scorecard.labour.value)}%` : '—'}
+            value={scorecard.labour.value != null ? `${scorecard.labour.value.toFixed(1)}%` : '—'}
             zone={`${zones.labour[0]}–${zones.labour[1]}%`} color={labCol} dot={dot(labCol)} />
+          <ScoreRow label="Total labour incl owner"
+            value={data.labourTotal?.value != null ? `${data.labourTotal.value.toFixed(1)}%` : '—'}
+            zone="context" color="var(--color-ink-label)" dot="⚪" />
+          {meta.pending && (
+            <div className="text-[10px] px-1" style={{ color: 'var(--color-ink-muted)' }}>{meta.pending}</div>
+          )}
           <ScoreRow label="Sales trend"
             value={wow != null ? `${wow >= 0 ? '+' : ''}${wow.toFixed(1)}%` : '—'}
             zone="WoW" color={wowCol} dot={dot(wowCol)} />
@@ -202,7 +210,7 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
 
       {/* FOOTNOTE */}
       <div className="text-[10px] leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
-        Labour is {meta.labourBasis}, on net (ex-GST) sales. Gross margin: {grossMargin.source}{gmMonth}.
+        Labour = {meta.labourBasis} (payroll wage sheet). Line staff excludes the owner wage. Gross margin: {grossMargin.source}{gmMonth}.
       </div>
     </div>
   );

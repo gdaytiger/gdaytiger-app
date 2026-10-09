@@ -3,25 +3,34 @@ import { GROSS_MARGIN } from '../../lib/businessMetrics';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WEEKLY FLASH — the Monday-morning operational scorecard.
-// Reads the `sales_daily` Notion block DIRECTLY (net/orders per day) — no
-// intra-app self-fetch, which is unreliable on Vercel (server→own /api returns
-// empty). Labour (Deputy) is pulled from /api/labour via the canonical
-// VERCEL_URL, best-effort. Benchmarks each metric vs the ONA venue zones and
-// returns the last completed week vs the week before.
+// Reads Notion code blocks DIRECTLY (no intra-app self-fetch, which returns
+// empty on Vercel): `sales_daily` (net/orders per day) and `labour_weekly`.
+// Benchmarks each metric vs the ONA venue zones and returns the last completed
+// week vs the week before.
 //
-// Labour % is on NET (ex-GST) sales, line-staff only (owner wage excluded) —
-// the basis we standardised on. Gross margin comes from businessMetrics
-// (monthly Xero). Mix + day-part are rendered from /api/flash-extras (fetched
-// client-side, so unaffected by the self-fetch issue).
+// LABOUR (standard basis, Oct 2026): `labour_weekly` is written nightly by
+// apps-script/LabourWeekly.js from the PAYROLL wage sheet — wages + 12% super
+// ÷ net sales ex-GST. Two figures: line-staff % (benchmarked vs ONA 34–38%)
+// and total % incl owner wage (context only). Replaces the old Deputy
+// self-fetch, which returned empty on Vercel and under-counted payroll 16–34%.
+//
+// Gross margin comes from businessMetrics (monthly Xero). Mix + day-part are
+// rendered from /api/flash-extras (fetched client-side).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const NOTION_PAGE_ID = '3403c99c0e858113a941c2118b3cdef9';
 const ZONES = { grossMargin: [65, 75], labour: [34, 38] } as const;
 const TZ_OFFSET_MS = 10 * 60 * 60 * 1000; // Australia/Melbourne (AEST)
-const DEFAULT_RATE = 38;
 
 type SalesDay = { date: string; weekday: string; gross: number; net: number; orders: number };
+type LabourWeek = {
+  label: string; start: string; end: string;
+  wages: number; line_wages: number; owner_wages: number;
+  line_cost: number; total_cost: number;
+  gross_sales: number; net_sales: number;
+  line_pct: number; total_pct: number;
+};
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const fmt = (d: Date) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
@@ -54,7 +63,9 @@ async function notionFetch(path: string): Promise<any> {
   return res.json();
 }
 
-async function readSalesDaily(): Promise<SalesDay[]> {
+// Reads a JSON code block (identified by its "<key>" marker) from the OS page.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readBlock(key: string): Promise<any | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let blocks: any[] = [];
   let cursor: string | undefined;
@@ -64,38 +75,19 @@ async function readSalesDaily(): Promise<SalesDay[]> {
     cursor = data.has_more ? data.next_cursor : undefined;
   } while (cursor);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const block = blocks.find((b: any) => b.type === 'code' &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (b.code?.rich_text || []).map((r: any) => r.plain_text).join('').includes('"sales_daily"'));
-  if (!block) return [];
+  const textOf = (b: any) => (b.code?.rich_text || []).map((r: any) => r.plain_text).join('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const text = (block.code?.rich_text || []).map((r: any) => r.plain_text).join('');
-  try { return (JSON.parse(text).days || []) as SalesDay[]; } catch { return []; }
+  const block = blocks.find((b: any) => b.type === 'code' && textOf(b).includes(`"${key}"`));
+  if (!block) return null;
+  try { return JSON.parse(textOf(block)); } catch { return null; }
 }
 
-// Best-effort weekly line-staff labour cost from Deputy (/api/labour), keyed by
-// Monday-of-week. Uses VERCEL_URL (canonical) — returns {} if unreachable.
-async function readLabourByWeek(req: Request): Promise<Record<string, number>> {
+export async function GET() {
   try {
-    const vurl = process.env.VERCEL_URL;
-    const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
-    const base = vurl ? `https://${vurl}` : host ? `https://${host}` : null;
-    if (!base) return {};
-    const res = await fetch(`${base}/api/labour?weeks=4&rate=${DEFAULT_RATE}`, { cache: 'no-store' });
-    const data = await res.json();
-    const out: Record<string, number> = {};
-    for (const d of (data?.days || [])) {
-      if (!d?.date || d?.cost == null) continue;
-      const k = mondayOf(d.date);
-      out[k] = (out[k] || 0) + d.cost;
-    }
-    return out;
-  } catch { return {}; }
-}
-
-export async function GET(req: Request) {
-  try {
-    const [days, labourByWeek] = await Promise.all([readSalesDaily(), readLabourByWeek(req)]);
+    const [salesBlock, labourBlock] = await Promise.all([readBlock('sales_daily'), readBlock('labour_weekly')]);
+    const days: SalesDay[] = salesBlock?.days || [];
+    const labourWeeks: LabourWeek[] = labourBlock?.weeks || [];
+    const labourByStart = new Map(labourWeeks.map((w) => [w.start, w]));
 
     const wk = new Map<string, { net: number; orders: number; days: SalesDay[] }>();
     for (const d of days) {
@@ -113,15 +105,18 @@ export async function GET(req: Request) {
     function weekMetrics(start: string) {
       const s = wk.get(start);
       if (!s || s.net <= 0) return null;
-      const labour = labourByWeek[start] ?? null;
+      const lw = labourByStart.get(start) ?? null;
       const sorted = [...s.days].sort((a, b) => b.net - a.net);
       const best = sorted[0] || null, worst = sorted[sorted.length - 1] || null;
       return {
         start, end: addDays(start, 6),
         net: round2(s.net), orders: s.orders,
         avgSale: s.orders > 0 ? round2(s.net / s.orders) : null,
-        labourCost: labour != null ? round2(labour) : null,
-        labourPct: labour != null ? round2((labour / s.net) * 100) : null,
+        // Payroll basis (wage sheet). Null until that week's pay run is entered.
+        labourCost: lw ? lw.line_cost : null,
+        labourPct: lw ? lw.line_pct : null,
+        totalLabourCost: lw ? lw.total_cost : null,
+        totalLabourPct: lw ? lw.total_pct : null,
         best: best ? { weekday: best.weekday, date: best.date, net: round2(best.net) } : null,
         worst: worst ? { weekday: worst.weekday, date: worst.date, net: round2(worst.net) } : null,
       };
@@ -141,7 +136,12 @@ export async function GET(req: Request) {
         labour: { value: feat?.labourPct ?? null, verdict: zoneVerdict(feat?.labourPct ?? null, ZONES.labour) },
         salesTrend: { value: salesWoW, verdict: salesWoW == null ? null : (salesWoW >= 0 ? 'up' : 'down') },
       },
-      meta: { labourBasis: 'line-staff, ex-GST (owner wage excluded)', pending: '' },
+      labourTotal: { value: feat?.totalLabourPct ?? null },
+      meta: {
+        labourBasis: 'payroll wages + 12% super ÷ net sales ex-GST',
+        pending: feat && feat.labourPct == null ? 'Payroll for this week not in the wage sheet yet.' : '',
+        labourUpdated: labourBlock?.updated ?? null,
+      },
     });
   } catch (err) {
     console.error('weekly-flash error:', err);

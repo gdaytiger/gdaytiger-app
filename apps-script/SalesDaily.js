@@ -101,6 +101,7 @@ function runDailySalesUpdate() {
   sdTrimOldRows_(sheet);
   sdComputeAndWriteSummary_(sheet);
   try { runFlashExtras(); } catch (e) { Logger.log('flash_extras failed (non-fatal): ' + e); }
+  try { runLabourWeekly(); } catch (e) { Logger.log('labour_weekly failed (non-fatal): ' + e); }
 }
 
 // Diagnostic: log the current rolling payload without writing to Notion.
