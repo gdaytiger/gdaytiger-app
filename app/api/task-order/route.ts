@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/app/lib/auth';
+import { melbNowDate } from '@/app/lib/melbTime';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 // Same G'DAY TIGER OS page used by checked-state — guaranteed accessible by NOTION_API_KEY.
@@ -78,7 +79,7 @@ async function updateOrderBlock(blockId: string, state: Record<string, string[]>
 
 function cleanOldDates(state: Record<string, string[]>): Record<string, string[]> {
   const pad = (n: number) => String(n).padStart(2, '0');
-  const cutoff = new Date(Date.now() + 10 * 60 * 60 * 1000 - 8 * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(melbNowDate().getTime() - 8 * 24 * 60 * 60 * 1000);
   const cutoffStr = `${cutoff.getUTCFullYear()}-${pad(cutoff.getUTCMonth() + 1)}-${pad(cutoff.getUTCDate())}`;
   return Object.fromEntries(Object.entries(state).filter(([k]) => k >= cutoffStr));
 }

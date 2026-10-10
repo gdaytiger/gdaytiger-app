@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { melbNowDate } from '@/app/lib/melbTime';
 
 // Merges /api/labour (Deputy hours+cost per day) with /api/sales-daily (Square
 // sales per day) into the single metric that matters: STAFF COST % per day/week
@@ -13,7 +14,6 @@ import { NextResponse } from 'next/server';
 
 const DEFAULT_RATE = 38;
 const TARGET_PCT = 35; // healthy staff-cost % (incl-area, ex-Jono)
-const TZ_OFFSET_MS = 10 * 60 * 60 * 1000; // Australia/Melbourne (AEST)
 
 type LabourDay = { date: string; weekday: string; hours: number; cost: number };
 type SalesDay = { date: string; gross: number; net: number };
@@ -94,7 +94,7 @@ export async function GET(req: Request) {
       });
 
     // ---- This week / last week headline ----
-    const today = new Date(Date.now() + TZ_OFFSET_MS);
+    const today = melbNowDate();
     const thisMon = mondayOf(fmt(today));
     const thisWeek = weeklies.find((w) => w.start === thisMon) || null;
     const idx = weeklies.findIndex((w) => w.start === thisMon);

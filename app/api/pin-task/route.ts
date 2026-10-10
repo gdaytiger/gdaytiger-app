@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/app/lib/auth';
 import { formatYMD } from '@/app/lib/dayTasks';
+import { melbNowDate } from '@/app/lib/melbTime';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const PROJECTS_DB_ID = 'f7712afe4c7247d7b1690f2e1ecc1a0d';
@@ -54,8 +55,8 @@ export async function PATCH(req: NextRequest) {
     projectId = null;
   }
 
-  // Melbourne time = UTC+10 (AEST). Using fixed offset matches dashboard/route.ts.
-  const today = new Date(new Date().getTime() + 10 * 60 * 60 * 1000);
+  // Melbourne time (DST-aware). Matches dashboard/route.ts.
+  const today = melbNowDate();
   const todayStr = formatYMD(today);
   const content = projectId
     ? `[STICKY:${todayStr}:${projectId}] ${cleanText}`

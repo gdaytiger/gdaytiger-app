@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GROSS_MARGIN } from '../../lib/businessMetrics';
+import { melbNowDate } from '@/app/lib/melbTime';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WEEKLY FLASH — the Monday-morning operational scorecard.
@@ -31,7 +32,6 @@ function labourVerdict(v: number | null) {
   if (v <= ZONES.labour[1]) return 'watch';
   return 'above';
 }
-const TZ_OFFSET_MS = 10 * 60 * 60 * 1000; // Australia/Melbourne (AEST)
 
 type SalesDay = { date: string; weekday: string; gross: number; net: number; orders: number };
 type LabourWeek = {
@@ -107,7 +107,7 @@ export async function GET() {
       wk.set(k, cur);
     }
 
-    const today = fmt(new Date(Date.now() + TZ_OFFSET_MS));
+    const today = fmt(melbNowDate());
     const thisMon = mondayOf(today);
     const featStart = addDays(thisMon, -7);
     const prevStart = addDays(thisMon, -14);

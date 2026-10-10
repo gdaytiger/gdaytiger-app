@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { melbOffsetMs, melbNowDate } from '@/app/lib/melbTime';
 
 // Labour analysis feed — actual worked hours + cost per day, broken down by area.
 //
@@ -31,16 +32,15 @@ const AREA_NAMES: Record<number, string> = {
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-// Melbourne is UTC+10 (AEST). Deputy stores Date as a unix-ish value or string;
-// we render everything in Melbourne local to line up with trading days.
-const MELB_OFFSET_MS = 10 * 60 * 60 * 1000;
+// Deputy stores Date as a unix-ish value or string; we render everything in
+// Melbourne local (DST-aware via melbOffsetMs) to line up with trading days.
 
 const formatDate = (d: Date) =>
   `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 
 const normalizeDate = (val: string | number): string => {
   if (typeof val === 'number') {
-    const melb = new Date(val * 1000 + MELB_OFFSET_MS);
+    const melb = new Date(val * 1000 + melbOffsetMs(val * 1000));
     return formatDate(melb);
   }
   return String(val).substring(0, 10);
@@ -54,7 +54,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
 
     // ---- Resolve date range ----
-    const melbNow = new Date(Date.now() + MELB_OFFSET_MS);
+    const melbNow = melbNowDate();
     let startStr = searchParams.get('start');
     let endStr = searchParams.get('end');
     if (!startStr || !endStr) {

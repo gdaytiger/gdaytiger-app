@@ -14,6 +14,7 @@ import AddIngredientModal from './components/AddIngredientModal';
 import WeeklyFlashCard, { type WeeklyFlashData, type FlashExtrasData } from './components/WeeklyFlashCard';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
 import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle } from './lib/theme';
+import { melbNowDate } from '@/app/lib/melbTime';
 
 // Blended "True Payment Cost" — Square processing fees as a % of total revenue,
 // from Sales Summary (12mo to 15 Jun 2026): $12,916.54 fees / $1,262,991.94 collected.
@@ -2108,10 +2109,10 @@ const getNextDateStr = (dateStr: string): string => {
 };
 
 // "Today" in Melbourne, computed identically to the server (/api/dashboard):
-// UTC + 10h, then YYYY-MM-DD from UTC components. Matching the server exactly
+// Melbourne offset (DST-aware), then YYYY-MM-DD from UTC components. Matching the server exactly
 // is what stops the day-rollover check from ever false-triggering a reload.
 const melbourneToday = (): string => {
-  const d = new Date(Date.now() + 10 * 60 * 60 * 1000);
+  const d = melbNowDate();
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 };

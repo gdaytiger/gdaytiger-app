@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { melbOffsetMs, melbNowDate } from '@/app/lib/melbTime';
 
 const DEPUTY_ENDPOINT = process.env.DEPUTY_ENDPOINT;
 
@@ -15,7 +16,7 @@ export async function GET() {
 
     const pad = (n: number) => String(n).padStart(2, '0');
 
-    const melbNow = new Date(Date.now() + 10 * 60 * 60 * 1000);
+    const melbNow = melbNowDate();
     const eightDays = new Date(melbNow.getTime() + 8 * 24 * 60 * 60 * 1000);
 
     const formatDate = (d: Date) =>
@@ -60,7 +61,7 @@ export async function GET() {
 
     const formatTime = (unix: number) => {
       const d = new Date(unix * 1000);
-      const melb = new Date(d.getTime() + 10 * 60 * 60 * 1000);
+      const melb = new Date(d.getTime() + melbOffsetMs(d.getTime()));
       let h = melb.getUTCHours();
       const m = melb.getUTCMinutes();
       const ampm = h >= 12 ? 'pm' : 'am';
@@ -70,7 +71,7 @@ export async function GET() {
 
     const normalizeDate = (val: string | number): string => {
       if (typeof val === 'number') {
-        const melb = new Date(val * 1000 + 10 * 60 * 60 * 1000);
+        const melb = new Date(val * 1000 + melbOffsetMs(val * 1000));
         return `${melb.getUTCFullYear()}-${pad(melb.getUTCMonth() + 1)}-${pad(melb.getUTCDate())}`;
       }
       return String(val).substring(0, 10);

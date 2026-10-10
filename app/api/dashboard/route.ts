@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { DAY_PAGES, parseDayTaskBlocks, formatYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
+import { melbNowDate } from '@/app/lib/melbTime';
 
 // Permanent (never-expiring) key in the checked-state JSON for completed [STICKY]
 // tasks. cleanOldDates() in /api/checked-state only strips keys that sort below
@@ -218,7 +219,7 @@ function getPersonalTodos(allBlocks: any[]) {
 }
 
 export async function GET() {
-  const today = new Date(new Date().getTime() + 10 * 60 * 60 * 1000);
+  const today = melbNowDate();
   const dayOfWeek = today.getDay();
   const todayStr = formatYMD(today);
 

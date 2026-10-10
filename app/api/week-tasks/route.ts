@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { DAY_PAGES, parseDayTaskBlocks, formatYMD, ParsedTask } from '@/app/lib/dayTasks';
+import { melbNowDate } from '@/app/lib/melbTime';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 
@@ -20,7 +21,7 @@ async function getTasksForDay(dateStr: string, todayStr: string): Promise<Parsed
 }
 
 export async function GET() {
-  const melbNow = new Date(Date.now() + 10 * 60 * 60 * 1000);
+  const melbNow = melbNowDate();
   const todayStr = formatYMD(melbNow);
 
   const dateStrs = Array.from({ length: 7 }, (_, i) =>
