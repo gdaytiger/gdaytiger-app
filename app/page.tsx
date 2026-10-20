@@ -42,6 +42,10 @@ interface Todo {
   // an expandable "ongoing project" on the pinned row in Daily To Do.
   projectId?: string;
   subtasks?: Todo[];
+  // Unticked task from a past day, injected by /api/dashboard. Renders red at the
+  // top labelled "<CATEGORY> • NOT COMPLETED YESTERDAY" until ticked; rolls forward
+  // each day until ticked or dismissed (✕).
+  isMissed?: boolean;
 }
 
 interface Project {
@@ -406,7 +410,7 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, onUnpin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight, onRename, rawText }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, onUnpin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight, onRename, rawText, missed }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
@@ -441,6 +445,8 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   // Undecorated stored text to seed the editor (the `text` prop may carry live
   // review-margin decoration; rawText is what actually gets written back).
   rawText?: string;
+  // Unticked "not completed yesterday" task — red tile + red label.
+  missed?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
@@ -655,7 +661,9 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
       onTouchEnd={handleTouchEnd}
       style={{
         userSelect: 'none', minHeight: '62px',
-        ...(highlight
+        ...(missed
+          ? { background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.35)', boxShadow: 'var(--glass-shadow)' }
+          : highlight
           ? { background: 'rgba(251,205,173,0.12)', border: '1px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow)' }
           : glassTileStyle),
       }}
@@ -736,7 +744,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
               return <span onClick={onRename ? handleTextTap : undefined} className={`transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'} ${onRename ? 'cursor-text' : ''}`}>{text.toUpperCase()}</span>;
             })()}
           </div>
-          {label && <p className="text-xs text-gray-400 mt-0.5 uppercase">{label}</p>}
+          {label && <p className={`text-xs mt-0.5 uppercase ${missed ? '' : 'text-gray-400'}`} style={missed ? { color: 'var(--color-danger)' } : undefined}>{label}</p>}
         </div>
         {isSticky && (onUnpin ? (
           <button onClick={e => { e.stopPropagation(); onUnpin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Unpin task" title="Unpin — back to a normal task" style={{ fontSize: '13px' }}>📌</button>
@@ -2703,10 +2711,15 @@ export default function Home() {
       // Recurring task moved away from today — suppress it in the UI after server re-fetch
       // so it doesn't reappear (the block stays in Notion so it recurs next week).
       setMovedRecurringIds(prev => new Set(prev).add(blockId));
-      // Persist suppression so it survives a hard refresh (stored under `date:moved` key,
-      // auto-cleaned after 8 days by the checked-state cleanup routine).
-      fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, date: `${sourceDate}:moved`, checked: true }) }).catch(() => {});
     }
+    // Suppress the task on the day it was dragged FROM — today or any future day.
+    // Recurring blocks stay in Notion (so they recur next cycle) and are hidden for
+    // that one date via the `${date}:moved` key (applyServerChecked filters it for
+    // both the Daily To Do and Week Ahead lists). One-offs are deleted above, but the
+    // key also stops a stale Notion read bringing them back for a few seconds.
+    // syncCheckedState records it in pendingWrites so the post-move refresh can't
+    // undo it before the write lands. Auto-cleaned after 8 days.
+    syncCheckedState(blockId, `${sourceDate}:moved`, true);
     await Promise.all(ops);
     await refreshAfterMutation({ dashboard: sourceDate === todayStr || targetDate === todayStr });
   };
@@ -2731,6 +2744,15 @@ export default function Home() {
     }
     await Promise.all(ops);
     await refreshAfterMutation();
+  };
+
+  // ✕ / swipe-left on a red "not completed yesterday" tile. Never deletes the
+  // Notion block (it may be a recurring task) — just records it as dismissed under
+  // `${todayStr}:carry-handled`, which stops it rolling forward.
+  const handleDismissMissed = (blockId: string) => {
+    setMovedRecurringIds(prev => new Set(prev).add(blockId));
+    setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(t => t.id !== blockId) } : prev);
+    fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, date: `${todayStr}:carry-handled`, checked: true }) }).catch(() => {});
   };
 
   // Hand the action item off to full Claude. Desktop opens a Cowork session
@@ -2968,7 +2990,10 @@ export default function Home() {
               // Draggable (unchecked, non-pinned) render in the saved manual order;
               // unknown tasks fall to the end. Pinned (📌) tasks sit at the bottom of
               // the list and aren't draggable; checked tasks sink below them.
-              const orderedUnchecked = applyTaskOrder(normal.filter(n => !n.task.checked && !n.task.isSticky), orderDate);
+              // Unticked "not completed yesterday" tasks sit red at the very top (not
+              // draggable); once ticked they fall into checkedItems like any task.
+              const missedItems = normal.filter(n => !n.task.checked && n.task.isMissed && !n.task.isSticky);
+              const orderedUnchecked = applyTaskOrder(normal.filter(n => !n.task.checked && !n.task.isSticky && !n.task.isMissed), orderDate);
               // Pinned tasks reorder among themselves in their own group (global order).
               const stickyItems = applyTaskOrder(normal.filter(n => !n.task.checked && n.task.isSticky), PINNED_KEY);
               const checkedItems = normal.filter(n => n.task.checked);
@@ -2983,12 +3008,15 @@ export default function Home() {
                 rawText: task.text,
                 onRename: (rid: string, rtext: string) => handleRenameTask(rid, rtext, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined),
                 checked: task.checked,
-                label: category || undefined,
+                label: (task.isMissed && !task.checked ? `${category || 'ADMIN'} • Not completed yesterday` : category) || undefined,
+                missed: task.isMissed && !task.checked,
                 context: taskContext[task.id],
                 onContextSave: handleContextSave,
                 isSticky: task.isSticky,
                 onChange: (id: string, checked: boolean) => toggleTodo(id, checked, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isSticky),
-                onDelete: (id: string) => handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring),
+                onDelete: (id: string) => task.isMissed
+                  ? handleDismissMissed(id)
+                  : handleDeleteTask(id, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined, task.isRecurring),
                 onSwipeRight: () => handleMoveToDay(task.id, task.text, getNextDateStr(isViewingOtherDay ? selectedDate! : todayStr), task.isRecurring, isViewingOtherDay ? selectedDate! : todayStr, category || undefined, task.isSticky),
                 onPin: !isViewingOtherDay && !task.isSticky ? () => handlePinTask(task.id, task.text) : undefined,
                 // "Review pricing" tasks are auto-pinned by content (isReviewPricingTask in
@@ -3008,6 +3036,9 @@ export default function Home() {
               const tileStyle = { minHeight: '62px', ...glassTileStyle };
               return (
                 <>
+                  {missedItems.map(({ task, category }) => (
+                    <CheckItem key={task.id} {...itemProps(task, category)} />
+                  ))}
                   <SortableContext items={sortableIdsRef.current} strategy={verticalListSortingStrategy}>
                     {orderedUnchecked.map(({ task, category }) => (
                       <SortableCheckItem key={task.id} {...itemProps(task, category)} />
