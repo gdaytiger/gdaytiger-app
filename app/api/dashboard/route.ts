@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { DAY_PAGES, parseDayTaskBlocks, formatYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
+import { DAY_PAGES, parseDayTaskBlocks, formatYMD, shiftYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
 import { melbNowDate } from '@/app/lib/melbTime';
 
 // Permanent (never-expiring) key in the checked-state JSON for completed [STICKY]
@@ -144,7 +144,50 @@ async function fetchCarryAndStickyCandidates(today: Date) {
       }
     }
   }
-  return { carry, sticky };
+  // pages[1] is yesterday's day page — reused by getMissedYesterday() so the
+  // "Not done yesterday" list costs no extra Notion call.
+  return { carry, sticky, yesterdayBlocks: pages[1]?.results || [] };
+}
+
+// Checked-state key holding yesterday-task IDs already actioned (added to today
+// or skipped) from the "Not done yesterday" strip. Date-prefixed, so the normal
+// 8-day cleanOldDates() routine clears it.
+const carryHandledKey = (todayStr: string) => `${todayStr}:carry-handled`;
+
+// Tasks that were on yesterday's list but never ticked off (and weren't moved,
+// already handled, or already showing today). Offered to the user — nothing is
+// added automatically. Pinned/[CARRY] tasks are excluded by the parser since they
+// resurface on their own; shopping lives on a separate page so never appears.
+function getMissedYesterday(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  yesterdayBlocks: any[],
+  today: Date,
+  checkedState: Record<string, string[]>,
+  todayTasks: { id: string; text: string; isHeader?: boolean }[],
+) {
+  const todayStr = formatYMD(today);
+  const yesterdayStr = shiftYMD(todayStr, -1);
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const parsed = parseDayTaskBlocks(yesterdayBlocks, { renderDate: yesterday, todayStr: yesterdayStr });
+
+  const skip = new Set([
+    ...(checkedState[yesterdayStr] || []),
+    ...(checkedState[`${yesterdayStr}:moved`] || []),
+    ...(checkedState[carryHandledKey(todayStr)] || []),
+    ...(checkedState[STICKY_DONE_KEY] || []),
+  ]);
+  const todayIds = new Set(todayTasks.filter(t => !t.isHeader).map(t => t.id));
+  // [D]/[MD] tasks are mirrored as separate blocks per day page, so also match on text.
+  const todayTexts = new Set(todayTasks.filter(t => !t.isHeader).map(t => t.text.trim().toLowerCase()));
+
+  const missed: { id: string; text: string; category: string; isRecurring: boolean }[] = [];
+  let category = '';
+  for (const t of parsed) {
+    if (t.isHeader) { category = t.text.toUpperCase(); continue; }
+    if (skip.has(t.id) || todayIds.has(t.id) || todayTexts.has(t.text.trim().toLowerCase())) continue;
+    missed.push({ id: t.id, text: t.text, category, isRecurring: !!t.isRecurring });
+  }
+  return { missed, yesterdayStr };
 }
 
 async function getDailyTasks(dayOfWeek: number, today: Date) {
@@ -223,7 +266,7 @@ export async function GET() {
   const dayOfWeek = today.getDay();
   const todayStr = formatYMD(today);
 
-  const [weather, dailyTasks, projects, osPageBlocks, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates }] = await Promise.all([
+  const [weather, dailyTasks, projects, osPageBlocks, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates, yesterdayBlocks }] = await Promise.all([
     getWeather(),
     getDailyTasks(dayOfWeek, today),
     getProjects(),
@@ -299,6 +342,10 @@ export async function GET() {
     }
   }
 
+  // Computed before shopping is appended and after carry/sticky injection, so the
+  // "already on today's list" check sees everything that will actually render.
+  const { missed: missedYesterday, yesterdayStr } = getMissedYesterday(yesterdayBlocks, today, checkedState, dailyTasks);
+
   // Append the 🛒 Shopping List as its own group at the end of the daily list
   if (shoppingItems.length > 0) {
     dailyTasks.push({ id: 'header-shopping', text: '🛒 SHOPPING LIST', checked: false, isHeader: true });
@@ -316,7 +363,7 @@ export async function GET() {
   // are managed locally and posted to /api/checked-state separately, so the
   // user never sees their own tap as "missing" from the cached payload.
   return NextResponse.json(
-    { dateStr, weather, dailyTasks, projects, personalTodos, todayStr },
+    { dateStr, weather, dailyTasks, projects, personalTodos, todayStr, missedYesterday, yesterdayStr },
     { headers: { 'Cache-Control': 's-maxage=30, stale-while-revalidate=60' } }
   );
 }

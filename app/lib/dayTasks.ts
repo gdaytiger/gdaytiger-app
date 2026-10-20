@@ -32,6 +32,12 @@ export function formatYMD(d: Date): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
+// Shift a YYYY-MM-DD string by n days (calendar arithmetic in UTC, so no DST drift).
+export function shiftYMD(ymd: string, n: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return formatYMD(new Date(Date.UTC(y, m - 1, d + n)));
+}
+
 // Fire-and-forget delete of a stale Notion block (a dated task whose date has passed).
 export function deleteBlock(blockId: string) {
   fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
@@ -123,11 +129,13 @@ export function parseDayTaskBlocks(blocks: Block[], opts: ParseOpts): ParsedTask
     const raw = (richTextSource || []).map((r: any) => r.plain_text).join('');
     if (!raw.trim()) continue;
 
-    // [YYYY-MM-DD] — specific date. Auto-delete if past, show only on its date.
+    // [YYYY-MM-DD] — specific date. Auto-delete once it's more than a day old, show
+    // only on its date. Yesterday's one-offs are kept for one extra day so the
+    // dashboard can offer them in "Not done yesterday" (see /api/dashboard).
     const dateMatch = raw.match(DATE_PREFIX_RE);
     if (dateMatch) {
       const taskDate = dateMatch[1];
-      if (taskDate < todayStr) { deleteBlock(block.id); continue; }
+      if (taskDate < shiftYMD(todayStr, -1)) { deleteBlock(block.id); continue; }
       if (taskDate === renderDateStr) {
         pushTask(block.id, raw.replace(DATE_PREFIX_RE, '').trim(), false);
       }
