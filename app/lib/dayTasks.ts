@@ -15,6 +15,10 @@ export const DAY_PAGES: Record<number, string> = {
   6: '3403c99c0e8581b3a01dc82031df8f09',
 };
 
+// Past one-off tasks are kept this many days so the dashboard's "not completed
+// yesterday" lookback (6 days) can still read them.
+const MISSED_RETENTION_DAYS = 7;
+
 export const DATE_PREFIX_RE = /^\[(\d{4}-\d{2}-\d{2})\]\s*/;
 
 // ISO week number (1–53). Used to alternate [F] / [F2] fortnightlies.
@@ -30,6 +34,12 @@ export function getISOWeek(date: Date): number {
 export function formatYMD(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+// Shift a YYYY-MM-DD string by n days (calendar arithmetic in UTC, so no DST drift).
+export function shiftYMD(ymd: string, n: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return formatYMD(new Date(Date.UTC(y, m - 1, d + n)));
 }
 
 // Fire-and-forget delete of a stale Notion block (a dated task whose date has passed).
@@ -53,6 +63,8 @@ export type ParsedTask = {
   // by this parser. Stays on the Daily To Do every day until ticked off, with
   // no expiry (unlike [CARRY]). See STICKY_PREFIX.
   isSticky?: boolean;
+  // Unticked task from a past day, injected by /api/dashboard ("not completed yesterday").
+  isMissed?: boolean;
 };
 
 // [STICKY], [STICKY:YYYY-MM-DD], or [STICKY:YYYY-MM-DD:projectId] text — persistent
@@ -123,11 +135,13 @@ export function parseDayTaskBlocks(blocks: Block[], opts: ParseOpts): ParsedTask
     const raw = (richTextSource || []).map((r: any) => r.plain_text).join('');
     if (!raw.trim()) continue;
 
-    // [YYYY-MM-DD] — specific date. Auto-delete if past, show only on its date.
+    // [YYYY-MM-DD] — specific date. Shows only on its date. Kept in Notion for
+    // MISSED_RETENTION_DAYS after its date so an unticked one-off can keep rolling
+    // forward as "not completed yesterday" (see /api/dashboard), then auto-deleted.
     const dateMatch = raw.match(DATE_PREFIX_RE);
     if (dateMatch) {
       const taskDate = dateMatch[1];
-      if (taskDate < todayStr) { deleteBlock(block.id); continue; }
+      if (taskDate < shiftYMD(todayStr, -MISSED_RETENTION_DAYS)) { deleteBlock(block.id); continue; }
       if (taskDate === renderDateStr) {
         pushTask(block.id, raw.replace(DATE_PREFIX_RE, '').trim(), false);
       }

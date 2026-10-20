@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { DAY_PAGES, parseDayTaskBlocks, formatYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
+import { DAY_PAGES, parseDayTaskBlocks, formatYMD, shiftYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
 import { melbNowDate } from '@/app/lib/melbTime';
 
 // Permanent (never-expiring) key in the checked-state JSON for completed [STICKY]
@@ -144,7 +144,69 @@ async function fetchCarryAndStickyCandidates(today: Date) {
       }
     }
   }
-  return { carry, sticky };
+  // pages[1..6] are the previous 6 days' pages — reused by getMissedTasks() so
+  // "Not completed yesterday" costs no extra Notion calls.
+  return { carry, sticky, pastPages: pages.map(p => p?.results || []) };
+}
+
+// Key recording "not completed" tasks dismissed (✕) on a given day. Date-prefixed,
+// so the normal 8-day cleanOldDates() routine clears it.
+const carryHandledKey = (dateStr: string) => `${dateStr}:carry-handled`;
+// How far back unticked tasks keep rolling forward (pages fetched = today + 6).
+const MISSED_LOOKBACK_DAYS = 6;
+
+// "Not completed yesterday": tasks that were on a past day's list in the last 6
+// days and haven't been ticked since. They roll forward every day until ticked,
+// dismissed (✕), moved, pinned, or they age out of the window. Ticking one today
+// is stored under today's date like any task, so tomorrow it's gone.
+//
+// Pinned/[CARRY] tasks are skipped by the parser (they resurface on their own);
+// shopping lives on another page; anything already on today's list is skipped.
+function getMissedTasks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pastPages: any[][],
+  today: Date,
+  checkedState: Record<string, string[]>,
+  todayTasks: { id: string; text: string; isHeader?: boolean }[],
+) {
+  const todayStr = formatYMD(today);
+  const stickyDone = new Set(checkedState[STICKY_DONE_KEY] || []);
+  const todayIds = new Set(todayTasks.filter(t => !t.isHeader).map(t => t.id));
+  // [D]/[MD] tasks are mirrored as separate blocks per day page, so match on text too.
+  const seenTexts = new Set(todayTasks.filter(t => !t.isHeader).map(t => t.text.trim().toLowerCase()));
+  const seenIds = new Set<string>();
+
+  // Was this id ticked on [fromStr, todayStr) or dismissed/moved on [fromStr, todayStr]?
+  const resolvedSince = (id: string, fromStr: string) => {
+    for (const [k, ids] of Object.entries(checkedState)) {
+      if (!ids.includes(id)) continue;
+      const date = k.slice(0, 10);
+      if (date < fromStr) continue;
+      if (k.length === 10 && date < todayStr) return true;           // ticked
+      if (k.endsWith(':carry-handled') || k.endsWith(':moved')) return true; // dismissed / moved
+    }
+    return false;
+  };
+
+  const missed: { id: string; text: string; category: string; isRecurring: boolean }[] = [];
+  for (let i = 1; i <= MISSED_LOOKBACK_DAYS; i++) { // most recent day first
+    const blocks = pastPages[i];
+    if (!blocks) continue;
+    const dayDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+    const dayStr = shiftYMD(todayStr, -i);
+    const parsed = parseDayTaskBlocks(blocks, { renderDate: dayDate, todayStr });
+    let category = '';
+    for (const t of parsed) {
+      if (t.isHeader) { category = t.text.toUpperCase(); continue; }
+      const textKey = t.text.trim().toLowerCase();
+      if (seenIds.has(t.id) || todayIds.has(t.id) || seenTexts.has(textKey) || stickyDone.has(t.id)) continue;
+      if (resolvedSince(t.id, dayStr)) continue;
+      seenIds.add(t.id);
+      seenTexts.add(textKey);
+      missed.push({ id: t.id, text: t.text, category: category || 'ADMIN', isRecurring: !!t.isRecurring });
+    }
+  }
+  return missed;
 }
 
 async function getDailyTasks(dayOfWeek: number, today: Date) {
@@ -223,7 +285,7 @@ export async function GET() {
   const dayOfWeek = today.getDay();
   const todayStr = formatYMD(today);
 
-  const [weather, dailyTasks, projects, osPageBlocks, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates }] = await Promise.all([
+  const [weather, dailyTasks, projects, osPageBlocks, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates, pastPages }] = await Promise.all([
     getWeather(),
     getDailyTasks(dayOfWeek, today),
     getProjects(),
@@ -295,6 +357,24 @@ export async function GET() {
       dailyTasks.unshift(
         { id: `header-sticky-${sticky.header}`, text: sticky.header, checked: false, isHeader: true },
         stickyTask,
+      );
+    }
+  }
+
+  // Inject "not completed yesterday" tasks. Computed after carry/sticky injection
+  // so the "already on today's list" check sees everything that will render.
+  // Placed under their category header like any task; the client renders the
+  // unticked ones red at the top and ticked ones with the other checked tasks.
+  const missedTasks = getMissedTasks(pastPages, today, checkedState, dailyTasks);
+  for (const m of missedTasks) {
+    const missedTask = { id: m.id, text: m.text, checked: false, isRecurring: m.isRecurring, isMissed: true };
+    const headerIdx = dailyTasks.findIndex((t: { isHeader?: boolean; text: string }) => t.isHeader && t.text.toUpperCase() === m.category);
+    if (headerIdx !== -1) {
+      dailyTasks.splice(headerIdx + 1, 0, missedTask);
+    } else {
+      dailyTasks.unshift(
+        { id: `header-missed-${m.category}`, text: m.category, checked: false, isHeader: true },
+        missedTask,
       );
     }
   }
