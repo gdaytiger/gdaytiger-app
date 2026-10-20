@@ -70,6 +70,15 @@ interface Shift {
   comment: string;
 }
 
+// A task from yesterday's list that was never ticked off — offered in the
+// "Not done yesterday" strip at the top of Daily To Do (see /api/dashboard).
+interface MissedTask {
+  id: string;
+  text: string;
+  category: string;
+  isRecurring: boolean;
+}
+
 interface DashboardData {
   dateStr: string;
   weather: string;
@@ -77,6 +86,8 @@ interface DashboardData {
   dailyTasks: Todo[];
   projects: Project[];
   personalTodos: Todo[];
+  missedYesterday?: MissedTask[];
+  yesterdayStr?: string;
 }
 
 interface WeekDay {
@@ -2300,6 +2311,9 @@ export default function Home() {
   const [paymentFees, setPaymentFees] = useState<PaymentFeesData | null>(null);
   // Recurring task IDs moved away from today — suppressed in UI until next refresh/session.
   const [movedRecurringIds, setMovedRecurringIds] = useState<Set<string>>(new Set());
+  // Yesterday-task IDs added to today or skipped this session — hides them from
+  // the "Not done yesterday" strip instantly, before the server write propagates.
+  const [handledMissed, setHandledMissed] = useState<Set<string>>(new Set());
   const [taskContext, setTaskContext] = useState<Record<string, string>>({});
   // Manual drag-to-reorder. taskOrder maps date → ordered block-ids (unchecked
   // tasks). orderPending guards a just-dragged date against a stale Notion read
@@ -2733,6 +2747,60 @@ export default function Home() {
     await refreshAfterMutation();
   };
 
+  // "Not done yesterday" strip. Record the IDs as handled (one batched
+  // checked-state write under `${todayStr}:carry-handled`) so they don't get
+  // offered again today on any device.
+  const markMissedHandled = (ids: string[]) => {
+    setHandledMissed(prev => { const next = new Set(prev); ids.forEach(id => next.add(id)); return next; });
+    fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockIds: ids, date: `${todayStr}:carry-handled`, checked: true }) }).catch(() => {});
+  };
+
+  // Copy yesterday's unticked task(s) onto today as one-off [today] tasks, under
+  // the same category, with any context note carried across. The original block
+  // is left alone (a weekly task still recurs next week). Added sequentially —
+  // add-task's context write is a read-modify-write on a single Notion block.
+  const handleAddMissed = async (tasks: MissedTask[]) => {
+    if (!tasks.length) return;
+    markMissedHandled(tasks.map(t => t.id));
+    // Optimistic: drop each task straight into today's list as a normal tile under
+    // its category (temp id), so the red tile flips to a regular one instantly. The
+    // post-add dashboard refresh replaces these with the real Notion blocks.
+    setData(prev => {
+      if (!prev) return prev;
+      const list = [...prev.dailyTasks];
+      for (const t of tasks) {
+        const task: Todo = { id: `pending-${t.id}`, text: t.text, checked: false, isRecurring: false };
+        const cat = t.category || 'ADMIN';
+        const headerIdx = list.findIndex(x => x.isHeader && x.text.toUpperCase() === cat);
+        if (headerIdx !== -1) list.splice(headerIdx + 1, 0, task);
+        else list.unshift({ id: `header-pending-${cat}`, text: cat, checked: false, isHeader: true }, task);
+      }
+      return { ...prev, dailyTasks: list };
+    });
+    for (const t of tasks) {
+      const ctx = taskContext[t.id];
+      await fetch('/api/add-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: todayStr, text: t.text, category: t.category || undefined, ...(ctx ? { context: ctx } : {}) }),
+      }).catch(() => {});
+    }
+    await refreshAfterMutation({ dashboard: true });
+    fetchTaskContext().catch(() => {});
+  };
+
+  // Ticked on the red tile = it was actually done yesterday. Record it against
+  // yesterday's date (so it's correct everywhere) and clear it from the strip.
+  const handleTickMissed = (t: MissedTask) => {
+    const yStr = data?.yesterdayStr;
+    if (yStr) syncCheckedState(t.id, yStr, true);
+    markMissedHandled([t.id]);
+  };
+
+  const handleSkipMissed = (tasks: MissedTask[]) => {
+    if (tasks.length) markMissedHandled(tasks.map(t => t.id));
+  };
+
   // Hand the action item off to full Claude. Desktop opens a Cowork session
   // (claude:// scheme) with the TIGER OS repo attached and the task prefilled —
   // full tools + memory + native persistence, unlike the old in-app box.
@@ -2945,6 +3013,40 @@ export default function Home() {
             </div>
           }>
           <div className="space-y-2">
+            {/* Not done yesterday — one red tile per unticked task from yesterday,
+                same footprint as a CheckItem tile. Offered, never auto-added. */}
+            {!isViewingOtherDay && (() => {
+              const missed = (data.missedYesterday ?? []).filter(m => !handledMissed.has(m.id));
+              if (!missed.length) return null;
+              return (
+                <>
+                  {missed.length > 1 && (
+                    <div className="flex items-center justify-end gap-3 px-1">
+                      <button onClick={() => handleAddMissed(missed)} className="text-xs uppercase tracking-widest font-semibold" style={{ color: 'var(--color-danger)' }}>Add all</button>
+                      <button onClick={() => handleSkipMissed(missed)} className="text-xs uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors">Skip all</button>
+                    </div>
+                  )}
+                  {missed.map(m => (
+                    <div key={m.id} className="rounded-2xl flex items-start gap-3 px-3 py-2.5"
+                      style={{ minHeight: '62px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.35)', boxShadow: 'var(--glass-shadow)' }}>
+                      {/* Checkbox (same as a regular task) — ticking means it was actually
+                          done: records it as checked on yesterday's date and clears the tile. */}
+                      <div onClick={() => handleTickMissed(m)} role="checkbox" aria-checked={false} aria-label={`Mark ${m.text} done`}
+                        className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer"
+                        style={{ background: 'rgba(255,255,255,0.6)', border: '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm leading-snug font-semibold text-gray-800">{m.text.toUpperCase()}</div>
+                        <p className="text-xs mt-0.5 uppercase" style={{ color: 'var(--color-danger)' }}>Not completed yesterday</p>
+                      </div>
+                      {/* + sits where a regular task's delete ✕ does — adds it to today as a normal tile. */}
+                      <button onClick={() => handleAddMissed([m])} aria-label={`Add ${m.text} to today`} title="Add to today"
+                        className="shrink-0 leading-none font-semibold transition-opacity opacity-80 hover:opacity-100 mt-0.5"
+                        style={{ color: 'var(--color-danger)', fontSize: '16px' }}>+</button>
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
             {(() => {
               const orderDate = isViewingOtherDay ? selectedDate! : todayStr;
               // Flat manual list: keep each task's category (from its header) for the
