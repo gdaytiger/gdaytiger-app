@@ -90,14 +90,17 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const denied = requireSession(req);
   if (denied) return denied;
-  const { blockId, date, checked } = await req.json();
+  const { blockId, blockIds, date, checked } = await req.json();
+  // Accept a batch (blockIds) so multi-task actions like "Add all" are one
+  // read-modify-write instead of N racing writes to the same code block.
+  const ids: string[] = Array.isArray(blockIds) ? blockIds : [blockId];
   const { id: stateBlockId, state } = await getStateBlock();
   if (!stateBlockId) return NextResponse.json({ success: false, error: 'No state block found' });
 
   if (checked) {
-    state[date] = [...new Set([...(state[date] || []), blockId])];
+    state[date] = [...new Set([...(state[date] || []), ...ids])];
   } else {
-    state[date] = (state[date] || []).filter((id: string) => id !== blockId);
+    state[date] = (state[date] || []).filter((id: string) => !ids.includes(id));
     if (!state[date].length) delete state[date];
   }
 
