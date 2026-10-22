@@ -4,7 +4,8 @@ import type { MorningSnapshot } from './morning';
 
 // Monday: write last week's cash tally as child to_dos under the "DO THE BANKING"
 // task on the Monday Notion day page. The dashboard shows them as subtasks.
-// Idempotent — skips if this week's tally is already there (so ticks survive re-runs),
+// One line: "Cash vs Square: +$181.30 over (counted $2,015.70, Square $1,834.40)".
+// Idempotent — skips if that exact line is already there (so a tick survives re-runs),
 // otherwise replaces last week's.
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -25,19 +26,14 @@ export async function writeBankingTally(week: NonNullable<NonNullable<MorningSna
   if (!task) return 'skipped: no DO THE BANKING task on Monday page';
 
   const kids = (await notionFetch(`/blocks/${task.id}/children?page_size=50`)).results || [];
+  const v = week.variance;
+  const line = `Cash vs Square: ${signed(v)} ${Math.abs(v) < 1 ? 'balanced' : v > 0 ? 'over' : 'short'} (counted ${money(week.counted)}, Square ${money(week.square)})`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (kids.some((k: any) => textOf(k).includes(`(${label})`))) return 'skipped: already written';
+  if (kids.some((k: any) => textOf(k) === line)) return `skipped: already written (${label})`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await Promise.all(kids.map((k: any) => notionFetch(`/blocks/${k.id}`, 'DELETE')));
 
-  const v = week.variance;
-  const lines = [
-    `Bank ${money(week.counted)} cash (${label})`,
-    `Cash vs Square: ${signed(v)} ${Math.abs(v) < 1 ? '— balanced' : v > 0 ? 'over' : 'short'} (counted ${money(week.counted)}, Square ${money(week.square)})`,
-    week.days.map(d => `${d.weekday} ${d.variance == null ? 'n/a' : signed(d.variance)}`).join(' · '),
-  ];
-  const missing = week.days.filter(d => d.counted == null).map(d => d.weekday);
-  if (missing.length) lines.push(`Not cashed up: ${missing.join(', ')}`);
+  const lines = [line];
 
   await notionFetch(`/blocks/${task.id}/children`, 'PATCH', {
     children: lines.map(t => ({ type: 'to_do', to_do: { rich_text: [{ type: 'text', text: { content: t } }], checked: false } })),
