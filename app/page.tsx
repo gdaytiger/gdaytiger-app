@@ -2836,6 +2836,16 @@ export default function Home() {
   // ── Pinned "ongoing project" subtasks (expandable checklist on a Daily To Do
   // row) — the checklist lives on the linked Projects DB page's child to_do
   // blocks, found via task.projectId (see /api/dashboard's sticky→project match). ──
+  // Child to_dos under a regular day task (not a pinned project) — same /api/todos PATCH.
+  const toggleTaskSubtask = async (taskId: string, blockId: string, checked: boolean) => {
+    setData(prev => prev ? {
+      ...prev,
+      dailyTasks: prev.dailyTasks.map(t => t.id === taskId
+        ? { ...t, subtasks: (t.subtasks || []).map(s => s.id === blockId ? { ...s, checked } : s) }
+        : t),
+    } : prev);
+    await fetch('/api/todos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, checked }) });
+  };
   const toggleProjectSubtask = async (projectId: string, blockId: string, checked: boolean) => {
     setData(prev => prev ? {
       ...prev,
@@ -3036,7 +3046,7 @@ export default function Home() {
                 // Pinned tasks with a linked Projects DB page ("ongoing projects") show
                 // a done/total badge; the checklist itself renders as sibling tiles
                 // below the row (see stickyItems render), not nested inside it.
-                subtaskCount: task.projectId ? { done: (task.subtasks || []).filter(s => s.checked).length, total: (task.subtasks || []).length } : undefined,
+                subtaskCount: (task.projectId || task.subtasks?.length) ? { done: (task.subtasks || []).filter(s => s.checked).length, total: (task.subtasks || []).length } : undefined,
               });
 
               const tileStyle = { minHeight: '62px', ...glassTileStyle };
@@ -3046,9 +3056,25 @@ export default function Home() {
                     <CheckItem key={task.id} {...itemProps(task, category)} />
                   ))}
                   <SortableContext items={sortableIdsRef.current} strategy={verticalListSortingStrategy}>
-                    {orderedUnchecked.map(({ task, category }) => (
-                      <SortableCheckItem key={task.id} {...itemProps(task, category)} />
-                    ))}
+                    {orderedUnchecked.map(({ task, category }) => {
+                      if (!task.subtasks?.length || task.projectId) {
+                        return <SortableCheckItem key={task.id} {...itemProps(task, category)} />;
+                      }
+                      // Regular task with child to_dos (e.g. Monday's DO THE BANKING +
+                      // the weekly cash tally). Tap the row to show/hide them.
+                      const isOpen = expandedPins.has(task.id);
+                      return (
+                        <SortableWrapper key={task.id} id={task.id}>
+                          <div className="space-y-2">
+                            <CheckItem {...itemProps(task, category)} onRowClick={() => togglePinExpanded(task.id)} />
+                            {isOpen && task.subtasks.map(s => (
+                              <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} rawText={s.text}
+                                onChange={(sid, schecked) => toggleTaskSubtask(task.id, sid, schecked)} />
+                            ))}
+                          </div>
+                        </SortableWrapper>
+                      );
+                    })}
                   </SortableContext>
                   {/* Pinned (📌) tasks — parked at the bottom, highlighted, and now
                       drag-reorderable among themselves (own group, global order). Ones
