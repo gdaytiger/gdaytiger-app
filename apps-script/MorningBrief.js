@@ -6,7 +6,9 @@
 //
 //  Block shape:
 //    { type: 'morning_brief', updated, yesterday: { date, gross, orders, cash },
-//      ly: { date, gross, orders } }      // ly = same weekday 52 weeks earlier
+//      ly: { date, gross, orders },       // same weekday 52 weeks earlier
+//      cashWeek: { weekStart, sheetFound, complete, days: [{ date, weekday, square, counted }] } }
+//  counted comes from the staff's weekly cash-up sheet in Drive (CASH SALES row).
 //
 //  cash = CASH tenders on yesterday's completed orders, minus cash refunds on
 //  those same orders. (A cash refund on an OLDER order isn't netted — rare.)
@@ -45,8 +47,54 @@ function mbBuild_() {
     type: MB_BLOCK_TYPE,
     updated: new Date().toISOString(),
     yesterday: { date: sdDateKey_(yStart), gross: y.gross, orders: y.orders, cash: y.cash },
-    ly: { date: sdDateKey_(lyStart), gross: ly.gross, orders: ly.orders }
+    ly: { date: sdDateKey_(lyStart), gross: ly.gross, orders: ly.orders },
+    cashWeek: mbCashWeek_(yStart, y.cash)
   };
+}
+
+// ── Weekly cash reconciliation ───────────────────────────────────────────────
+// Cash-up sheets live in Drive as one spreadsheet per Mon–Sun week, titled
+// DDMMYYYY-DDMMYYYY (Monday first), one tab per weekday. "CASH SALES:" (col C)
+// is the counted till minus float. Compare it with the cash Square recorded.
+var MB_DAY_TABS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function mbCashWeek_(yStart, yCash) {
+  var dow = yStart.getDay();                                  // 0 = Sun
+  var monday = sdAddDays_(yStart, -((dow + 6) % 7));
+  var ss = mbFindCashupSheet_(monday);
+  var days = [];
+  for (var d = new Date(monday.getTime()); d <= yStart; d = sdAddDays_(d, 1)) {
+    var square = (d.getTime() === yStart.getTime()) ? yCash : mbDayTotals_(d, sdAddDays_(d, 1)).cash;
+    days.push({ date: sdDateKey_(d), weekday: MB_DAY_TABS[d.getDay()].slice(0, 3), square: square, counted: ss ? mbCountedCash_(ss, MB_DAY_TABS[d.getDay()]) : null });
+  }
+  return { weekStart: sdDateKey_(monday), sheetFound: !!ss, complete: dow === 0, days: days };
+}
+
+function mbFindCashupSheet_(monday) {
+  var key = Utilities.formatDate(monday, SD_TZ, 'ddMMyyyy');
+  var it = DriveApp.searchFiles("title contains '" + key + "' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false");
+  var best = null;
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.getName().indexOf(key) !== 0) continue;
+    if (!best || f.getLastUpdated() > best.getLastUpdated()) best = f;   // duplicates exist — take the latest edited
+  }
+  return best ? SpreadsheetApp.openById(best.getId()) : null;
+}
+
+// Counted cash for one day tab, or null if nobody cashed up (till blank/zero).
+function mbCountedCash_(ss, tabName) {
+  var sh = ss.getSheetByName(tabName);
+  if (!sh) return null;
+  var vals = sh.getRange('B1:C30').getValues();
+  var inTill = null, cashSales = null;
+  vals.forEach(function (r) {
+    var label = String(r[0]).trim().toUpperCase();
+    if (label === 'IN TILL:') inTill = Number(r[1]) || 0;
+    if (label === 'CASH SALES:') cashSales = Number(r[1]);
+  });
+  if (!inTill || cashSales === null || isNaN(cashSales)) return null;
+  return Math.round(cashSales * 100) / 100;
 }
 
 // One Melbourne day of COMPLETED orders → { gross (incl GST, excl tips), orders, cash } in dollars.

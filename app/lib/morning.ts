@@ -8,9 +8,14 @@ import { formatYMD, shiftYMD } from './dayTasks';
 
 export const CASH_TOLERANCE = 20; // $ either way before a cash-up is flagged
 
-type Brief = { updated: string; yesterday: { date: string; gross: number; orders: number; cash: number }; ly: { date: string; gross: number; orders: number } };
+type CashDay = { date: string; weekday: string; square: number; counted: number | null };
+type Brief = {
+  updated: string;
+  yesterday: { date: string; gross: number; orders: number; cash: number };
+  ly: { date: string; gross: number; orders: number };
+  cashWeek?: { weekStart: string; sheetFound: boolean; complete: boolean; days: CashDay[] };
+};
 type SalesDaily = { days: { date: string; gross: number; orders: number }[] };
-export type CashCounts = { float: number | null; entries: Record<string, number> };
 
 export type MorningSnapshot = {
   generated: string;
@@ -20,10 +25,16 @@ export type MorningSnapshot = {
   tasks: { total: number; missed: number; top: string[] };
   shift: string | null;
   sales: { date: string; gross: number; orders: number; ly: number | null; lyPct: number | null; avg4: number | null; avg4Pct: number | null } | null;
-  cash: { date: string; square: number; counted: number | null; variance: number | null; status: 'ok' | 'short' | 'over' | 'missing' | 'no-float' } | null;
+  cash: {
+    yesterday: { date: string; square: number; counted: number | null; variance: number | null; status: CashStatus } | null;
+    week: { weekStart: string; complete: boolean; sheetFound: boolean; square: number; counted: number; variance: number; daysCounted: number; days: (CashDay & { variance: number | null })[] } | null;
+  } | null;
   alerts: string[];
   focus: string | null;
 };
+
+type CashStatus = 'ok' | 'short' | 'over' | 'missing';
+const statusOf = (v: number): CashStatus => (Math.abs(v) < CASH_TOLERANCE ? 'ok' : v < 0 ? 'short' : 'over');
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-AU')}`;
 const pct = (a: number, b: number) => (b > 0 ? Math.round(((a - b) / b) * 100) : null);
@@ -46,11 +57,10 @@ export async function buildMorning(origin: string, withFocus: boolean): Promise<
   const [dash, roster, blocks] = await Promise.all([
     internal(origin, '/api/dashboard'),
     internal(origin, '/api/roster'),
-    readOsBlocks(['morning_brief', 'sales_daily', 'cash_counts']),
+    readOsBlocks(['morning_brief', 'sales_daily']),
   ]);
   const brief = blocks.morning_brief as unknown as Brief | null;
   const salesDaily = blocks.sales_daily as unknown as SalesDaily | null;
-  const cashCounts = (blocks.cash_counts as unknown as CashCounts | null) || { float: null, entries: {} };
   const alerts: string[] = [];
 
   // Tasks
@@ -82,23 +92,23 @@ export async function buildMorning(origin: string, withFocus: boolean): Promise<
     alerts.push('Square sales feed didn’t update overnight');
   }
 
-  // Cash-up (yesterday)
+  // Cash: Square cash tenders vs the counted CASH SALES on the staff cash-up sheet
   let cash: MorningSnapshot['cash'] = null;
-  if (brief?.yesterday?.date === yesterday && (brief.yesterday.cash > 0 || cashCounts.entries[yesterday] != null)) {
-    const square = brief.yesterday.cash;
-    const raw = cashCounts.entries[yesterday];
-    if (raw == null) {
-      cash = { date: yesterday, square, counted: null, variance: null, status: 'missing' };
-      alerts.push('No cash-up entered for yesterday');
-    } else if (cashCounts.float == null) {
-      cash = { date: yesterday, square, counted: raw, variance: null, status: 'no-float' };
-    } else {
-      const counted = raw - cashCounts.float;
-      const variance = Math.round((counted - square) * 100) / 100;
-      const status = Math.abs(variance) < CASH_TOLERANCE ? 'ok' : variance < 0 ? 'short' : 'over';
-      cash = { date: yesterday, square, counted, variance, status };
-      if (status !== 'ok') alerts.push(`Cash ${status} ${money(Math.abs(variance))} yesterday`);
-    }
+  const cw = brief?.yesterday?.date === yesterday ? brief.cashWeek : undefined;
+  if (cw?.days?.length) {
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const days = cw.days.map(d => ({ ...d, variance: d.counted == null ? null : r2(d.counted - d.square) }));
+    const counted = days.filter(d => d.counted != null);
+    const wSquare = r2(counted.reduce((a, d) => a + d.square, 0));
+    const wCounted = r2(counted.reduce((a, d) => a + (d.counted as number), 0));
+    const week = { weekStart: cw.weekStart, complete: cw.complete, sheetFound: cw.sheetFound, square: wSquare, counted: wCounted, variance: r2(wCounted - wSquare), daysCounted: counted.length, days };
+    const y = days[days.length - 1];
+    const yRow = y && y.date === yesterday ? { date: y.date, square: y.square, counted: y.counted, variance: y.variance, status: (y.variance == null ? 'missing' : statusOf(y.variance)) as CashStatus } : null;
+    cash = { yesterday: yRow, week };
+    if (!cw.sheetFound) alerts.push('This week’s cash-up sheet not found in Drive');
+    else if (yRow?.status === 'missing') alerts.push('Nobody cashed up yesterday');
+    else if (yRow && yRow.status !== 'ok') alerts.push(`Cash ${yRow.status} ${money(Math.abs(yRow.variance || 0))} yesterday`);
+    if (week.complete && Math.abs(week.variance) >= CASH_TOLERANCE * 3) alerts.push(`Cash ${week.variance > 0 ? 'over' : 'short'} ${money(Math.abs(week.variance))} for the week`);
   }
 
   const snap: MorningSnapshot = { generated: new Date().toISOString(), today, todayLabel, weather, tasks, shift, sales, cash, alerts, focus: null };
@@ -129,9 +139,12 @@ export function pushText(s: MorningSnapshot): { title: string; body: string } {
   lines.push(`${s.tasks.total} tasks${s.tasks.missed ? ` (${s.tasks.missed} from before)` : ''}${s.shift ? ` · You: ${s.shift}` : ''}${s.weather ? ` · ${s.weather}` : ''}`);
   if (s.sales) {
     const vs = s.sales.lyPct != null ? `${s.sales.lyPct >= 0 ? '+' : ''}${s.sales.lyPct}% vs LY` : s.sales.avg4Pct != null ? `${s.sales.avg4Pct >= 0 ? '+' : ''}${s.sales.avg4Pct}% vs 4wk` : '';
-    const c = s.cash ? (s.cash.status === 'ok' ? ' · Cash ✓' : s.cash.status === 'missing' ? ' · Cash-up missing' : s.cash.status === 'no-float' ? '' : ` · Cash ${s.cash.status} $${Math.abs(s.cash.variance || 0).toFixed(0)}`) : '';
+    const cy = s.cash?.yesterday;
+    const c = cy ? (cy.status === 'ok' ? ' · Cash ✓' : cy.status === 'missing' ? ' · No cash-up' : ` · Cash ${cy.status} $${Math.abs(cy.variance || 0).toFixed(0)}`) : '';
     lines.push(`Yesterday ${money(s.sales.gross)}${vs ? ` (${vs})` : ''}${c}`);
   }
+  const wk = s.cash?.week;
+  if (wk?.complete && wk.daysCounted) lines.push(`Last week cash: ${wk.variance >= 0 ? '+' : '−'}${money(Math.abs(wk.variance))} (${money(wk.counted)} counted vs ${money(wk.square)} Square)`);
   if (s.focus) lines.push(s.focus);
   else if (s.alerts.length) lines.push(`⚠️ ${s.alerts[0]}`);
   return { title: `☀️ ${s.todayLabel}`, body: lines.join('\n') };

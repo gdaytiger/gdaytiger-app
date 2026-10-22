@@ -3,17 +3,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { MorningSnapshot } from '@/app/lib/morning';
 
-// Morning card: the same snapshot the 5am push sends, the nightly cash-up
-// entry, and the switch to turn phone alerts on. Self-contained — fetches its
-// own data from /api/morning, /api/cash-count, /api/push/*.
+// Morning card: the same snapshot the 5am push sends (incl. the cash check —
+// Square cash vs the staff cash-up sheet, daily + week to date) and the switch
+// to turn phone alerts on. Self-contained — fetches /api/morning, /api/push/*.
 
-type MorningData = { snapshot: MorningSnapshot; cash: { float: number | null; todayCount: number | null } } | null;
+type MorningData = { snapshot: MorningSnapshot } | null;
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-AU')}`;
 const signed = (n: number | null, suffix: string) => (n == null ? null : `${n >= 0 ? '+' : ''}${n}% ${suffix}`);
 const label: React.CSSProperties = { fontFamily: '"stolzl", sans-serif', fontWeight: 700, fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-ink-label)' };
 const box: React.CSSProperties = { background: 'rgba(255,255,255,0.55)', borderRadius: '16px', padding: '12px 14px' };
-const input: React.CSSProperties = { width: '110px', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontSize: '16px', background: 'white' };
+const varColour = (v: number | null) => (v == null ? 'var(--color-warning)' : Math.abs(v) < 20 ? 'var(--color-success)' : 'var(--color-danger)');
+const signedMoney = (v: number) => `${v >= 0 ? '+' : '−'}$${Math.abs(v).toFixed(2)}`;
 const btn: React.CSSProperties = { padding: '8px 14px', borderRadius: '999px', background: 'var(--color-brand-peach)', color: '#333', fontWeight: 700, fontSize: '13px', border: 'none' };
 
 function urlB64ToUint8Array(base64: string) {
@@ -24,17 +25,11 @@ function urlB64ToUint8Array(base64: string) {
 
 export default function MorningCard({ active }: { active: boolean }) {
   const [data, setData] = useState<MorningData>(null);
-  const [count, setCount] = useState('');
-  const [floatVal, setFloatVal] = useState('');
-  const [editFloat, setEditFloat] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [pushState, setPushState] = useState<'unknown' | 'unsupported' | 'off' | 'on'>('unknown');
 
   const load = useCallback(() => {
-    fetch('/api/morning').then(r => r.json()).then((d: MorningData) => {
-      setData(d);
-      if (d?.cash.float == null) setEditFloat(true);
-    }).catch(() => {});
+    fetch('/api/morning').then(r => r.json()).then((d: MorningData) => setData(d)).catch(() => {});
   }, []);
 
   useEffect(() => { if (active && !data) load(); }, [active, data, load]);
@@ -45,14 +40,6 @@ export default function MorningCard({ active }: { active: boolean }) {
       .then(sub => setPushState(sub ? 'on' : 'off'))
       .catch(() => setPushState(supported ? 'off' : 'unsupported'));
   }, []);
-
-  async function saveCash(payload: { counted?: number; float?: number }) {
-    setMsg('Saving…');
-    const r = await fetch('/api/cash-count', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!r.ok) { setMsg('Couldn’t save — try again'); return; }
-    setMsg('Saved ✓'); setCount(''); setEditFloat(false); load();
-    setTimeout(() => setMsg(null), 2500);
-  }
 
   async function enablePush() {
     try {
@@ -80,7 +67,6 @@ export default function MorningCard({ active }: { active: boolean }) {
   }
 
   const s = data?.snapshot;
-  const cashColour = s?.cash?.status === 'ok' ? 'var(--color-success)' : s?.cash?.status === 'missing' || s?.cash?.status === 'no-float' ? 'var(--color-warning)' : 'var(--color-danger)';
 
   return (
     <div className="flex flex-col gap-3" style={{ padding: '4px 2px 12px' }}>
@@ -124,43 +110,33 @@ export default function MorningCard({ active }: { active: boolean }) {
             </div>
           )}
 
-          {s.cash && (
+          {s.cash?.week && (
             <div style={box}>
-              <div style={label}>Yesterday’s cash-up</div>
-              <div className="text-sm tabular-nums" style={{ marginTop: 4 }}>
-                Square cash {money(s.cash.square)}{s.cash.counted != null && s.cash.status !== 'no-float' ? ` · Counted ${money(s.cash.counted)}` : ''}
-              </div>
-              <div className="text-sm font-bold" style={{ color: cashColour, marginTop: 2 }}>
-                {s.cash.status === 'ok' && 'Balanced ✓'}
-                {s.cash.status === 'missing' && 'No count entered'}
-                {s.cash.status === 'no-float' && 'Set your float below to check this'}
-                {(s.cash.status === 'short' || s.cash.status === 'over') && `${s.cash.status === 'short' ? 'Short' : 'Over'} ${money(Math.abs(s.cash.variance || 0))}`}
-              </div>
+              <div style={label}>Cash check · {s.cash.week.complete ? 'last week' : 'week to date'}</div>
+              <div className="text-xs" style={{ color: 'var(--color-ink-muted)', marginTop: 4 }}>Counted (cash-up sheet) vs cash rung through Square</div>
+              <table className="w-full text-sm tabular-nums" style={{ marginTop: 6 }}>
+                <tbody>
+                  {s.cash.week.days.map(d => (
+                    <tr key={d.date}>
+                      <td>{d.weekday}</td>
+                      <td style={{ textAlign: 'right' }}>{d.counted == null ? '—' : money(d.counted)}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--color-ink-muted)' }}>{money(d.square)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: varColour(d.variance) }}>{d.variance == null ? 'not cashed up' : signedMoney(d.variance)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+                    <td className="font-bold">Total</td>
+                    <td style={{ textAlign: 'right' }} className="font-bold">{money(s.cash.week.counted)}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--color-ink-muted)' }}>{money(s.cash.week.square)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: varColour(Math.abs(s.cash.week.variance) < 60 ? 0 : s.cash.week.variance) }}>{signedMoney(s.cash.week.variance)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div className="text-xs" style={{ color: 'var(--color-ink-muted)', marginTop: 6 }}>+ means more cash in the till than Square recorded.</div>
             </div>
           )}
         </>
       )}
-
-      <div style={box}>
-        <div style={label}>Tonight’s cash-up</div>
-        <div className="text-xs" style={{ color: 'var(--color-ink-muted)', marginTop: 4 }}>
-          Total cash in the till at close, float included.{data?.cash.todayCount != null ? ` Entered today: ${money(data.cash.todayCount)}.` : ''}
-        </div>
-        <div className="flex items-center gap-2" style={{ marginTop: 8 }}>
-          <input inputMode="decimal" placeholder="$ till count" value={count} onChange={e => setCount(e.target.value)} style={input} />
-          <button style={btn} disabled={!count} onClick={() => saveCash({ counted: Number(count.replace(/[$,]/g, '')) })}>Save</button>
-        </div>
-        {editFloat ? (
-          <div className="flex items-center gap-2" style={{ marginTop: 8 }}>
-            <input inputMode="decimal" placeholder="$ float" value={floatVal} onChange={e => setFloatVal(e.target.value)} style={input} />
-            <button style={btn} disabled={!floatVal} onClick={() => saveCash({ float: Number(floatVal.replace(/[$,]/g, '')) })}>Set float</button>
-          </div>
-        ) : (
-          <div className="text-xs" style={{ color: 'var(--color-ink-muted)', marginTop: 8 }} onClick={() => setEditFloat(true)}>
-            Float {money(data?.cash.float ?? 0)} · <u>change</u>
-          </div>
-        )}
-      </div>
 
       <div style={box}>
         <div style={label}>Phone alerts</div>
