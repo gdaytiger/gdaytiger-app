@@ -11,6 +11,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import AddProductModal from './components/AddProductModal';
 import AddIngredientModal from './components/AddIngredientModal';
+import MorningCard from './components/MorningCard';
 import WeeklyFlashCard, { type WeeklyFlashData, type FlashExtrasData } from './components/WeeklyFlashCard';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
 import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle } from './lib/theme';
@@ -115,10 +116,10 @@ const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
 // ── Widget icons (emoji) ─────────────────────────────────────────────────────
 // One place mapping each widget to its emoji, rendered at a size derived from
 // the caller's chip value. Kept as a component so the set can be swapped later.
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'flash';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning';
 
 const WIDGET_ICON_EMOJI: Record<WidgetIconName, string> = {
-  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒', flash: '📈',
+  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒', flash: '📈', morning: '☀️',
 };
 
 function WidgetIcon({ name, chip = 28 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -2272,6 +2273,11 @@ export default function Home() {
     setOpenWidgets(prev => prev.has(key) ? new Set() : new Set([key]));
   };
   const closeWidgets = () => setOpenWidgets(new Set());
+  // Tapping the 5am push opens /?open=morning — jump straight to the Morning card.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('open');
+    if (p === 'morning') { window.history.replaceState(null, '', '/'); setTimeout(() => setOpenWidgets(new Set(['morning'])), 0); }
+  }, []);
   // Used by the Daily To Do shopping link row — opens the Shopping sheet.
   const openShoppingWidget = () => {
     setOpenWidgets(prev => prev.has('shopping') ? new Set() : new Set(['shopping']));
@@ -3117,7 +3123,8 @@ export default function Home() {
         </Card>
 
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
-        <div className="md:col-span-2 grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="md:col-span-2 grid grid-cols-3 md:grid-cols-7 gap-3">
+          <LauncherTile icon={<WidgetIcon name="morning" chip={48} glyph={26} />} title="Morning" active={openWidgets.has('morning')} onClick={() => toggleWidget('morning')} />
           <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
           <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
@@ -3199,6 +3206,13 @@ export default function Home() {
               onDeleteTask={deleteTigerTask}
               onDelegate={delegateTigerTask}
             />
+          </Card>
+        </div>
+
+        {/* MORNING — 5am snapshot, cash-up entry, phone alerts */}
+        <div style={{ display: openWidgets.has('morning') ? 'block' : 'none' }}>
+          <Card bare icon={<WidgetIcon name="morning" chip={28} glyph={17} />} title="Morning" onCollapse={() => toggleWidget('morning')}>
+            <MorningCard active={openWidgets.has('morning')} />
           </Card>
         </div>
 
