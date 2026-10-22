@@ -65,6 +65,10 @@ export type ParsedTask = {
   isSticky?: boolean;
   // Unticked task from a past day, injected by /api/dashboard ("not completed yesterday").
   isMissed?: boolean;
+  // Notion block has child blocks — /api/dashboard fetches them as `subtasks`
+  // (e.g. the weekly cash tally Claude writes under Monday's DO THE BANKING).
+  hasChildren?: boolean;
+  subtasks?: { id: string; text: string; checked: boolean }[];
 };
 
 // [STICKY], [STICKY:YYYY-MM-DD], or [STICKY:YYYY-MM-DD:projectId] text — persistent
@@ -113,11 +117,12 @@ export function parseDayTaskBlocks(blocks: Block[], opts: ParseOpts): ParsedTask
   const weekNum = getISOWeek(renderDate);
   const isOddWeek = weekNum % 2 === 1;
 
-  type RawItem = { type: 'header' | 'task'; id: string; text: string; isRecurring?: boolean; isSticky?: boolean };
+  type RawItem = { type: 'header' | 'task'; id: string; text: string; isRecurring?: boolean; isSticky?: boolean; hasChildren?: boolean };
   const rawItems: RawItem[] = [];
 
+  const childIds = new Set(blocks.filter(b => b.has_children).map(b => b.id as string));
   const pushTask = (id: string, text: string, isRecurring: boolean) => {
-    rawItems.push({ type: 'task', id, text, isRecurring, isSticky: isReviewPricingTask(text) || undefined });
+    rawItems.push({ type: 'task', id, text, isRecurring, isSticky: isReviewPricingTask(text) || undefined, hasChildren: childIds.has(id) || undefined });
   };
 
   for (const block of blocks) {
@@ -198,7 +203,7 @@ export function parseDayTaskBlocks(blocks: Block[], opts: ParseOpts): ParsedTask
       }
       if (hasTask) tasks.push({ id: `header-${item.id}`, text: item.text, checked: false, isHeader: true });
     } else {
-      tasks.push({ id: item.id, text: item.text, checked: false, isRecurring: item.isRecurring, isSticky: item.isSticky });
+      tasks.push({ id: item.id, text: item.text, checked: false, isRecurring: item.isRecurring, isSticky: item.isSticky, ...(item.hasChildren ? { hasChildren: true } : {}) });
     }
   }
   return tasks;

@@ -212,7 +212,20 @@ function getMissedTasks(
 async function getDailyTasks(dayOfWeek: number, today: Date) {
   const pageId = DAY_PAGES[dayOfWeek];
   const data = await notionFetch(`/blocks/${pageId}/children?page_size=100`);
-  return parseDayTaskBlocks(data.results || [], { renderDate: today, todayStr: formatYMD(today) });
+  const tasks = parseDayTaskBlocks(data.results || [], { renderDate: today, todayStr: formatYMD(today) });
+  // Tasks with child to_do blocks (e.g. the Monday cash tally under DO THE BANKING)
+  // get them attached as `subtasks` — ticked via /api/todos like project subtasks.
+  await Promise.all(tasks.filter(t => t.hasChildren).map(async t => {
+    const kids = await notionFetch(`/blocks/${t.id}/children?page_size=50`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    t.subtasks = (kids.results || []).filter((b: any) => b.type === 'to_do').map((b: any) => ({
+      id: b.id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      text: (b.to_do?.rich_text || []).map((r: any) => r.plain_text).join(''),
+      checked: b.to_do?.checked || false,
+    }));
+  }));
+  return tasks;
 }
 
 async function getShoppingTasks() {
