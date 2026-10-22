@@ -14,6 +14,11 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 5am push cron — no cookie; the route checks Bearer CRON_SECRET itself.
+  if (pathname === '/api/push/morning' && request.method === 'GET') {
+    return NextResponse.next();
+  }
+
   // Check session cookie
   const session = request.cookies.get('gdt_session')?.value;
 
@@ -29,5 +34,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png|manifest.json).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png|manifest.json|sw.js|icon-192.png).*)'],
 };
