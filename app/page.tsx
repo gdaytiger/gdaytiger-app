@@ -2957,7 +2957,8 @@ export default function Home() {
       <div style={{ position: 'fixed', top: '40%', left: '30%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
 
       <div className="max-w-5xl mx-auto px-5 pt-8 pb-4 flex items-center justify-between relative">
-        <div>
+        {/* Tap the header (title / date / weather) to open the Morning snapshot */}
+        <div role="button" className="cursor-pointer" onClick={() => toggleWidget('morning')}>
           <h1 className="text-4xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif', fontWeight: 700, fontStyle: 'italic', fontVariationSettings: "'opsz' 18, 'wght' 700" }}>
             TIGER <span style={{ color: 'var(--color-brand-peach)' }}>OS</span>
           </h1>
@@ -3149,8 +3150,7 @@ export default function Home() {
         </Card>
 
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
-        <div className="md:col-span-2 grid grid-cols-3 md:grid-cols-7 gap-3">
-          <LauncherTile icon={<WidgetIcon name="morning" chip={48} glyph={26} />} title="Morning" active={openWidgets.has('morning')} onClick={() => toggleWidget('morning')} />
+        <div className="md:col-span-2 grid grid-cols-3 md:grid-cols-6 gap-3">
           <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
           <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />

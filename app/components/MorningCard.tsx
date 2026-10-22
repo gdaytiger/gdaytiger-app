@@ -3,9 +3,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { MorningSnapshot } from '@/app/lib/morning';
 
-// Morning card: the same snapshot the 5am push sends (incl. the cash check —
-// Square cash vs the staff cash-up sheet, daily + week to date) and the switch
-// to turn phone alerts on. Self-contained — fetches /api/morning, /api/push/*.
+// Morning card (opens from the TIGER OS header): the 5am snapshot — focus line,
+// alerts, today's tasks, yesterday's sales — and the switch for phone alerts.
+// The cash check lives on Monday's DO THE BANKING subtask, not here. Self-contained — fetches /api/morning, /api/push/*.
 
 type MorningData = { snapshot: MorningSnapshot } | null;
 
@@ -13,8 +13,6 @@ const money = (n: number) => `$${Math.round(n).toLocaleString('en-AU')}`;
 const signed = (n: number | null, suffix: string) => (n == null ? null : `${n >= 0 ? '+' : ''}${n}% ${suffix}`);
 const label: React.CSSProperties = { fontFamily: '"stolzl", sans-serif', fontWeight: 700, fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-ink-label)' };
 const box: React.CSSProperties = { background: 'rgba(255,255,255,0.55)', borderRadius: '16px', padding: '12px 14px' };
-const varColour = (v: number | null) => (v == null ? 'var(--color-warning)' : Math.abs(v) < 20 ? 'var(--color-success)' : 'var(--color-danger)');
-const signedMoney = (v: number) => `${v >= 0 ? '+' : '−'}$${Math.abs(v).toFixed(2)}`;
 const btn: React.CSSProperties = { padding: '8px 14px', borderRadius: '999px', background: 'var(--color-brand-peach)', color: '#333', fontWeight: 700, fontSize: '13px', border: 'none' };
 
 function urlB64ToUint8Array(base64: string) {
@@ -67,6 +65,8 @@ export default function MorningCard({ active }: { active: boolean }) {
   }
 
   const s = data?.snapshot;
+  // Cash alerts belong to Monday's banking subtask — keep them out of this card.
+  const alerts = (s?.alerts || []).filter(x => !/cash/i.test(x));
 
   return (
     <div className="flex flex-col gap-3" style={{ padding: '4px 2px 12px' }}>
@@ -85,10 +85,10 @@ export default function MorningCard({ active }: { active: boolean }) {
             </div>
           )}
 
-          {s.alerts.length > 0 && (
+          {alerts.length > 0 && (
             <div style={{ ...box, borderLeft: '4px solid var(--color-danger)' }}>
               <div style={label}>Needs attention</div>
-              {s.alerts.map(a => <div key={a} className="text-sm" style={{ marginTop: 4 }}>⚠️ {a}</div>)}
+              {alerts.map(a => <div key={a} className="text-sm" style={{ marginTop: 4 }}>⚠️ {a}</div>)}
             </div>
           )}
 
@@ -110,31 +110,6 @@ export default function MorningCard({ active }: { active: boolean }) {
             </div>
           )}
 
-          {s.cash?.week && (
-            <div style={box}>
-              <div style={label}>Cash check · {s.cash.week.complete ? 'last week' : 'week to date'}</div>
-              <div className="text-xs" style={{ color: 'var(--color-ink-muted)', marginTop: 4 }}>Counted (cash-up sheet) vs cash rung through Square</div>
-              <table className="w-full text-sm tabular-nums" style={{ marginTop: 6 }}>
-                <tbody>
-                  {s.cash.week.days.map(d => (
-                    <tr key={d.date}>
-                      <td>{d.weekday}</td>
-                      <td style={{ textAlign: 'right' }}>{d.counted == null ? '—' : money(d.counted)}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--color-ink-muted)' }}>{money(d.square)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: varColour(d.variance) }}>{d.variance == null ? 'not cashed up' : signedMoney(d.variance)}</td>
-                    </tr>
-                  ))}
-                  <tr style={{ borderTop: '1px solid rgba(0,0,0,0.1)' }}>
-                    <td className="font-bold">Total</td>
-                    <td style={{ textAlign: 'right' }} className="font-bold">{money(s.cash.week.counted)}</td>
-                    <td style={{ textAlign: 'right', color: 'var(--color-ink-muted)' }}>{money(s.cash.week.square)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: varColour(Math.abs(s.cash.week.variance) < 60 ? 0 : s.cash.week.variance) }}>{signedMoney(s.cash.week.variance)}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div className="text-xs" style={{ color: 'var(--color-ink-muted)', marginTop: 6 }}>+ means more cash in the till than Square recorded.</div>
-            </div>
-          )}
         </>
       )}
 
