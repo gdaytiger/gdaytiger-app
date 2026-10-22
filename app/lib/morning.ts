@@ -126,7 +126,7 @@ async function focusLine(snap: MorningSnapshot): Promise<string | null> {
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 80,
         system: "You brief Jonathan, owner-operator of G'Day Tiger café (Cowes, Phillip Island; 6:30am–3pm). Given this morning's snapshot, write ONE line (max 18 words, Australian English, no preamble, no emoji) naming the single most useful thing to focus on today — a commercial or operational call, not a generic tip. If nothing stands out, point at the highest-value task.",
-        messages: [{ role: 'user', content: JSON.stringify({ ...snap, focus: undefined }) }],
+        messages: [{ role: 'user', content: JSON.stringify({ ...snap, focus: undefined, cash: undefined, alerts: snap.alerts.filter(x => !/cash/i.test(x)) }) }],
       }),
     });
     const d = await res.json();
@@ -139,14 +139,13 @@ export function pushText(s: MorningSnapshot): { title: string; body: string } {
   lines.push(`${s.tasks.total} tasks${s.tasks.missed ? ` (${s.tasks.missed} from before)` : ''}${s.shift ? ` · You: ${s.shift}` : ''}${s.weather ? ` · ${s.weather}` : ''}`);
   if (s.sales) {
     const vs = s.sales.lyPct != null ? `${s.sales.lyPct >= 0 ? '+' : ''}${s.sales.lyPct}% vs LY` : s.sales.avg4Pct != null ? `${s.sales.avg4Pct >= 0 ? '+' : ''}${s.sales.avg4Pct}% vs 4wk` : '';
-    const cy = s.cash?.yesterday;
-    const c = cy ? (cy.status === 'ok' ? ' · Cash ✓' : cy.status === 'missing' ? ' · No cash-up' : ` · Cash ${cy.status} $${Math.abs(cy.variance || 0).toFixed(0)}`) : '';
-    lines.push(`Yesterday ${money(s.sales.gross)}${vs ? ` (${vs})` : ''}${c}`);
+    lines.push(`Yesterday ${money(s.sales.gross)}${vs ? ` (${vs})` : ''}`);
   }
-  const wk = s.cash?.week;
-  if (wk?.complete && wk.daysCounted) lines.push(`Last week cash: ${wk.variance >= 0 ? '+' : '−'}${money(Math.abs(wk.variance))} (${money(wk.counted)} counted vs ${money(wk.square)} Square)`);
   if (s.focus) lines.push(s.focus);
-  else if (s.alerts.length) lines.push(`⚠️ ${s.alerts[0]}`);
+  else {
+    const a = s.alerts.find(x => !/cash/i.test(x));
+    if (a) lines.push(`⚠️ ${a}`);
+  }
   return { title: `☀️ ${s.todayLabel}`, body: lines.join('\n') };
 }
 
