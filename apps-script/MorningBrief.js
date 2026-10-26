@@ -31,6 +31,20 @@ function installMorningBrief() {
 
 function runMorningBrief() {
   mbWriteBlock_(MB_BLOCK_TYPE, mbBuild_());
+  mbTriggerPush_();
+}
+
+// Fire the TIGER OS morning push (snapshot + phone notification + Monday banking
+// tally) right after the brief is written. Replaces the Vercel cron, which never
+// fired. Needs Script Property CRON_SECRET (same value as in Vercel).
+var MB_PUSH_URL = 'https://gdaytiger-app.vercel.app/api/push/morning?force=1';
+function mbTriggerPush_() {
+  var secret = PropertiesService.getScriptProperties().getProperty('CRON_SECRET');
+  if (!secret) { Logger.log('MB: CRON_SECRET not set — push skipped.'); return; }
+  try {
+    var r = UrlFetchApp.fetch(MB_PUSH_URL, { headers: { Authorization: 'Bearer ' + secret }, muteHttpExceptions: true });
+    Logger.log('MB push: ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 300));
+  } catch (e) { Logger.log('MB push failed: ' + e); }
 }
 
 function printMorningBrief() {

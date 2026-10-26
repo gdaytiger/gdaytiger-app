@@ -40,3 +40,21 @@ export async function writeBankingTally(week: NonNullable<NonNullable<MorningSna
   });
   return `written: ${label}`;
 }
+
+// Monday safety net, called from /api/dashboard: build last week's tally straight
+// from the Apps Script `morning_brief` block (no dependency on the 5am push cron)
+// and write it if it isn't there yet. Only acts when the brief's week is the
+// Mon–Sun that ended yesterday.
+export async function ensureBankingTally(todayYmd: string): Promise<string> {
+  const { readOsBlock } = await import('./osBlocks');
+  type CashDay = { date: string; weekday: string; square: number; counted: number | null };
+  const brief = await readOsBlock<{ cashWeek?: { weekStart: string; sheetFound: boolean; complete: boolean; days: CashDay[] } }>('morning_brief');
+  const cw = brief?.cashWeek;
+  if (!cw?.complete || cw.weekStart !== shiftYMD(todayYmd, -7)) return 'skipped: no completed week for today';
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const days = cw.days.map(d => ({ ...d, variance: d.counted == null ? null : r2(d.counted - d.square) }));
+  const counted = days.filter(d => d.counted != null);
+  const square = r2(counted.reduce((a, d) => a + d.square, 0));
+  const total = r2(counted.reduce((a, d) => a + (d.counted as number), 0));
+  return writeBankingTally({ weekStart: cw.weekStart, complete: true, sheetFound: cw.sheetFound, square, counted: total, variance: r2(total - square), daysCounted: counted.length, days });
+}

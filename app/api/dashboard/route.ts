@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ensureBankingTally } from '@/app/lib/banking';
 import { DAY_PAGES, parseDayTaskBlocks, formatYMD, shiftYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
 import { melbNowDate } from '@/app/lib/melbTime';
 
@@ -297,6 +298,10 @@ export async function GET() {
   const today = melbNowDate();
   const dayOfWeek = today.getDay();
   const todayStr = formatYMD(today);
+
+  // Mondays: make sure last week's cash tally sits under DO THE BANKING before the
+  // task list is read (idempotent; never blocks the dashboard if it fails).
+  if (dayOfWeek === 1) await ensureBankingTally(todayStr).catch(() => {});
 
   const [weather, dailyTasks, projects, osPageBlocks, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates, pastPages }] = await Promise.all([
     getWeather(),
