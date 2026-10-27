@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/app/lib/auth';
+import { chunkRichText } from '@/app/lib/richTextChunks';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const STATE_PARENT_ID = '3403c99c0e858113a941c2118b3cdef9';
@@ -61,7 +62,7 @@ async function updateContextBlock(blockId: string, context: Record<string, strin
     headers: notionHeaders,
     body: JSON.stringify({
       code: {
-        rich_text: [{ type: 'text', text: { content: JSON.stringify(context) } }],
+        rich_text: chunkRichText(JSON.stringify(context)),
         language: 'javascript',
       },
     }),

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/app/lib/auth';
+import { chunkRichText } from '@/app/lib/richTextChunks';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -101,7 +102,7 @@ async function setContext(blockId: string, text: string): Promise<void> {
     },
     body: JSON.stringify({
       code: {
-        rich_text: [{ type: 'text', text: { content: JSON.stringify(context) } }],
+        rich_text: chunkRichText(JSON.stringify(context)),
         language: 'javascript',
       },
     }),

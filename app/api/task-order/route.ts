@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/app/lib/auth';
 import { melbNowDate } from '@/app/lib/melbTime';
+import { chunkRichText } from '@/app/lib/richTextChunks';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 // Same G'DAY TIGER OS page used by checked-state — guaranteed accessible by NOTION_API_KEY.
@@ -70,7 +71,7 @@ async function updateOrderBlock(blockId: string, state: Record<string, string[]>
     headers: notionHeaders,
     body: JSON.stringify({
       code: {
-        rich_text: [{ type: 'text', text: { content: JSON.stringify(state) } }],
+        rich_text: chunkRichText(JSON.stringify(state)),
         language: ORDER_LANG,
       },
     }),

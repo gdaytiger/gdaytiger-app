@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/app/lib/auth';
 import { melbNowDate } from '@/app/lib/melbTime';
+import { chunkRichText } from '@/app/lib/richTextChunks';
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 // Use the main G'DAY TIGER OS page — guaranteed accessible by NOTION_API_KEY
@@ -62,17 +63,19 @@ async function getStateBlock(): Promise<{ id: string; state: Record<string, stri
   return { id: '', state: {} };
 }
 
-async function updateStateBlock(blockId: string, state: Record<string, string[]>) {
-  await fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
+async function updateStateBlock(blockId: string, state: Record<string, string[]>): Promise<boolean> {
+  const res = await fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
     method: 'PATCH',
     headers: notionHeaders,
     body: JSON.stringify({
       code: {
-        rich_text: [{ type: 'text', text: { content: JSON.stringify(state) } }],
+        rich_text: chunkRichText(JSON.stringify(state)),
         language: 'json',
       },
     }),
   });
+  if (!res.ok) console.error('checked-state: Notion write failed', res.status, await res.text());
+  return res.ok;
 }
 
 function cleanOldDates(state: Record<string, string[]>): Record<string, string[]> {
@@ -104,6 +107,7 @@ export async function POST(req: NextRequest) {
     if (!state[date].length) delete state[date];
   }
 
-  await updateStateBlock(stateBlockId, cleanOldDates(state));
+  const ok = await updateStateBlock(stateBlockId, cleanOldDates(state));
+  if (!ok) return NextResponse.json({ success: false, error: 'Notion write failed' }, { status: 502 });
   return NextResponse.json({ success: true });
 }
