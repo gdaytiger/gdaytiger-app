@@ -116,3 +116,17 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Costings simulator — invisible track over the margin bar, round thumb only. */
+.margin-slider { -webkit-appearance: none; appearance: none; background: transparent; }
+.margin-slider::-webkit-slider-runnable-track { background: transparent; height: 16px; }
+.margin-slider::-moz-range-track { background: transparent; height: 16px; }
+.margin-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: 1px;
+  border-radius: 9999px; background: #fff; border: 2px solid var(--color-ink-label);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.margin-slider::-moz-range-thumb {
+  width: 10px; height: 10px; border-radius: 9999px; background: #fff;
+  border: 2px solid var(--color-ink-label); box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}

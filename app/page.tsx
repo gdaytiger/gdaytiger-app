@@ -1555,7 +1555,18 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
 
   // Change in weekly takings at the simulated price (7-day Square volume, GST-inc).
   const weeklyDelta = (edited && weeklyQty !== undefined && p.sellPrice !== null) ? (simPrice - p.sellPrice) * weeklyQty : null;
-  const bump = (d: number) => onOverride?.(Math.max(0, Math.round((simPrice + d) * 100) / 100));
+  // Typed price: keep a draft while focused so "8." etc. can be typed freely.
+  const [priceDraft, setPriceDraft] = useState<string | null>(null);
+  const commitPrice = (raw: string) => {
+    const v = parseFloat(raw.replace(/[^0-9.]/g, ''));
+    if (Number.isFinite(v) && v > 0) onOverride?.(Math.round(v * 100) / 100);
+  };
+  // Slider on the margin bar: drag to a target margin → price = cost ÷ (1 − m),
+  // rounded to the nearest 10c (how menu prices are actually set).
+  const fromMargin = (m: number) => {
+    if (cost === null || m >= 100) return;
+    onOverride?.(Math.max(0.1, Math.round(cost / (1 - m / 100) * 10) / 10));
+  };
 
   // "was X%" — prior gross GP before the last supplier cost/price change moved it.
   // Only on the real (non-simulated) view; hidden once GP is back to unchanged.
@@ -1612,22 +1623,36 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
       </div>
       <div className="flex items-center gap-2">
         {simulate && p.sellPrice !== null ? (
-          <span className="inline-flex items-center gap-1 shrink-0">
-            <button onClick={() => bump(-0.10)} className="w-6 h-6 rounded-md flex items-center justify-center text-sm leading-none"
-              style={{ background: 'rgba(0,0,0,0.07)', color: '#374151' }} aria-label="Lower price 10c">−</button>
-            <span className="text-xs font-bold" style={{ minWidth: '44px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: edited ? 'var(--color-ink)' : 'var(--color-ink-muted)' }}>
-              ${simPrice.toFixed(2)}
-            </span>
-            <button onClick={() => bump(0.10)} className="w-6 h-6 rounded-md flex items-center justify-center text-sm leading-none"
-              style={{ background: 'rgba(0,0,0,0.07)', color: '#374151' }} aria-label="Raise price 10c">+</button>
+          // Fixed 16px row height (same as the static price) so tiles don't grow.
+          <span className="inline-flex items-center shrink-0 rounded-md h-4 pl-1.5"
+            style={{ background: 'rgba(0,0,0,0.06)', color: edited ? 'var(--color-ink)' : 'var(--color-ink-muted)' }}>
+            <span className="text-xs leading-4">$</span>
+            <input
+              type="text" inputMode="decimal" aria-label={`Simulated price for ${p.name}`}
+              value={priceDraft ?? simPrice.toFixed(2)}
+              onFocus={e => { setPriceDraft(simPrice.toFixed(2)); e.currentTarget.select(); }}
+              onChange={e => { setPriceDraft(e.target.value); commitPrice(e.target.value); }}
+              onBlur={() => setPriceDraft(null)}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+              className="text-xs leading-4 h-4 p-0 pr-1.5 bg-transparent border-0 focus:outline-none font-bold"
+              style={{ width: '40px', fontVariantNumeric: 'tabular-nums', color: 'inherit' }}
+            />
           </span>
         ) : (
           p.sellPrice !== null && (
             <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>${p.sellPrice.toFixed(2)}</span>
           )
         )}
-        <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.07)' }}>
-          <div className="h-full rounded-full" style={{ width: `${bar}%`, background: mc, transition: 'width 0.3s ease' }} />
+        <div className="flex-1 relative h-4 flex items-center">
+          <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.07)' }}>
+            <div className="h-full rounded-full" style={{ width: `${bar}%`, background: mc, transition: simulate ? 'none' : 'width 0.3s ease' }} />
+          </div>
+          {simulate && cost !== null && (
+            <input type="range" min={0} max={95} step={0.5} value={Math.min(95, Math.max(0, shown))}
+              onChange={e => fromMargin(parseFloat(e.target.value))}
+              aria-label={`Drag to set margin for ${p.name}`}
+              className="margin-slider absolute inset-0 w-full h-4 m-0 cursor-pointer" />
+          )}
         </div>
         {weeklyDelta !== null ? (
           <span className="text-xs font-black shrink-0" style={{ color: weeklyDelta >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}
