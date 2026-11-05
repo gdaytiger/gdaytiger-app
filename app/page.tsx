@@ -1735,10 +1735,11 @@ function ProductColumn({ items, height = 272, fill, reviews, sales, feePct, head
   // (current → simulated) sits beside the label, with a reset icon.
   const simButton = (
     <div className="flex-1 basis-0 min-w-0 rounded-2xl flex items-center gap-2 px-3"
-      style={{ ...glassTileStyle, height: `${COSTING_TILE_H}px`, ...(simulate ? { background: 'rgba(217,119,6,0.14)' } : {}) }}>
+      // Selected state mirrors a selected day in The Week Ahead (peach wash + peach border).
+      style={{ ...glassTileStyle, height: `${COSTING_TILE_H}px`, ...(simulate ? { background: 'rgba(251,205,173,0.12)', border: '1px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow)' } : {}) }}>
       <button onClick={() => setSimulate(s => !s)}
         className="text-sm font-semibold shrink-0 h-full inline-flex items-center gap-2"
-        style={{ color: simulate ? '#78350f' : '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}
+        style={{ color: simulate ? '#1f2937' : '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}
         title="Preview margins at hypothetical prices — nothing is saved">
         {simulate
           ? <Check size={16} strokeWidth={2.5} aria-hidden style={{ display: 'block', flexShrink: 0 }} />
