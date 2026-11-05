@@ -32,13 +32,17 @@ function syncCostingsToNotion() {
     if (values.sellPrice === null) { missed.push('No Retail Price found for: "' + product.name + '"'); return; }
     if (values.profitPct === null) { missed.push('No Profit % found for: "' + product.name + '"'); return; }
 
+    // GP is ex-GST on the sell side: the 10% GST in the till price belongs to the
+    // ATO. (The sheet's own Profit % divides by the GST-inclusive price — ~3 pts high.)
+    const exPct = exGstProfitPct_(values.cost, values.sellPrice);
+    if (exPct !== null) values.profitPct = exPct;
     const sellSame = product.currentSell !== null && Math.abs(product.currentSell - values.sellPrice) < 0.005;
     const pctSame  = product.currentPct  !== null && Math.abs(product.currentPct  - values.profitPct) < 0.01;
     const costSame = (values.cost == null) || (product.currentCost != null && Math.abs(product.currentCost - values.cost) < 0.005);
     if (sellSame && pctSame && costSame) return;
 
     // Only record "changed from" when GP actually moved this run.
-    const prevPct = pctSame ? null : product.currentPct;
+    const prevPct = (pctSame || GP_MIGRATING_()) ? null : product.currentPct;
     const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, values.cost, NOTION_KEY, prevPct);
     Utilities.sleep(300);
     if (result.ok) {
@@ -201,6 +205,10 @@ function updateNotionPage(pageId, sellPrice, profitPct, cost, notionKey, prevPct
     props['Prev Profit %']  = { number: Math.round(prevPct * 10) / 10 };
     props['Profit Changed'] = { date: { start: new Date().toISOString() } };
   }
+  else if (GP_MIGRATING_()) {
+    props['Prev Profit %']  = { number: null };
+    props['Profit Changed'] = { date: null };
+  }
   const res = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + pageId, {
     method: 'patch',
     headers: { 'Authorization': 'Bearer ' + notionKey,
@@ -211,6 +219,18 @@ function updateNotionPage(pageId, sellPrice, profitPct, cost, notionKey, prevPct
   const data = JSON.parse(res.getContentText());
   if (data.object === 'error') return { ok: false, error: data.message };
   return { ok: true };
+}
+
+// ── Ex-GST GP basis (switched 6 Nov 2026) ─────────────────────────────────────
+// GP% = (sell ÷ 1.1 − cost) ÷ (sell ÷ 1.1). Cost = sheet "Total incl. wastage".
+function exGstProfitPct_(cost, sellIncGst) {
+  if (cost == null || !isFinite(cost) || sellIncGst == null || !(sellIncGst > 0)) return null;
+  return Math.round((1 - cost / (sellIncGst / 1.1)) * 1000) / 10;
+}
+// First full run after the switch rewrites every Profit % — don't let that
+// show as a "was X%" margin change on every tile. Cleared once syncAll finishes.
+function GP_MIGRATING_() {
+  return PropertiesService.getScriptProperties().getProperty('GP_BASIS') !== 'exgst';
 }
 
 function normalise(str) {
@@ -248,13 +268,17 @@ function syncCoffeeToNotion() {
     if (values.sellPrice === null) { missed.push('No Retail Price for: "' + product.name + '"'); return; }
     if (values.profitPct === null) { missed.push('No Profit % for: "' + product.name + '"'); return; }
 
+    // GP is ex-GST on the sell side: the 10% GST in the till price belongs to the
+    // ATO. (The sheet's own Profit % divides by the GST-inclusive price — ~3 pts high.)
+    const exPct = exGstProfitPct_(values.cost, values.sellPrice);
+    if (exPct !== null) values.profitPct = exPct;
     const sellSame = product.currentSell !== null && Math.abs(product.currentSell - values.sellPrice) < 0.005;
     const pctSame  = product.currentPct  !== null && Math.abs(product.currentPct  - values.profitPct) < 0.01;
     const costSame = (values.cost == null) || (product.currentCost != null && Math.abs(product.currentCost - values.cost) < 0.005);
     if (sellSame && pctSame && costSame) return;
 
     // Only record "changed from" when GP actually moved this run.
-    const prevPct = pctSame ? null : product.currentPct;
+    const prevPct = (pctSame || GP_MIGRATING_()) ? null : product.currentPct;
     const result = updateNotionPage(product.id, values.sellPrice, values.profitPct, values.cost, NOTION_KEY, prevPct);
     Utilities.sleep(300);
     if (result.ok) {
@@ -281,6 +305,7 @@ function syncAllCostingsToNotion() {
   var coffeeSummary = syncCoffeeToNotion();
   var sweetsSummary = '';
   try { sweetsSummary = syncSweetsToNotion(); } catch (e) { sweetsSummary = 'Sweets sync error: ' + e.message; Logger.log(sweetsSummary); }
+  PropertiesService.getScriptProperties().setProperty('GP_BASIS', 'exgst');
   // Heartbeat so the daily health check can confirm this sync is alive (it only
   // writes product pages when a price changes, so there's otherwise no signal).
   try { writeCostingsHeartbeat_(); } catch (e) { Logger.log('costings heartbeat error: ' + e.message); }

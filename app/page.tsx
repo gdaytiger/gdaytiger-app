@@ -1408,7 +1408,7 @@ function ChangeCard({ c }: { c: MarginChange }) {
   const [open, setOpen] = useState(false);
   const isNeg = c.dp < 0;
   const arrowCol = isNeg ? 'var(--color-danger)' : 'var(--color-success)';
-  const newMc = c.newPct >= 70 ? 'var(--color-success)' : c.newPct >= 60 ? 'var(--color-warning)' : 'var(--color-danger)';
+  const newMc = bandColor(c.newPct, DEFAULT_BANDS);
   const oldBar = Math.min(100, Math.max(0, c.oldPct));
   const newBar = Math.min(100, Math.max(0, c.newPct));
   return (
@@ -1539,11 +1539,14 @@ function TigerLogo({ size = 18 }: { size?: number }) {
   return <img src="/logo.png" alt="" aria-hidden style={{ width: size, height: size, objectFit: 'contain', display: 'block', flexShrink: 0 }} />;
 }
 
-// Margin colour bands. Made-in-house food/coffee: red <60, green 70+.
-// Bought-in sweets (Candied, Little Bertha, Dench): red <45, green 55+ — GP is ex-GST.
+// Margin colour bands — all GP is ex-GST (sell ÷ 1.1) from 6 Nov 2026.
+// Coffee: red <65, green 75+. Food (made in house): red <55, green 65+.
+// Bought-in sweets (Candied, Little Bertha, Dench): red <45, green 55+.
 type MarginBands = { red: number; green: number };
-const DEFAULT_BANDS: MarginBands = { red: 60, green: 70 };
+const COFFEE_BANDS: MarginBands = { red: 65, green: 75 };
+const FOOD_BANDS: MarginBands = { red: 55, green: 65 };
 const SWEETS_BANDS: MarginBands = { red: 45, green: 55 };
+const DEFAULT_BANDS: MarginBands = FOOD_BANDS;
 const bandColor = (m: number, b: MarginBands) => m >= b.green ? 'var(--color-success)' : m >= b.red ? 'var(--color-warning)' : 'var(--color-danger)';
 
 function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverride, bands = DEFAULT_BANDS }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number; feePct?: number; simulate?: boolean; override?: number; onOverride?: (price: number) => void; bands?: MarginBands }) {
@@ -1678,7 +1681,7 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
             )}
             {review && !simulate && (
               <span className="text-xs font-black shrink-0" style={{ color: 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}
-                title={`Earning ~$${Math.round(review.shortfall)}/wk less than at the 70% target margin`}>
+                title={`Earning ~$${Math.round(review.shortfall)}/wk less than at the ${bands.green}% target margin`}>
                 −${Math.round(review.shortfall)}/wk
               </span>
             )}
@@ -1851,7 +1854,7 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, b
       {atRisk !== undefined && atRisk > 0 && (
         <span className="text-xs font-bold px-2 py-0.5 rounded-lg uppercase"
           style={{ background: 'rgba(220,38,38,0.10)', border: '1px solid rgba(220,38,38,0.25)', color: '#991b1b', fontVariantNumeric: 'tabular-nums' }}
-          title={`Weekly profit below the 70% target margin, summed across every under-target product in this category${week ? ` — sales week ${week}` : ''}`}>
+          title={`Weekly profit below the ${bands.green}% target margin, summed across every under-target product in this category${week ? ` — sales week ${week}` : ''}`}>
           ~${Math.round(atRisk)}/wk at risk{atRiskPct !== undefined && atRiskPct > 0 ? ` · ${atRiskPct.toFixed(1)}% of sales` : ''}
         </span>
       )}
@@ -2098,8 +2101,8 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       {/* ── Coffee Costings — always in DOM ── */}
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card bare icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" onCollapse={() => onCollapse('coffee')}>
-          <ProductColumn items={coffeeShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct}
-            header={<MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} week={reviewWeek} paymentFees={paymentFees} />}
+          <ProductColumn items={coffeeShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} bands={COFFEE_BANDS}
+            header={<MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} week={reviewWeek} paymentFees={paymentFees} bands={COFFEE_BANDS} />}
             search={{ value: coffeeQuery, onChange: setCoffeeQuery, placeholder: 'Search coffee products' }} />
         </Card>
       </div>
@@ -2107,8 +2110,8 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       {/* ── Food Costings — always in DOM ── */}
       <div style={{ display: open.food ? 'block' : 'none' }}>
         <Card bare icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" onCollapse={() => onCollapse('food')}>
-          <ProductColumn items={foodShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct}
-            header={<MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} />}
+          <ProductColumn items={foodShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} bands={FOOD_BANDS}
+            header={<MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} bands={FOOD_BANDS} />}
             search={{ value: foodQuery, onChange: setFoodQuery, placeholder: 'Search food products' }} />
         </Card>
       </div>
@@ -3028,10 +3031,10 @@ export default function Home() {
   // ── Launcher tile metadata (counts + attention dots) ──
   const costMargin   = costings.filter(p => p.margin !== null);
   const coffeeCount  = costMargin.filter(p => p.category === 'Coffee').length;
-  const coffeeAlert  = costMargin.some(p => p.category === 'Coffee' && p.margin! < 60);
+  const coffeeAlert  = costMargin.some(p => p.category === 'Coffee' && p.margin! < COFFEE_BANDS.red);
   const isFood       = (p: CostingProduct) => p.category !== 'Coffee' && p.category !== 'Sweets';
   const foodCount    = costMargin.filter(isFood).length;
-  const foodAlert    = costMargin.some(p => isFood(p) && p.margin! < 60);
+  const foodAlert    = costMargin.some(p => isFood(p) && p.margin! < FOOD_BANDS.red);
   const sweetsCount  = costMargin.filter(p => p.category === 'Sweets').length;
   const sweetsAlert  = costMargin.some(p => p.category === 'Sweets' && p.margin! < SWEETS_BANDS.red);
   const supplierCount = ingredientPrices?.ingredients?.length ?? 0;

@@ -33,13 +33,17 @@
 //    2. Run printMarginReview() any time to preview without writing to Notion.
 //
 //  ── CONVENTIONS ────────────────────────────────────────────────────────────
-//    Margin target: 70% (green threshold). Red <60%, amber 60–70%.
-//    Shortfall $ = weeklyQty × (sell ÷ 1.1) × (70% − margin)  [GST-ex approx]
+//    Margin targets (ex-GST GP, from 6 Nov 2026): Coffee green 75 / red <65; Food green 65 / red <55.
+//    Shortfall $ = weeklyQty × (sell ÷ 1.1) × (category target − margin)  [GST-ex]
 // ═══════════════════════════════════════════════════════════════════════════════
 
 var MR_DB_ID         = '8f16358a47e54062b5fe1ce7a7480754';  // Notion Product Costings DB
-var MR_TARGET_MARGIN = 70;    // % — matches the green threshold convention
-var MR_RED_BELOW     = 60;    // % — red threshold
+var MR_TARGET_MARGIN = 65;    // % — FOOD green threshold (ex-GST GP, from 6 Nov 2026)
+var MR_RED_BELOW     = 55;    // % — FOOD red threshold
+var MR_COFFEE_TARGET = 75;    // % — COFFEE green threshold
+var MR_COFFEE_RED    = 65;    // % — COFFEE red threshold
+function mrTarget_(p) { return (p.category || '') === 'Coffee' ? MR_COFFEE_TARGET : MR_TARGET_MARGIN; }
+function mrRed_(p)    { return (p.category || '') === 'Coffee' ? MR_COFFEE_RED    : MR_RED_BELOW; }
 var MR_MAX_ITEMS     = 12;    // legacy global cap (kept for reference; see MR_MAX_PER_CAT)
 var MR_MAX_PER_CAT   = 8;     // cap the ranked DISPLAY list PER category (coffee / food)
 var MR_MAX_UNMATCHED = 12;    // top Square sellers with no costing match
@@ -375,7 +379,7 @@ function buildMarginReview_() {
     }
   }
 
-  // Rank underperformers by weekly $ shortfall vs the 70% target.
+  // Rank underperformers by weekly $ shortfall vs the category target.
   //
   // Coffee vs food are reported as SEPARATE badges on the dashboard. Two traps
   // this code now avoids on purpose:
@@ -399,13 +403,13 @@ function buildMarginReview_() {
   for (var norm in acc) {
     var a = acc[norm];
     var p = a.product;
-    // Sweets are bought-in (55% target, own widget) — keep them out of the 70% food review.
+    // Sweets are bought-in (55% target, own widget) — keep them out of the food/coffee review.
     if ((p.category || '') === 'Sweets') continue;
     if (mrIsCoffee_(p)) catRevenue.coffee += a.gross / 100;
     else                catRevenue.food   += a.gross / 100;
-    if (p.margin >= MR_TARGET_MARGIN) { greenCount++; continue; }
+    if (p.margin >= mrTarget_(p)) { greenCount++; continue; }
     var sellEx    = p.sell / 1.1;
-    var shortfall = r2(a.qty * sellEx * (MR_TARGET_MARGIN - p.margin) / 100);
+    var shortfall = r2(a.qty * sellEx * (mrTarget_(p) - p.margin) / 100);
     items.push({
       name:        p.name,
       category:    p.category || '',
@@ -414,7 +418,7 @@ function buildMarginReview_() {
       weeklyQty:   a.qty,
       weeklyGross: r2(a.gross / 100),
       shortfall:   shortfall,
-      severity:    p.margin < MR_RED_BELOW ? 'red' : 'amber',
+      severity:    p.margin < mrRed_(p) ? 'red' : 'amber',
     });
   }
   items.sort(function (a, b) { return b.shortfall - a.shortfall; });
@@ -463,6 +467,7 @@ function buildMarginReview_() {
     weekStart:           start.toISOString().slice(0, 10),
     weekEnd:             end.toISOString().slice(0, 10),
     targetMargin:        MR_TARGET_MARGIN,
+    coffeeTargetMargin:  MR_COFFEE_TARGET,
     items:               top,
     // Category-complete at-risk totals (summed pre-cap). totalShortfall is now
     // coffee + food so it stays consistent with the two badges.
