@@ -12,6 +12,7 @@ import { CSS } from '@dnd-kit/utilities';
 import AddProductModal from './components/AddProductModal';
 import AddIngredientModal from './components/AddIngredientModal';
 import MorningCard from './components/MorningCard';
+import GoogleReviewsCard from './components/GoogleReviewsCard';
 import WeeklyFlashCard, { type WeeklyFlashData, type FlashExtrasData } from './components/WeeklyFlashCard';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
 import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle } from './lib/theme';
@@ -116,10 +117,10 @@ const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
 // ── Widget icons (emoji) ─────────────────────────────────────────────────────
 // One place mapping each widget to its emoji, rendered at a size derived from
 // the caller's chip value. Kept as a component so the set can be swapped later.
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google';
 
 const WIDGET_ICON_EMOJI: Record<WidgetIconName, string> = {
-  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒', flash: '📈', morning: '☀️',
+  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒', flash: '📈', morning: '☀️', google: '⭐',
 };
 
 function WidgetIcon({ name, chip = 28 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -2273,6 +2274,8 @@ export default function Home() {
     setOpenWidgets(prev => prev.has(key) ? new Set() : new Set([key]));
   };
   const closeWidgets = () => setOpenWidgets(new Set());
+  // Google reviews awaiting a reply — set by GoogleReviewsCard (always mounted) for the tile badge.
+  const [googlePending, setGooglePending] = useState(0);
   // Tapping the 5am push opens /?open=morning — jump straight to the Morning card.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get('open');
@@ -3157,6 +3160,7 @@ export default function Home() {
           <LauncherTile icon={<WidgetIcon name="food" chip={48} glyph={26} />} title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Tiger OS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
+          <LauncherTile icon={<WidgetIcon name="google" chip={48} glyph={26} />} title="Google" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('google')} onClick={() => toggleWidget('google')} />
         </div>
 
         </div>{/* end stable grid */}
@@ -3246,6 +3250,13 @@ export default function Home() {
         <div style={{ display: openWidgets.has('flash') ? 'block' : 'none' }}>
           <Card bare icon={<WidgetIcon name="flash" chip={28} glyph={17} />} title="Weekly Flash" onCollapse={() => toggleWidget('flash')}>
             <WeeklyFlashCard data={weeklyFlash} extras={flashExtras} />
+          </Card>
+        </div>
+
+        {/* GOOGLE — new reviews + drafted replies, photo upload, menu price check */}
+        <div style={{ display: openWidgets.has('google') ? 'block' : 'none' }}>
+          <Card bare icon={<WidgetIcon name="google" chip={28} glyph={17} />} title="Google" onCollapse={() => toggleWidget('google')}>
+            <GoogleReviewsCard active={openWidgets.has('google')} onCount={setGooglePending} />
           </Card>
         </div>
 

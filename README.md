@@ -263,6 +263,34 @@ SalesDaily → Square Orders → sales by Melbourne trading day → sales_daily 
 
 ---
 
+## Google Business Profile (reviews, photos, menu prices)
+
+**Tile:** ⭐ Google — new reviews with Claude-drafted replies (Post / Redraft / Skip), photo upload to the Business Profile, and the Square → Google menu price check. Nothing posts to Google without a tap.
+
+**Routes:** `/api/google-reviews` (GET pending reviews + menu check; POST `reply` / `redraft` / `skip` / `sync` / `menuSync`), `/api/google-photo` (POST, client shrinks to ≤2000px JPEG). Both forward to the GBP Apps Script web app via `app/lib/gbp.ts`.
+
+**Apps Script:** `apps-script-gbp/` is a **separate** Apps Script project (own `business.manage` scope, so the costings triggers are untouched). It writes `google_reviews` and `google_menu_sync` JSON blocks to the Notion OS page.
+
+| File | Purpose |
+|---|---|
+| `GbpCore.js` | GBP auth + location lookup, Notion block read/write, Square catalogue, `doPost` router, `gbpCheckSetup()`, `installGbpTriggers()` |
+| `GbpReviews.js` | `syncGoogleReviews()` every 30 min → drafts replies with Jono's voice rules (`GBP_VOICE_RULES`: no sign-off, emoji list, "Chicken Schnitta", "Surina", jono@ on negatives, "permanent fixture" line for praised off-menu items) |
+| `GbpMenuSync.js` | `syncGoogleMenuPrices()` hourly — updates **prices only** on items already on the Google menu, matched to Square by name (`GBP_MENU_ALIASES` for mismatches). `MENU_SYNC_MODE` = `preview` (default) or `live` |
+| `GbpPhotos.js` | Photo upload (startUpload → bytes → media.create) |
+
+**Setup (once Google approves API access — case 1-6049000042499, Cloud project `tigeros` / 92946970006):**
+1. script.google.com → New project "TIGER OS – Google" (as gday@). Project Settings → Google Cloud Platform project → **Change project** → `92946970006`.
+2. Copy the script ID into `apps-script-gbp/.clasp.json` (see `.clasp.json.example`) and `cd apps-script-gbp && clasp push`.
+3. Script Properties: `NOTION_API_KEY`, `SQUARE_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`, `GBP_SECRET` (new random string), `MENU_SYNC_MODE=preview`.
+4. Run `gbpCheckSetup()` (authorise), then `installGbpTriggers()`.
+5. Deploy → New deployment → Web app (execute as me, anyone) → copy `/exec` URL.
+6. Vercel env: `GBP_WEBAPP_URL` (that URL), `GBP_SECRET` (same value). Redeploy.
+7. Check the menu preview in the tile; when it looks right set `MENU_SYNC_MODE=live`.
+
+`REVIEWS_SINCE` is set on first run so the old backlog isn't drafted — set it earlier to pull older reviews in.
+
+---
+
 ## Git Branches
 
 | Branch | Status |

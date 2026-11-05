@@ -1,0 +1,6 @@
+{
+  "scriptId": "PASTE_THE_NEW_GBP_SCRIPT_ID_HERE",
+  "rootDir": "",
+  "scriptExtensions": [".js", ".gs"],
+  "jsonExtensions": [".json"]
+}
