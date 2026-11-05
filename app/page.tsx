@@ -117,7 +117,7 @@ const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
 
 // ── Widget icons (Lucide) ────────────────────────────────────────────────────
 // One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
-// falls back to ~56% of the chip. Colour comes from the brand token.
+// falls back to ~56% of the chip. Colour: neutral grey (--color-ink-label).
 type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google';
 
 const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
@@ -126,7 +126,7 @@ const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
 
 function WidgetIcon({ name, chip = 28, glyph }: { name: WidgetIconName; chip?: number; glyph?: number }) {
   const Icon = WIDGET_ICON[name];
-  return <Icon size={glyph ?? Math.round(chip * 0.56)} strokeWidth={2} aria-hidden style={{ display: 'block', color: 'var(--color-brand-bark)' }} />;
+  return <Icon size={glyph ?? Math.round(chip * 0.56)} strokeWidth={2} aria-hidden style={{ display: 'block', color: 'var(--color-ink-label)' }} />;
 }
 
 const SUPPLIER_LINKS: Record<string, string> = {
@@ -751,11 +751,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           {label && <p className={`text-xs mt-0.5 uppercase ${missed ? '' : 'text-gray-400'}`} style={missed ? { color: 'var(--color-danger)' } : undefined}>{label}</p>}
         </div>
         {isSticky && (onUnpin ? (
-          <button onClick={e => { e.stopPropagation(); onUnpin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Unpin task" title="Unpin — back to a normal task"><Pin size={13} strokeWidth={2.25} aria-hidden style={{ display: 'block', color: 'var(--color-brand-bark)' }} fill="currentColor" /></button>
+          <button onClick={e => { e.stopPropagation(); onUnpin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Unpin task" title="Unpin — back to a normal task"><Pin size={13} strokeWidth={2.25} aria-hidden style={{ display: 'block', color: 'var(--color-ink-label)' }} fill="currentColor" /></button>
         ) : (
-          <span className="shrink-0 text-xs mt-0.5 leading-none opacity-0 group-hover:opacity-100 transition-opacity" title="Persistent — stays until ticked off"><Pin size={13} strokeWidth={2.25} aria-hidden style={{ display: 'block', color: 'var(--color-brand-bark)' }} fill="currentColor" /></span>
+          <span className="shrink-0 text-xs mt-0.5 leading-none opacity-0 group-hover:opacity-100 transition-opacity" title="Persistent — stays until ticked off"><Pin size={13} strokeWidth={2.25} aria-hidden style={{ display: 'block', color: 'var(--color-ink-label)' }} fill="currentColor" /></span>
         ))}
-        {!isSticky && !checked && onPin && <button onClick={e => { e.stopPropagation(); onPin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-60 hover:!opacity-100 mt-0.5" aria-label="Pin task" title="Make persistent — stays until ticked off"><Pin size={13} strokeWidth={2.25} aria-hidden style={{ display: 'block', color: 'var(--color-brand-bark)' }} /></button>}
+        {!isSticky && !checked && onPin && <button onClick={e => { e.stopPropagation(); onPin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-60 hover:!opacity-100 mt-0.5" aria-label="Pin task" title="Make persistent — stays until ticked off"><Pin size={13} strokeWidth={2.25} aria-hidden style={{ display: 'block', color: 'var(--color-ink-label)' }} /></button>}
         {subtaskCount && subtaskCount.total > 0 && <span className="shrink-0 text-xs text-gray-400 tabular-nums mt-0.5">{subtaskCount.done}/{subtaskCount.total}</span>}
         {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
         {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
@@ -1490,7 +1490,7 @@ function SupplierIcon({ name, size = 16 }: { name: string; size?: number }) {
   const icon = SUPPLIER_ICONS.find(s => n.includes(s.match))?.icon ?? Package;
   if (icon === 'logo') return <TigerLogo size={size + 2} />;
   const Icon = icon;
-  return <Icon size={size} strokeWidth={2} aria-hidden style={{ display: 'block', color: 'var(--color-brand-bark)' }} />;
+  return <Icon size={size} strokeWidth={2} aria-hidden style={{ display: 'block', color: 'var(--color-ink-label)' }} />;
 }
 
 // Brand mark in place of the 🐯 emoji — the same /logo.png the header uses.
