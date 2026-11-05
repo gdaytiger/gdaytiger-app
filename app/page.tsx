@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -1663,12 +1663,12 @@ const COSTING_TILE_H = 84;
 // tile that sits on one row with the Simulate tile. Uppercase to match tiles.
 function ProductSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <div className="relative flex-1 min-w-0">
+    <div className="relative flex-1 basis-0 min-w-0">
       <input
         type="text"
         value={value}
         onChange={e => onChange(e.target.value.toUpperCase())}
-        placeholder={(placeholder || 'Search…').toUpperCase()}
+        placeholder={(placeholder || 'Search').toUpperCase()}
         autoCapitalize="characters"
         className="w-full rounded-2xl pl-3 pr-9 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-200"
         style={{ ...glassTileStyle, height: `${COSTING_TILE_H}px`, fontFamily: '"stolzl", sans-serif', textTransform: 'uppercase', letterSpacing: '0.02em' }}
@@ -1704,45 +1704,40 @@ function ProductColumn({ items, height = 272, fill, reviews, sales, feePct, head
       simulate={simulate} override={overrides[key]} onOverride={(price) => setOverrides(o => ({ ...o, [key]: price }))} />;
   });
 
+  // Simulate tile — same width as search. Once on, the category average
+  // (current → simulated) sits beside the label, with a reset icon.
   const simButton = (
-    <button onClick={() => setSimulate(s => !s)}
-      className="rounded-2xl px-4 text-sm font-semibold shrink-0 transition-colors"
-      style={{
-        ...glassTileStyle,
-        height: `${COSTING_TILE_H}px`,
-        ...(simulate ? { background: 'rgba(217,119,6,0.14)' } : {}),
-        color: simulate ? '#78350f' : '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em',
-      }}
-      title="Preview margins at hypothetical prices — nothing is saved">
-      {simulate ? '✓ SIMULATING' : '⇅ SIMULATE'}
-    </button>
-  );
-
-  // Avg / reset only while simulating — small line under the search row.
-  const simInfo = simulate && (curAvg !== null || hasOverrides) ? (
-    <div className="flex items-center gap-2 pb-2">
-      {curAvg !== null && simAvg !== null && (
-        <span className="text-xs text-gray-500" style={{ fontVariantNumeric: 'tabular-nums' }} title="Category average margin (current → simulated)">
-          avg <span className="font-bold text-gray-700">{curAvg.toFixed(1)}%</span>
+    <div className="flex-1 basis-0 min-w-0 rounded-2xl flex items-center gap-2 px-3"
+      style={{ ...glassTileStyle, height: `${COSTING_TILE_H}px`, ...(simulate ? { background: 'rgba(217,119,6,0.14)' } : {}) }}>
+      <button onClick={() => setSimulate(s => !s)}
+        className="text-sm font-semibold shrink-0 h-full text-left"
+        style={{ color: simulate ? '#78350f' : '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}
+        title="Preview margins at hypothetical prices — nothing is saved">
+        {simulate ? '✓ SIMULATING' : '⇅ SIMULATE'}
+      </button>
+      {simulate && curAvg !== null && simAvg !== null && (
+        <span className="text-xs text-gray-500 min-w-0 truncate" style={{ fontVariantNumeric: 'tabular-nums', fontFamily: '"stolzl", sans-serif' }} title="Category average margin (current → simulated)">
+          AVG <span className="font-bold text-gray-700">{curAvg.toFixed(1)}%</span>
           {hasOverrides && (<><span className="text-gray-300"> → </span><span className="font-bold" style={{ color: simAvg >= curAvg ? 'var(--color-success)' : 'var(--color-danger)' }}>{simAvg.toFixed(1)}%</span></>)}
         </span>
       )}
-      {hasOverrides && (
-        <button onClick={() => setOverrides({})}
-          className="text-xs font-semibold px-2 py-1 rounded-lg ml-auto"
-          style={{ background: 'rgba(0,0,0,0.06)', color: '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}>RESET</button>
+      {simulate && hasOverrides && (
+        <button onClick={() => setOverrides({})} aria-label="Reset simulated prices" title="Reset simulated prices"
+          className="ml-auto shrink-0 w-7 h-7 rounded-lg flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.06)', color: '#374151' }}>
+          <RotateCcw size={14} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} />
+        </button>
       )}
     </div>
-  ) : null;
+  );
 
   const controls = (
     <>
       {header}
       <div className="flex items-stretch gap-2 mb-2">
-        {search ? <ProductSearch {...search} /> : <div className="flex-1" />}
+        {search ? <ProductSearch {...search} /> : <div className="flex-1 basis-0" />}
         {simButton}
       </div>
-      {simInfo}
     </>
   );
 
@@ -1788,7 +1783,7 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees }:
     <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0 flex items-center gap-2 flex-wrap" style={{ ...glassTileStyle, minHeight: `${COSTING_TILE_H}px` }}>
       {avg !== null && (
         <span className="flex items-center gap-1.5 text-xs">
-          <span className="text-gray-500">Avg <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>
+          <span className="text-gray-500">AVG <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>
           {net !== null && (
             <>
               <span className="text-gray-300" aria-hidden>→</span>
@@ -1798,27 +1793,21 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees }:
                   : `Net of ~${feePct}% blended Square processing fee (static estimate — live tracker still backfilling)`}>
                 {net.toFixed(1)}%
               </span>
-              <span className="px-1.5 py-0.5 rounded-md"
-                style={{
-                  fontSize: '9px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
-                  background: liveFee !== null ? 'rgba(22,163,74,0.10)' : 'rgba(0,0,0,0.06)',
-                  color: liveFee !== null ? '#15803d' : 'var(--color-ink-muted)',
-                }}>
-                after {feePct.toFixed(2)}% card
-              </span>
+              <span className="text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>(after {feePct.toFixed(2)}% card)</span>
             </>
           )}
         </span>
       )}
       {[
-        { count: red,    label: 'under 60%', bg: 'rgba(220,38,38,0.10)',   border: 'rgba(220,38,38,0.25)',   color: '#991b1b' },
-        { count: yellow, label: '60–70%',    bg: 'rgba(217,119,6,0.10)',   border: 'rgba(217,119,6,0.25)',   color: '#78350f' },
-        { count: green,  label: 'over 70%',  bg: 'rgba(22,163,74,0.10)',   border: 'rgba(22,163,74,0.25)',   color: '#14532d' },
-      ].map(({ count, label, bg, border, color }) => (
-        <span key={label} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold"
-          style={{ background: bg, border: `1px solid ${border}`, color }}>
-          <span className="font-black">{count}</span>
-          <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.8 }}>{label}</span>
+        { count: red,    label: 'under 60%', dot: 'var(--color-danger)' },
+        { count: yellow, label: '60–70%',    dot: 'var(--color-warning)' },
+        { count: green,  label: 'over 70%',  dot: 'var(--color-success)' },
+      ].map(({ count, label, dot }) => (
+        // Same filled-dot marker as the Weekly Flash scorecard.
+        <span key={label} className="inline-flex items-center gap-1.5 text-xs" title={`${count} products ${label}`}>
+          <Circle size={10} strokeWidth={2.5} aria-hidden fill={dot} style={{ display: 'block', flexShrink: 0, color: dot }} />
+          <span className="font-bold text-gray-700" style={{ fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+          <span className="text-gray-400" style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</span>
         </span>
       ))}
       {atRisk !== undefined && atRisk > 0 && (
@@ -1826,13 +1815,6 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees }:
           style={{ background: 'rgba(220,38,38,0.10)', border: '1px solid rgba(220,38,38,0.25)', color: '#991b1b', fontVariantNumeric: 'tabular-nums' }}
           title={`Weekly profit below the 70% target margin, summed across every under-target product in this category${week ? ` — sales week ${week}` : ''}`}>
           ~${Math.round(atRisk)}/wk at risk{atRiskPct !== undefined && atRiskPct > 0 ? ` · ${atRiskPct.toFixed(1)}% of sales` : ''}
-        </span>
-      )}
-      {uncosted !== undefined && uncosted > 0 && (
-        <span className="text-xs font-semibold px-2 py-0.5 rounded-lg uppercase"
-          style={{ background: 'rgba(217,119,6,0.10)', border: '1px solid rgba(217,119,6,0.25)', color: '#78350f' }}
-          title="Drinks selling on Square with no costing match yet — their margin isn't counted in the at-risk figure above. Add a costing to bring them in.">
-          +{uncosted} not costed
         </span>
       )}
       <span className="ml-auto text-xs text-gray-400 uppercase">{items.length} products</span>
@@ -2076,8 +2058,8 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card bare icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" onCollapse={() => onCollapse('coffee')}>
           <ProductColumn items={coffeeShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct}
-            header={<MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} uncosted={coffeeUncosted} week={reviewWeek} paymentFees={paymentFees} />}
-            search={{ value: coffeeQuery, onChange: setCoffeeQuery, placeholder: 'Search coffee products…' }} />
+            header={<MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} week={reviewWeek} paymentFees={paymentFees} />}
+            search={{ value: coffeeQuery, onChange: setCoffeeQuery, placeholder: 'Search coffee products' }} />
         </Card>
       </div>
 
@@ -2086,7 +2068,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
         <Card bare icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" onCollapse={() => onCollapse('food')}>
           <ProductColumn items={foodShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct}
             header={<MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} />}
-            search={{ value: foodQuery, onChange: setFoodQuery, placeholder: 'Search food products…' }} />
+            search={{ value: foodQuery, onChange: setFoodQuery, placeholder: 'Search food products' }} />
         </Card>
       </div>
 
