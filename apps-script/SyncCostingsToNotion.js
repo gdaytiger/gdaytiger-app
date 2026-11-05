@@ -279,11 +279,13 @@ function syncCoffeeToNotion() {
 function syncAllCostingsToNotion() {
   var foodSummary   = syncCostingsToNotion();
   var coffeeSummary = syncCoffeeToNotion();
+  var sweetsSummary = '';
+  try { sweetsSummary = syncSweetsToNotion(); } catch (e) { sweetsSummary = 'Sweets sync error: ' + e.message; Logger.log(sweetsSummary); }
   // Heartbeat so the daily health check can confirm this sync is alive (it only
   // writes product pages when a price changes, so there's otherwise no signal).
   try { writeCostingsHeartbeat_(); } catch (e) { Logger.log('costings heartbeat error: ' + e.message); }
-  Logger.log('\n--- COMBINED RUN COMPLETE ---\n' + foodSummary + '\n\n' + coffeeSummary);
-  return foodSummary + '\n\n' + coffeeSummary;
+  Logger.log('\n--- COMBINED RUN COMPLETE ---\n' + foodSummary + '\n\n' + coffeeSummary + '\n\n' + sweetsSummary);
+  return foodSummary + '\n\n' + coffeeSummary + '\n\n' + sweetsSummary;
 }
 
 // Writes/updates a small JSON "costings_sync" code block on the TIGER OS Notion

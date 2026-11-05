@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -117,10 +117,10 @@ const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
 // ── Widget icons (Lucide) ────────────────────────────────────────────────────
 // One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
 // falls back to ~56% of the chip. Colour: neutral grey (--color-ink-label).
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google';
 
 const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
-  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star,
+  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star,
 };
 
 function WidgetIcon({ name, chip = 28, glyph }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -1539,7 +1539,14 @@ function TigerLogo({ size = 18 }: { size?: number }) {
   return <img src="/logo.png" alt="" aria-hidden style={{ width: size, height: size, objectFit: 'contain', display: 'block', flexShrink: 0 }} />;
 }
 
-function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverride }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number; feePct?: number; simulate?: boolean; override?: number; onOverride?: (price: number) => void }) {
+// Margin colour bands. Made-in-house food/coffee: red <60, green 70+.
+// Bought-in sweets (Candied, Little Bertha, Dench): red <45, green 55+ — GP is ex-GST.
+type MarginBands = { red: number; green: number };
+const DEFAULT_BANDS: MarginBands = { red: 60, green: 70 };
+const SWEETS_BANDS: MarginBands = { red: 45, green: 55 };
+const bandColor = (m: number, b: MarginBands) => m >= b.green ? 'var(--color-success)' : m >= b.red ? 'var(--color-warning)' : 'var(--color-danger)';
+
+function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverride, bands = DEFAULT_BANDS }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number; feePct?: number; simulate?: boolean; override?: number; onOverride?: (price: number) => void; bands?: MarginBands }) {
   // Cost is fixed; recover it from the live figures (margin = (sell − cost)/sell).
   const cost = (p.sellPrice !== null && p.margin !== null) ? p.sellPrice * (1 - p.margin / 100) : null;
   const simPrice = override ?? p.sellPrice ?? 0;
@@ -1548,10 +1555,10 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
   const shown    = simulate ? simMargin : (p.margin ?? 0);
   const dMargin  = simMargin - (p.margin ?? 0);
 
-  const mc = shown >= 70 ? 'var(--color-success)' : shown >= 60 ? 'var(--color-warning)' : 'var(--color-danger)';
+  const mc = bandColor(shown, bands);
   const bar = Math.min(100, Math.max(0, shown));
   const netMargin = feePct !== undefined ? shown - feePct : null;
-  const netColor  = netMargin !== null ? (netMargin >= 70 ? 'var(--color-success)' : netMargin >= 60 ? 'var(--color-warning)' : 'var(--color-danger)') : mc;
+  const netColor  = netMargin !== null ? bandColor(netMargin, bands) : mc;
 
   // Change in weekly takings at the simulated price (7-day Square volume, GST-inc).
   const weeklyDelta = (edited && weeklyQty !== undefined && p.sellPrice !== null) ? (simPrice - p.sellPrice) * weeklyQty : null;
@@ -1709,7 +1716,7 @@ function ProductSearch({ value, onChange, placeholder }: { value: string; onChan
   );
 }
 
-function ProductColumn({ items, height = 272, fill, reviews, sales, feePct, header, search }: { items: CostingProduct[]; height?: number; fill?: boolean; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number>; feePct?: number; header?: React.ReactNode; search?: { value: string; onChange: (v: string) => void; placeholder?: string } }) {
+function ProductColumn({ items, height = 272, fill, reviews, sales, feePct, header, search, bands }: { items: CostingProduct[]; height?: number; fill?: boolean; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number>; feePct?: number; header?: React.ReactNode; search?: { value: string; onChange: (v: string) => void; placeholder?: string }; bands?: MarginBands }) {
   // Non-destructive price simulator: nothing here writes to Square or the sheet —
   // it just recomputes margins in the browser against hypothetical prices.
   const [simulate, setSimulate] = useState(false);
@@ -1727,7 +1734,7 @@ function ProductColumn({ items, height = 272, fill, reviews, sales, feePct, head
 
   const list = items.map(p => {
     const key = p.name.toUpperCase().trim();
-    return <ProductItem key={p.id} p={p} review={reviews?.get(key)} weeklyQty={sales?.get(key)} feePct={feePct}
+    return <ProductItem key={p.id} p={p} review={reviews?.get(key)} weeklyQty={sales?.get(key)} feePct={feePct} bands={bands}
       simulate={simulate} override={overrides[key]} onOverride={(price) => setOverrides(o => ({ ...o, [key]: price }))} />;
   });
 
@@ -1798,7 +1805,7 @@ function ProductColumn({ items, height = 272, fill, reviews, sales, feePct, head
   );
 }
 
-function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees }: { items: CostingProduct[]; atRisk?: number; atRiskPct?: number; uncosted?: number; week?: string; paymentFees?: PaymentFeesData | null }) {
+function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, bands = DEFAULT_BANDS }: { items: CostingProduct[]; atRisk?: number; atRiskPct?: number; uncosted?: number; week?: string; paymentFees?: PaymentFeesData | null; bands?: MarginBands }) {
   const avg    = items.length > 0 ? items.reduce((s, p) => s + p.margin!, 0) / items.length : null;
   // Prefer the live rolling rate once enough days have backfilled; otherwise
   // fall back to the static constant (see MERCHANT_FEE_PCT comment for source).
@@ -1806,10 +1813,10 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees }:
     ? paymentFees.feePct : null;
   const feePct  = liveFee ?? MERCHANT_FEE_PCT;
   const net     = avg !== null ? avg - feePct : null;
-  const red    = items.filter(p => p.margin! < 60).length;
-  const yellow = items.filter(p => p.margin! >= 60 && p.margin! < 70).length;
-  const green  = items.filter(p => p.margin! >= 70).length;
-  const netColor = net !== null ? (net >= 70 ? 'var(--color-success)' : net >= 60 ? 'var(--color-warning)' : 'var(--color-danger)') : 'var(--color-ink-label)';
+  const red    = items.filter(p => p.margin! < bands.red).length;
+  const yellow = items.filter(p => p.margin! >= bands.red && p.margin! < bands.green).length;
+  const green  = items.filter(p => p.margin! >= bands.green).length;
+  const netColor = net !== null ? bandColor(net, bands) : 'var(--color-ink-label)';
   return (
     <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0 flex items-center gap-2 flex-wrap" style={{ ...glassTileStyle, minHeight: `${COSTING_TILE_H}px` }}>
       {avg !== null && (
@@ -1830,9 +1837,9 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees }:
         </span>
       )}
       {[
-        { count: red,    label: 'under 60%', dot: 'var(--color-danger)' },
-        { count: yellow, label: '60–70%',    dot: 'var(--color-warning)' },
-        { count: green,  label: 'over 70%',  dot: 'var(--color-success)' },
+        { count: red,    label: `under ${bands.red}%`,           dot: 'var(--color-danger)' },
+        { count: yellow, label: `${bands.red}–${bands.green}%`, dot: 'var(--color-warning)' },
+        { count: green,  label: `over ${bands.green}%`,          dot: 'var(--color-success)' },
       ].map(({ count, label, dot }) => (
         // Same filled-dot marker as the Weekly Flash scorecard.
         <span key={label} className="inline-flex items-center gap-1.5 text-xs" title={`${count} products ${label}`}>
@@ -1853,14 +1860,15 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees }:
   );
 }
 
-function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, paymentFees, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; paymentFees: PaymentFeesData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { coffee: boolean; food: boolean; supplier: boolean }; onCollapse: (key: 'coffee' | 'food' | 'supplier') => void }) {
+function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, paymentFees, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; paymentFees: PaymentFeesData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { coffee: boolean; food: boolean; sweets: boolean; supplier: boolean }; onCollapse: (key: 'coffee' | 'food' | 'sweets' | 'supplier') => void }) {
   // Made-in-house components (sub-recipes like Fennel Slaw, Pickled Onions) are
   // tracked in the Supplier Prices widget, NOT as sellable products. Exclude any
   // costing row whose Notes flag it as a component so it never renders as a tile.
   const isComponent = (p: CostingProduct) => /made in house|component of/i.test(p.notes || '');
   const withMargin  = costings.filter(p => p.margin !== null && !isComponent(p));
   const coffeeItems = [...withMargin].filter(p => p.category === 'Coffee').sort((a, b) => a.margin! - b.margin!);
-  const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee').sort((a, b) => a.margin! - b.margin!);
+  const foodItems   = [...withMargin].filter(p => p.category !== 'Coffee' && p.category !== 'Sweets').sort((a, b) => a.margin! - b.margin!);
+  const sweetsItems = [...withMargin].filter(p => p.category === 'Sweets').sort((a, b) => a.margin! - b.margin!);
 
   // Margin review lookup (Notion names match costing names — both come from
   // the same DB). Rendered inline on each product tile as qty/wk + −$/wk.
@@ -1874,7 +1882,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   const coffeeAtRisk = marginReview?.coffeeShortfall
     ?? reviewItems.filter(i => i.category === 'Coffee').reduce((s, i) => s + i.shortfall, 0);
   const foodAtRisk   = marginReview?.foodShortfall
-    ?? reviewItems.filter(i => i.category !== 'Coffee').reduce((s, i) => s + i.shortfall, 0);
+    ?? reviewItems.filter(i => i.category !== 'Coffee' && i.category !== 'Sweets').reduce((s, i) => s + i.shortfall, 0);
   const coffeeAtRiskPct  = marginReview?.coffeeShortfallPct;
   const foodAtRiskPct    = marginReview?.foodShortfallPct;
   const coffeeUncosted   = marginReview?.unmatchedCoffeeCount ?? 0;
@@ -2037,9 +2045,11 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   // the summary badges keep showing the full-category figures.
   const [coffeeQuery, setCoffeeQuery] = useState('');
   const [foodQuery, setFoodQuery] = useState('');
+  const [sweetsQuery, setSweetsQuery] = useState('');
   const matchName = (p: CostingProduct, q: string) => p.name.toLowerCase().includes(q.trim().toLowerCase());
   const coffeeShown = coffeeQuery.trim() ? coffeeItems.filter(p => matchName(p, coffeeQuery)) : coffeeItems;
   const foodShown   = foodQuery.trim()   ? foodItems.filter(p => matchName(p, foodQuery))     : foodItems;
+  const sweetsShown = sweetsQuery.trim() ? sweetsItems.filter(p => matchName(p, sweetsQuery)) : sweetsItems;
 
   // Supplier Prices: search + group-by-supplier
   const [priceQuery, setPriceQuery] = useState('');
@@ -2100,6 +2110,15 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
           <ProductColumn items={foodShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct}
             header={<MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} />}
             search={{ value: foodQuery, onChange: setFoodQuery, placeholder: 'Search food products' }} />
+        </Card>
+      </div>
+
+      {/* ── Sweets Costings (bought-in) — always in DOM. GP ex-GST, 45/55 bands ── */}
+      <div style={{ display: open.sweets ? 'block' : 'none' }}>
+        <Card bare icon={<WidgetIcon name="sweets" chip={28} glyph={17} />} title="Sweets Costings" onCollapse={() => onCollapse('sweets')}>
+          <ProductColumn items={sweetsShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} bands={SWEETS_BANDS}
+            header={<MarginBadges items={sweetsItems} week={reviewWeek} paymentFees={paymentFees} bands={SWEETS_BANDS} />}
+            search={{ value: sweetsQuery, onChange: setSweetsQuery, placeholder: 'Search sweets' }} />
         </Card>
       </div>
 
@@ -3010,8 +3029,11 @@ export default function Home() {
   const costMargin   = costings.filter(p => p.margin !== null);
   const coffeeCount  = costMargin.filter(p => p.category === 'Coffee').length;
   const coffeeAlert  = costMargin.some(p => p.category === 'Coffee' && p.margin! < 60);
-  const foodCount    = costMargin.filter(p => p.category !== 'Coffee').length;
-  const foodAlert    = costMargin.some(p => p.category !== 'Coffee' && p.margin! < 60);
+  const isFood       = (p: CostingProduct) => p.category !== 'Coffee' && p.category !== 'Sweets';
+  const foodCount    = costMargin.filter(isFood).length;
+  const foodAlert    = costMargin.some(p => isFood(p) && p.margin! < 60);
+  const sweetsCount  = costMargin.filter(p => p.category === 'Sweets').length;
+  const sweetsAlert  = costMargin.some(p => p.category === 'Sweets' && p.margin! < SWEETS_BANDS.red);
   const supplierCount = ingredientPrices?.ingredients?.length ?? 0;
   const supplierAlert = (priceDrift?.warnings?.length ?? 0) > 0;
   const tigerOpenCount = tigerTasks.filter(t => !t.done).length;
@@ -3023,7 +3045,7 @@ export default function Home() {
   const shoppingAllChecked = _shopAll.filter(t => t.checked);
   const shoppingBadge = shoppingAllUnchecked.length;
 
-  const CATEGORIES = ['Coffee', 'Food', 'Retail', 'Vending', 'Uncategorised'];
+  const CATEGORIES = ['Coffee', 'Food', 'Sweets', 'Retail', 'Vending', 'Uncategorised'];
 
   return (
     <div className="min-h-screen text-gray-900 dashboard-unbold" style={{ background: 'linear-gradient(135deg, #e8eeff 0%, #fff8f0 40%, #f0fdf4 100%)' }}>
@@ -3230,6 +3252,7 @@ export default function Home() {
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
           <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
           <LauncherTile icon={<WidgetIcon name="food" chip={48} glyph={26} />} title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
+          <LauncherTile icon={<WidgetIcon name="sweets" chip={48} glyph={26} />} title="Sweets Costings" badgeText={sweetsCount || undefined} alert={sweetsAlert} active={openWidgets.has('sweets')} onClick={() => toggleWidget('sweets')} />
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Tiger OS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
           <LauncherTile icon={<WidgetIcon name="google" chip={48} glyph={26} />} title="Google" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('google')} onClick={() => toggleWidget('google')} />
@@ -3334,7 +3357,7 @@ export default function Home() {
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (each renders only when its tile is open) */}
         <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} marginReview={marginReview} paymentFees={paymentFees} recipeMap={recipeMap}
-          open={{ coffee: openWidgets.has('coffee'), food: openWidgets.has('food'), supplier: openWidgets.has('supplier') }}
+          open={{ coffee: openWidgets.has('coffee'), food: openWidgets.has('food'), sweets: openWidgets.has('sweets'), supplier: openWidgets.has('supplier') }}
           onCollapse={(k) => toggleWidget(k)}
           onIngredientsChanged={() => fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {})} />
 

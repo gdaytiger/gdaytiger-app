@@ -331,6 +331,9 @@ function scanAllSuppliers() {
   let total = 0;
   total += scanFoodSuppliers(cutoff);
   total += scanCoffeeSuppliers(cutoff);
+  // Sweets (bought-in) — tracks its own seen-invoice list, independent of cutoff.
+  try { const swLog = []; total += scanSweetsInvoices_(swLog); Logger.log('\n--- SWEETS ---\n' + swLog.join('\n')); }
+  catch (e) { Logger.log('Sweets scan error: ' + e.message); }
   setLastScanTime();
 
   Logger.log(`\n=== Complete. ${total} total price(s) updated. ===`);

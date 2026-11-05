@@ -399,6 +399,8 @@ function buildMarginReview_() {
   for (var norm in acc) {
     var a = acc[norm];
     var p = a.product;
+    // Sweets are bought-in (55% target, own widget) — keep them out of the 70% food review.
+    if ((p.category || '') === 'Sweets') continue;
     if (mrIsCoffee_(p)) catRevenue.coffee += a.gross / 100;
     else                catRevenue.food   += a.gross / 100;
     if (p.margin >= MR_TARGET_MARGIN) { greenCount++; continue; }
