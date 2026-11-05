@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Candy, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -1512,8 +1512,8 @@ const SUPPLIER_ICONS: { match: string; icon: LucideIcon | 'logo' }[] = [
   { match: "g'day tiger", icon: 'logo' },
   { match: 'gday tiger', icon: 'logo' },
   { match: 'matsu', icon: Leaf },
-  { match: 'mörk', icon: Candy },
-  { match: 'mork', icon: Candy },
+  { match: 'mörk', icon: Dice4 },
+  { match: 'mork', icon: Dice4 },
   { match: 'noisette', icon: Croissant },
   { match: 'pfd', icon: Drumstick },
   { match: 'planetware', icon: CupSoda },
