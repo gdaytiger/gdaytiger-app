@@ -10,7 +10,6 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import AddProductModal from './components/AddProductModal';
 import AddIngredientModal from './components/AddIngredientModal';
 import MorningCard from './components/MorningCard';
 import GoogleReviewsCard from './components/GoogleReviewsCard';
@@ -1575,7 +1574,7 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
   ) : null;
 
   return (
-    <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0" style={{ ...glassTileStyle }}>
+    <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0" style={{ ...glassTileStyle, minHeight: `${COSTING_TILE_H}px` }}>
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <p className="text-sm font-normal text-gray-800 leading-snug flex-1 min-w-0 truncate"
           style={{ fontFamily: '"stolzl", sans-serif', textTransform: 'uppercase' }}>
@@ -1656,29 +1655,34 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
   );
 }
 
-// Compact product search for the Coffee / Food costings widgets. Filters the
-// visible list; a clear (✕) appears once there's a query.
+// Height of a costing product tile (py-2.5 + margin stack + bar row). The
+// summary tile, search and Simulate share it so the widget reads as one grid.
+const COSTING_TILE_H = 84;
+
+// Product search for the Coffee / Food costings widgets — a tile-height glass
+// tile that sits on one row with the Simulate tile. Uppercase to match tiles.
 function ProductSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <div className="relative pt-2 pb-1">
+    <div className="relative flex-1 min-w-0">
       <input
         type="text"
         value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder || 'Search…'}
-        className="w-full text-sm pl-3 pr-8 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200"
-        style={{ background: 'rgba(255,255,255,0.75)', border: '1px solid rgba(0,0,0,0.08)', color: '#374151' }}
+        onChange={e => onChange(e.target.value.toUpperCase())}
+        placeholder={(placeholder || 'Search…').toUpperCase()}
+        autoCapitalize="characters"
+        className="w-full rounded-2xl pl-3 pr-9 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-200"
+        style={{ ...glassTileStyle, height: `${COSTING_TILE_H}px`, fontFamily: '"stolzl", sans-serif', textTransform: 'uppercase', letterSpacing: '0.02em' }}
       />
       {value && (
         <button onClick={() => onChange('')} aria-label="Clear search"
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-          style={{ fontSize: '13px', lineHeight: 1 }}><X size={14} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          style={{ fontSize: '13px', lineHeight: 1 }}><X size={16} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>
       )}
     </div>
   );
 }
 
-function ProductColumn({ items, height = 272, fill, reviews, sales, feePct }: { items: CostingProduct[]; height?: number; fill?: boolean; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number>; feePct?: number }) {
+function ProductColumn({ items, height = 272, fill, reviews, sales, feePct, header, search }: { items: CostingProduct[]; height?: number; fill?: boolean; reviews?: Map<string, MarginReviewItem>; sales?: Map<string, number>; feePct?: number; header?: React.ReactNode; search?: { value: string; onChange: (v: string) => void; placeholder?: string } }) {
   // Non-destructive price simulator: nothing here writes to Square or the sheet —
   // it just recomputes margins in the browser against hypothetical prices.
   const [simulate, setSimulate] = useState(false);
@@ -1700,49 +1704,75 @@ function ProductColumn({ items, height = 272, fill, reviews, sales, feePct }: { 
       simulate={simulate} override={overrides[key]} onOverride={(price) => setOverrides(o => ({ ...o, [key]: price }))} />;
   });
 
-  const controls = (
-    <div className="flex items-center gap-2 pb-1.5 flex-wrap">
-      <button onClick={() => setSimulate(s => !s)}
-        className="text-xs font-semibold px-2 py-1 rounded-lg transition-colors"
-        style={{ background: simulate ? 'rgba(217,119,6,0.14)' : 'rgba(0,0,0,0.06)', color: simulate ? '#78350f' : '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}
-        title="Preview margins at hypothetical prices — nothing is saved">
-        {simulate ? '✓ SIMULATING' : '⇅ SIMULATE'}
-      </button>
-      {simulate && curAvg !== null && simAvg !== null && (
+  const simButton = (
+    <button onClick={() => setSimulate(s => !s)}
+      className="rounded-2xl px-4 text-sm font-semibold shrink-0 transition-colors"
+      style={{
+        ...glassTileStyle,
+        height: `${COSTING_TILE_H}px`,
+        ...(simulate ? { background: 'rgba(217,119,6,0.14)' } : {}),
+        color: simulate ? '#78350f' : '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em',
+      }}
+      title="Preview margins at hypothetical prices — nothing is saved">
+      {simulate ? '✓ SIMULATING' : '⇅ SIMULATE'}
+    </button>
+  );
+
+  // Avg / reset only while simulating — small line under the search row.
+  const simInfo = simulate && (curAvg !== null || hasOverrides) ? (
+    <div className="flex items-center gap-2 pb-2">
+      {curAvg !== null && simAvg !== null && (
         <span className="text-xs text-gray-500" style={{ fontVariantNumeric: 'tabular-nums' }} title="Category average margin (current → simulated)">
           avg <span className="font-bold text-gray-700">{curAvg.toFixed(1)}%</span>
           {hasOverrides && (<><span className="text-gray-300"> → </span><span className="font-bold" style={{ color: simAvg >= curAvg ? 'var(--color-success)' : 'var(--color-danger)' }}>{simAvg.toFixed(1)}%</span></>)}
         </span>
       )}
-      {simulate && hasOverrides && (
+      {hasOverrides && (
         <button onClick={() => setOverrides({})}
           className="text-xs font-semibold px-2 py-1 rounded-lg ml-auto"
           style={{ background: 'rgba(0,0,0,0.06)', color: '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}>RESET</button>
       )}
     </div>
+  ) : null;
+
+  const controls = (
+    <>
+      {header}
+      <div className="flex items-stretch gap-2 mb-2">
+        {search ? <ProductSearch {...search} /> : <div className="flex-1" />}
+        {simButton}
+      </div>
+      {simInfo}
+    </>
   );
+
+  const empty = <p className="text-xs text-gray-400 italic">No matches</p>;
 
   return (
     <div className="flex-1 min-w-0">
-      {items.length === 0 ? (
-        <p className="text-xs text-gray-400 italic">No matches</p>
-      ) : fill ? (
+      {fill ? (
         // In the bottom sheet the sheet itself scrolls, so render the list inline.
-        <div className="pr-1" style={{ paddingTop: '6px' }}>{controls}{list}</div>
+        // Header + search/simulate stick to the top and stay visible on "No matches".
+        <div className="pr-1">
+          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(245,243,239,0.97)', paddingTop: '6px' }}>{controls}</div>
+          {items.length === 0 ? empty : list}
+        </div>
       ) : (
         <div>
           {controls}
-          <div className="relative" style={{ height: `${height}px` }}>
-            <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
-            <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>{list}</div>
-          </div>
+          {items.length === 0 ? empty : (
+            <div className="relative" style={{ height: `${height}px` }}>
+              <div className="absolute inset-0 pointer-events-none z-10" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK, background: 'transparent' }} />
+              <div className="no-scrollbar h-full overflow-y-scroll pr-1" style={{ paddingTop: '10px', paddingBottom: '10px' }}>{list}</div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, onAdd }: { items: CostingProduct[]; atRisk?: number; atRiskPct?: number; uncosted?: number; week?: string; paymentFees?: PaymentFeesData | null; onAdd?: () => void }) {
+function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees }: { items: CostingProduct[]; atRisk?: number; atRiskPct?: number; uncosted?: number; week?: string; paymentFees?: PaymentFeesData | null }) {
   const avg    = items.length > 0 ? items.reduce((s, p) => s + p.margin!, 0) / items.length : null;
   // Prefer the live rolling rate once enough days have backfilled; otherwise
   // fall back to the static constant (see MERCHANT_FEE_PCT comment for source).
@@ -1755,7 +1785,7 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, o
   const green  = items.filter(p => p.margin! >= 70).length;
   const netColor = net !== null ? (net >= 70 ? 'var(--color-success)' : net >= 60 ? 'var(--color-warning)' : 'var(--color-danger)') : 'var(--color-ink-label)';
   return (
-    <div className="flex items-center gap-2 flex-wrap pb-3 mb-1 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+    <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0 flex items-center gap-2 flex-wrap" style={{ ...glassTileStyle, minHeight: `${COSTING_TILE_H}px` }}>
       {avg !== null && (
         <span className="flex items-center gap-1.5 text-xs">
           <span className="text-gray-500">Avg <span className="font-bold text-gray-700">{avg.toFixed(1)}%</span></span>
@@ -1805,17 +1835,7 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, o
           +{uncosted} not costed
         </span>
       )}
-      <span className="ml-auto flex items-center gap-2">
-        <span className="text-xs text-gray-400 uppercase">{items.length} products</span>
-        {onAdd && (
-          <button
-            onClick={onAdd}
-            className="text-xs font-semibold px-2 py-1 rounded-lg transition-colors"
-            style={{ background: 'rgba(0,0,0,0.06)', color: '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}
-            title="Add a new product"
-          >+ ADD</button>
-        )}
-      </span>
+      <span className="ml-auto text-xs text-gray-400 uppercase">{items.length} products</span>
     </div>
   );
 }
@@ -1999,7 +2019,6 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   }, [withMargin.length, ingredientPrices, priceDrift, recipeMap]);
 
   const changedCount = ingredientChanges.filter(i => i.delta !== undefined).length;
-  const [addProductOpen, setAddProductOpen] = useState<null | 'food' | 'coffee'>(null);
 
   // Per-widget product search (Coffee / Food). Filters the visible list only;
   // the summary badges keep showing the full-category figures.
@@ -2056,31 +2075,20 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
       {/* ── Coffee Costings — always in DOM ── */}
       <div style={{ display: open.coffee ? 'block' : 'none' }}>
         <Card bare icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" onCollapse={() => onCollapse('coffee')}>
-          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(245,243,239,0.97)' }}>
-            <MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} uncosted={coffeeUncosted} week={reviewWeek} paymentFees={paymentFees} onAdd={() => setAddProductOpen('coffee')} />
-            <ProductSearch value={coffeeQuery} onChange={setCoffeeQuery} placeholder="Search coffee products…" />
-          </div>
-          <ProductColumn items={coffeeShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} />
+          <ProductColumn items={coffeeShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct}
+            header={<MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} uncosted={coffeeUncosted} week={reviewWeek} paymentFees={paymentFees} />}
+            search={{ value: coffeeQuery, onChange: setCoffeeQuery, placeholder: 'Search coffee products…' }} />
         </Card>
       </div>
 
       {/* ── Food Costings — always in DOM ── */}
       <div style={{ display: open.food ? 'block' : 'none' }}>
         <Card bare icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" onCollapse={() => onCollapse('food')}>
-          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(245,243,239,0.97)' }}>
-            <MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} onAdd={() => setAddProductOpen('food')} />
-            <ProductSearch value={foodQuery} onChange={setFoodQuery} placeholder="Search food products…" />
-          </div>
-          <ProductColumn items={foodShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} />
+          <ProductColumn items={foodShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct}
+            header={<MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} />}
+            search={{ value: foodQuery, onChange: setFoodQuery, placeholder: 'Search food products…' }} />
         </Card>
       </div>
-
-      <AddProductModal
-        open={addProductOpen !== null}
-        category={addProductOpen || 'food'}
-        onClose={() => setAddProductOpen(null)}
-        ingredients={ingredientPrices?.ingredients ?? []}
-      />
 
       {addIngredientOpen && (
         <AddIngredientModal
