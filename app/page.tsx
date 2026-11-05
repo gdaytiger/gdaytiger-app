@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, Ham, Cookie, Wheat, Leaf, Candy, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Candy, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -1464,6 +1464,32 @@ function ChangeCard({ c }: { c: MarginChange }) {
 
 // Per-supplier emoji. Matched case-insensitively by substring so name variants
 // (e.g. "Redi Milk" / "RediMilk") resolve. Falls back to a box.
+// Weather line — the API string is "<emoji> 15° — Light drizzle" (the emoji is
+// kept for the morning push). Here we drop the emoji and pick a Lucide icon
+// from the description so it matches the rest of the dashboard.
+function weatherIcon(desc: string): LucideIcon {
+  const d = desc.toLowerCase();
+  if (d.includes('thunder')) return CloudLightning;
+  if (d.includes('drizzle')) return CloudDrizzle;
+  if (d.includes('shower')) return CloudSunRain;
+  if (d.includes('rain')) return CloudRain;
+  if (d.includes('fog')) return CloudFog;
+  if (d.includes('overcast')) return Cloud;
+  if (d.includes('partly') || d.includes('mainly')) return CloudSun;
+  if (d.includes('clear')) return Sun;
+  return Thermometer;
+}
+function WeatherLine({ text }: { text: string }) {
+  const clean = (text || '').replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  const Icon = weatherIcon(clean);
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Icon size={14} strokeWidth={2.25} aria-hidden style={{ display: 'block', flexShrink: 0 }} />
+      {clean}
+    </span>
+  );
+}
+
 const SUPPLIER_ICONS: { match: string; icon: LucideIcon | 'logo' }[] = [
   { match: '5ways', icon: Ham },
   { match: 'candied', icon: Cookie },
@@ -2976,7 +3002,7 @@ export default function Home() {
             TIGER <span style={{ color: 'var(--color-brand-peach)' }}>OS</span>
           </h1>
           <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr}</p>
-          <p className="text-xs text-gray-400 mt-0.5 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.weather}</p>
+          <p className="text-xs text-gray-400 mt-0.5 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}><WeatherLine text={data.weather} /></p>
         </div>
         <img src="/logo.png" alt="G'Day Tiger" style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0px 4px 12px rgba(0,0,0,0.3))' }} />
       </div>
