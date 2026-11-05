@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
+import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
 import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Candy, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
@@ -204,6 +204,21 @@ function Card({ emoji, icon, title, children, onEmojiClick, headerRight, onColla
 
 // Square launcher tile — uniform size, opens its full widget on tap. `active`
 // gives the open tile a highlighted ring so the dock reads as a set.
+// Launcher grid — on desktop, every tile sits on one row up to 7 tiles; from 8
+// tiles it splits evenly over 2 rows (8 → 4+4, 9 → 5+4 …). Mobile stays 3-up.
+function LauncherGrid({ children }: { children: React.ReactNode }) {
+  const count = Children.toArray(children).filter(Boolean).length;
+  const cols = count <= 7 ? Math.max(count, 1) : Math.ceil(count / 2);
+  return (
+    <div
+      className="md:col-span-2 grid grid-cols-3 md:grid-cols-[repeat(var(--launch-cols),minmax(0,1fr))] gap-3"
+      style={{ '--launch-cols': cols } as React.CSSProperties}
+    >
+      {children}
+    </div>
+  );
+}
+
 function LauncherTile({ emoji, icon, title, subtitle, badgeText, alert, active, onClick }: {
   emoji?: string; icon?: React.ReactNode; title: string; subtitle?: string; badgeText?: string | number; alert?: boolean; active?: boolean; onClick: () => void;
 }) {
@@ -3189,7 +3204,7 @@ export default function Home() {
         </Card>
 
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
-        <div className="md:col-span-2 grid grid-cols-3 md:grid-cols-6 gap-3">
+        <LauncherGrid>
           <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
           <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
@@ -3197,7 +3212,7 @@ export default function Home() {
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Tiger OS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
           <LauncherTile icon={<WidgetIcon name="google" chip={48} glyph={26} />} title="Google" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('google')} onClick={() => toggleWidget('google')} />
-        </div>
+        </LauncherGrid>
 
         </div>{/* end stable grid */}
         </DndContext>
