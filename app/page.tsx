@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -117,10 +117,10 @@ const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
 // ── Widget icons (Lucide) ────────────────────────────────────────────────────
 // One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
 // falls back to ~56% of the chip. Colour: neutral grey (--color-ink-label).
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings';
 
 const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
-  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star,
+  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt,
 };
 
 function WidgetIcon({ name, chip = 28, glyph }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -1863,7 +1863,7 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, b
   );
 }
 
-function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, paymentFees, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; paymentFees: PaymentFeesData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { coffee: boolean; food: boolean; sweets: boolean; supplier: boolean }; onCollapse: (key: 'coffee' | 'food' | 'sweets' | 'supplier') => void }) {
+function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, paymentFees, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; paymentFees: PaymentFeesData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { costings: boolean; supplier: boolean }; onCollapse: (key: 'costings' | 'supplier') => void }) {
   // Made-in-house components (sub-recipes like Fennel Slaw, Pickled Onions) are
   // tracked in the Supplier Prices widget, NOT as sellable products. Exclude any
   // costing row whose Notes flag it as a component so it never renders as a tile.
@@ -2049,6 +2049,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   const [coffeeQuery, setCoffeeQuery] = useState('');
   const [foodQuery, setFoodQuery] = useState('');
   const [sweetsQuery, setSweetsQuery] = useState('');
+  const [costingCat, setCostingCat] = useState<'coffee' | 'food' | 'sweets'>('coffee');
   const matchName = (p: CostingProduct, q: string) => p.name.toLowerCase().includes(q.trim().toLowerCase());
   const coffeeShown = coffeeQuery.trim() ? coffeeItems.filter(p => matchName(p, coffeeQuery)) : coffeeItems;
   const foodShown   = foodQuery.trim()   ? foodItems.filter(p => matchName(p, foodQuery))     : foodItems;
@@ -2096,32 +2097,52 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
     ? paymentFees.feePct : null;
   const feePct = liveFeeCard ?? MERCHANT_FEE_PCT;
 
+  // Category switcher — tile-height buttons; the selected one uses the same
+  // peach wash + peach border as the Simulate tile when it's on.
+  const categoryTabs = (
+    <div className="flex items-stretch gap-2 mb-2" role="tablist" aria-label="Costings category">
+      {([
+        { key: 'coffee', label: 'COFFEE', count: coffeeItems.length },
+        { key: 'food',   label: 'FOOD',   count: foodItems.length },
+        { key: 'sweets', label: 'SWEETS', count: sweetsItems.length },
+      ] as const).map(({ key, label, count }) => {
+        const selected = costingCat === key;
+        return (
+          <button key={key} role="tab" aria-selected={selected} onClick={() => setCostingCat(key)}
+            className="flex-1 basis-0 min-w-0 rounded-2xl flex items-center justify-center gap-2 px-2 text-sm font-semibold"
+            style={{ ...glassTileStyle, height: `${COSTING_TILE_H}px`, color: selected ? '#1f2937' : '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em',
+              ...(selected ? { background: 'rgba(251,205,173,0.12)', border: '1px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow)' } : {}) }}>
+            <WidgetIcon name={key} chip={28} glyph={17} />
+            <span className="truncate">{label}</span>
+            <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <>
-      {/* ── Coffee Costings — always in DOM ── */}
-      <div style={{ display: open.coffee ? 'block' : 'none' }}>
-        <Card bare icon={<WidgetIcon name="coffee" chip={28} glyph={17} />} title="Coffee Costings" onCollapse={() => onCollapse('coffee')}>
-          <ProductColumn items={coffeeShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} bands={COFFEE_BANDS}
-            header={<MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} week={reviewWeek} paymentFees={paymentFees} bands={COFFEE_BANDS} />}
-            search={{ value: coffeeQuery, onChange: setCoffeeQuery, placeholder: 'Search coffee products' }} />
-        </Card>
-      </div>
-
-      {/* ── Food Costings — always in DOM ── */}
-      <div style={{ display: open.food ? 'block' : 'none' }}>
-        <Card bare icon={<WidgetIcon name="food" chip={28} glyph={17} />} title="Food Costings" onCollapse={() => onCollapse('food')}>
-          <ProductColumn items={foodShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} bands={FOOD_BANDS}
-            header={<MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} bands={FOOD_BANDS} />}
-            search={{ value: foodQuery, onChange: setFoodQuery, placeholder: 'Search food products' }} />
-        </Card>
-      </div>
-
-      {/* ── Sweets Costings (bought-in) — always in DOM. GP ex-GST, 45/55 bands ── */}
-      <div style={{ display: open.sweets ? 'block' : 'none' }}>
-        <Card bare icon={<WidgetIcon name="sweets" chip={28} glyph={17} />} title="Sweets Costings" onCollapse={() => onCollapse('sweets')}>
-          <ProductColumn items={sweetsShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} bands={SWEETS_BANDS}
-            header={<MarginBadges items={sweetsItems} week={reviewWeek} paymentFees={paymentFees} bands={SWEETS_BANDS} />}
-            search={{ value: sweetsQuery, onChange: setSweetsQuery, placeholder: 'Search sweets' }} />
+      {/* ── Costings — Coffee / Food / Sweets in one card. All three columns stay
+          mounted so each keeps its own search + Simulate state when switching. ── */}
+      <div style={{ display: open.costings ? 'block' : 'none' }}>
+        <Card bare icon={<WidgetIcon name="costings" chip={28} glyph={17} />} title="Costings" onCollapse={() => onCollapse('costings')}>
+          <div style={{ display: costingCat === 'coffee' ? 'block' : 'none' }}>
+            <ProductColumn items={coffeeShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} bands={COFFEE_BANDS}
+              header={<>{categoryTabs}<MarginBadges items={coffeeItems} atRisk={coffeeAtRisk} atRiskPct={coffeeAtRiskPct} week={reviewWeek} paymentFees={paymentFees} bands={COFFEE_BANDS} /></>}
+              search={{ value: coffeeQuery, onChange: setCoffeeQuery, placeholder: 'Search coffee products' }} />
+          </div>
+          <div style={{ display: costingCat === 'food' ? 'block' : 'none' }}>
+            <ProductColumn items={foodShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} bands={FOOD_BANDS}
+              header={<>{categoryTabs}<MarginBadges items={foodItems} atRisk={foodAtRisk} atRiskPct={foodAtRiskPct} week={reviewWeek} paymentFees={paymentFees} bands={FOOD_BANDS} /></>}
+              search={{ value: foodQuery, onChange: setFoodQuery, placeholder: 'Search food products' }} />
+          </div>
+          {/* Sweets (bought-in) — GP ex-GST, own bands */}
+          <div style={{ display: costingCat === 'sweets' ? 'block' : 'none' }}>
+            <ProductColumn items={sweetsShown} fill reviews={reviewMap} sales={salesMap} feePct={feePct} bands={SWEETS_BANDS}
+              header={<>{categoryTabs}<MarginBadges items={sweetsItems} week={reviewWeek} paymentFees={paymentFees} bands={SWEETS_BANDS} /></>}
+              search={{ value: sweetsQuery, onChange: setSweetsQuery, placeholder: 'Search sweets' }} />
+          </div>
         </Card>
       </div>
 
@@ -3253,9 +3274,7 @@ export default function Home() {
         <LauncherGrid>
           <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
-          <LauncherTile icon={<WidgetIcon name="coffee" chip={48} glyph={26} />} title="Coffee Costings" badgeText={coffeeCount || undefined} alert={coffeeAlert} active={openWidgets.has('coffee')} onClick={() => toggleWidget('coffee')} />
-          <LauncherTile icon={<WidgetIcon name="food" chip={48} glyph={26} />} title="Food Costings" badgeText={foodCount || undefined} alert={foodAlert} active={openWidgets.has('food')} onClick={() => toggleWidget('food')} />
-          <LauncherTile icon={<WidgetIcon name="sweets" chip={48} glyph={26} />} title="Sweets Costings" badgeText={sweetsCount || undefined} alert={sweetsAlert} active={openWidgets.has('sweets')} onClick={() => toggleWidget('sweets')} />
+          <LauncherTile icon={<WidgetIcon name="costings" chip={48} glyph={26} />} title="Costings" badgeText={(coffeeCount + foodCount + sweetsCount) || undefined} alert={coffeeAlert || foodAlert || sweetsAlert} active={openWidgets.has('costings')} onClick={() => toggleWidget('costings')} />
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Tiger OS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
           <LauncherTile icon={<WidgetIcon name="google" chip={48} glyph={26} />} title="Google" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('google')} onClick={() => toggleWidget('google')} />
@@ -3360,7 +3379,7 @@ export default function Home() {
 
         {/* COSTINGS — Coffee, Food, Ingredient Prices (each renders only when its tile is open) */}
         <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} marginReview={marginReview} paymentFees={paymentFees} recipeMap={recipeMap}
-          open={{ coffee: openWidgets.has('coffee'), food: openWidgets.has('food'), sweets: openWidgets.has('sweets'), supplier: openWidgets.has('supplier') }}
+          open={{ costings: openWidgets.has('costings'), supplier: openWidgets.has('supplier') }}
           onCollapse={(k) => toggleWidget(k)}
           onIngredientsChanged={() => fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {})} />
 
