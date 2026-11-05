@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { CircleCheck } from 'lucide-react';
 
 type Match = {
   supplier: string;
@@ -201,7 +202,7 @@ export default function AddIngredientModal({
 
         {done ? (
           <div className="p-6 text-center">
-            <p className="text-3xl mb-2">✅</p>
+            <CircleCheck size={36} strokeWidth={2} aria-hidden style={{ display: 'block', margin: '0 auto 8px', color: 'var(--color-success)' }} />
             <p className="text-sm font-semibold text-gray-800">Added &ldquo;{done.name}&rdquo;{done.supplier ? ` (${done.supplier})` : ''}.</p>
             <p className="text-xs text-gray-500 mt-1">
               {done.synced ? 'It now appears in Supplier Prices.' : 'It will appear after the next price sync (~30 min).'}

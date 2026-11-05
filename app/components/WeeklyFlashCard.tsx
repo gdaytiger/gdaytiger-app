@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Circle } from 'lucide-react';
 
 // Presentational body for the dashboard "Weekly Flash" card.
 // Fed by /api/weekly-flash (sales, labour, margin) + /api/flash-extras
@@ -64,7 +65,7 @@ function ScoreRow({ label, value, zone, color, dot }:
     <div className="flex items-center justify-between rounded-xl px-3 py-2"
       style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
       <div className="flex items-center gap-2">
-        <span style={{ fontSize: '12px' }}>{dot}</span>
+        <Circle size={10} strokeWidth={2.5} aria-hidden fill={dot || 'none'} style={{ display: 'block', flexShrink: 0, color: dot || 'var(--color-ink-muted)' }} />
         <span className="text-xs font-semibold" style={{ color: 'var(--color-ink-label)' }}>{label}</span>
       </div>
       <div className="flex items-baseline gap-2">
@@ -146,7 +147,8 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
   const gmCol = scorecard.grossMargin.verdict === 'below' ? RED : GREEN;
   const labVerdict = scorecard.labour.verdict;
   const labCol = labVerdict === 'in' ? GREEN : labVerdict === 'above' ? RED : labVerdict === 'watch' ? AMBER : 'var(--color-ink-muted)';
-  const dot = (col: string) => col === GREEN ? '🟢' : col === RED ? '🔴' : col === AMBER ? '🟡' : '⚪';
+  // Filled dot in the status colour; '' renders a hollow neutral ring.
+  const dot = (col: string) => (col === GREEN || col === RED || col === AMBER) ? col : '';
   const gmMonth = grossMargin.month ? ` (${grossMargin.month})` : '';
 
   return (
@@ -181,7 +183,7 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
             zone={`≤${zones.labour[0]}% · watch to ${zones.labour[1]}%`} color={labCol} dot={dot(labCol)} />
           <ScoreRow label="Total labour incl owner"
             value={data.labourTotal?.value != null ? `${data.labourTotal.value.toFixed(1)}%` : '—'}
-            zone="context" color="var(--color-ink-label)" dot="⚪" />
+            zone="context" color="var(--color-ink-label)" dot="" />
           {meta.pending && (
             <div className="text-[10px] px-1" style={{ color: 'var(--color-ink-muted)' }}>{meta.pending}</div>
           )}
