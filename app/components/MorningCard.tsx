@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import type { MorningSnapshot } from '@/app/lib/morning';
 
 // Morning card (opens from the TIGER OS header): the 5am snapshot — focus line,
@@ -88,7 +89,7 @@ export default function MorningCard({ active }: { active: boolean }) {
           {alerts.length > 0 && (
             <div style={{ ...box, borderLeft: '4px solid var(--color-danger)' }}>
               <div style={label}>Needs attention</div>
-              {alerts.map(a => <div key={a} className="text-sm" style={{ marginTop: 4 }}>⚠️ {a}</div>)}
+              {alerts.map(a => <div key={a} className="text-sm flex items-start gap-1.5" style={{ marginTop: 4 }}><TriangleAlert size={14} strokeWidth={2.25} aria-hidden style={{ flexShrink: 0, marginTop: 3, color: 'var(--color-danger)' }} /><span>{a}</span></div>)}
             </div>
           )}
 

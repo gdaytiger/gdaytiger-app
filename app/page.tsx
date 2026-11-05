@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Ham, Cookie, Wheat, Leaf, Candy, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -114,17 +115,18 @@ const CATEGORY_ORDER = ['ORDER', 'ADMIN', 'MAINTENANCE', 'STAFF', 'COSTING', 'ME
 // collapsible project headers so they all read as the same component.
 const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
 
-// ── Widget icons (emoji) ─────────────────────────────────────────────────────
-// One place mapping each widget to its emoji, rendered at a size derived from
-// the caller's chip value. Kept as a component so the set can be swapped later.
+// ── Widget icons (Lucide) ────────────────────────────────────────────────────
+// One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
+// falls back to ~56% of the chip. Colour comes from the brand token.
 type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google';
 
-const WIDGET_ICON_EMOJI: Record<WidgetIconName, string> = {
-  daily: '⚡', week: '📅', projects: '🎯', coffee: '☕', food: '🥪', supplier: '📦', updates: '🚀', shopping: '🛒', flash: '📈', morning: '☀️', google: '⭐',
+const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
+  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star,
 };
 
-function WidgetIcon({ name, chip = 28 }: { name: WidgetIconName; chip?: number; glyph?: number }) {
-  return <span style={{ fontSize: Math.round(chip * 0.56), lineHeight: 1, filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>{WIDGET_ICON_EMOJI[name]}</span>;
+function WidgetIcon({ name, chip = 28, glyph }: { name: WidgetIconName; chip?: number; glyph?: number }) {
+  const Icon = WIDGET_ICON[name];
+  return <Icon size={glyph ?? Math.round(chip * 0.56)} strokeWidth={2} aria-hidden style={{ display: 'block', color: 'var(--color-brand-bark)' }} />;
 }
 
 const SUPPLIER_LINKS: Record<string, string> = {
@@ -323,7 +325,7 @@ function BottomSheet({ open, onClose, children }: { open: boolean; onClose: () =
           <div style={{ width: '40px', height: '5px', borderRadius: '999px', background: 'rgba(0,0,0,0.18)' }} />
         </div>
         {/* Close button */}
-        <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '12px', right: '14px', zIndex: 2, width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', lineHeight: 1, color: 'var(--color-ink-label)', background: 'rgba(0,0,0,0.06)', borderRadius: '999px', border: 'none', cursor: 'pointer', padding: 0 }}>✕</button>
+        <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '12px', right: '14px', zIndex: 2, width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', lineHeight: 1, color: 'var(--color-ink-label)', background: 'rgba(0,0,0,0.06)', borderRadius: '999px', border: 'none', cursor: 'pointer', padding: 0 }}><X size={16} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>
         {/* Content fills the fixed-height sheet; the widget inside owns its scroll.
             Capped + centred for desktop; top space clears the ✕ chip. */}
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
@@ -757,7 +759,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         {subtaskCount && subtaskCount.total > 0 && <span className="shrink-0 text-xs text-gray-400 tabular-nums mt-0.5">{subtaskCount.done}/{subtaskCount.total}</span>}
         {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
         {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
-        {!isMobile && onDelete && <button onClick={e => { e.stopPropagation(); onDelete(id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Delete" title="Delete">✕</button>}
+        {!isMobile && onDelete && <button onClick={e => { e.stopPropagation(); onDelete(id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Delete" title="Delete"><X size={14} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>}
       </div>
       {expanded && !onRowClick && (
         <div className="px-4 pb-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
@@ -930,7 +932,7 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
           <span className="text-xs font-semibold shrink-0 text-gray-500 uppercase">{shift.label.split(' ')[0]}</span>
           <input ref={inputRef} value={taskText} onChange={e => setTaskText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') close(); }} placeholder="ADD TASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
           <button onClick={submit} disabled={saving || !taskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>{saving ? '...' : 'ADD'}</button>
-          <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
+          <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0"><X size={18} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>
         </div>
         <div className="flex items-center gap-1.5 overflow-x-auto pl-7" style={{ scrollbarWidth: 'none' }}>
           {RECURRENCE_OPTIONS.map(opt => (
@@ -1204,7 +1206,7 @@ function DriftChip({ drift }: { drift: DriftWarning }) {
       className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0 leading-none whitespace-nowrap"
       style={{ background: s.bg, color: s.fg, fontVariantNumeric: 'tabular-nums' }}
     >
-      ⚠ {label}
+      <TriangleAlert size={11} strokeWidth={2.5} aria-hidden style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />{label}
     </span>
   );
 }
@@ -1268,7 +1270,7 @@ function PackChangeBanner({ packChanges, unmappedSkus, onAddSku }: { packChanges
             style={{ ...glassDangerStyle }}>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--color-danger-deep)', fontFamily: '"stolzl", sans-serif' }}>
-                ⚠ Pack size changed
+                <TriangleAlert size={13} strokeWidth={2.5} aria-hidden style={{ display: 'inline', verticalAlign: '-2px', marginRight: 4 }} />Pack size changed
               </span>
               {pc.unitCostPct !== null && (
                 <span className="text-xs font-black ml-auto shrink-0" style={{ color: up ? 'var(--color-danger)' : 'var(--color-success)', fontVariantNumeric: 'tabular-nums' }}>
@@ -1462,31 +1464,39 @@ function ChangeCard({ c }: { c: MarginChange }) {
 
 // Per-supplier emoji. Matched case-insensitively by substring so name variants
 // (e.g. "Redi Milk" / "RediMilk") resolve. Falls back to a box.
-const SUPPLIER_ICONS: { match: string; icon: string }[] = [
-  { match: '5ways', icon: '🍖' },
-  { match: 'candied', icon: '🍪' },
-  { match: 'dench', icon: '🍞' },
-  { match: "g'day tiger", icon: '🐯' },
-  { match: 'gday tiger', icon: '🐯' },
-  { match: 'matsu', icon: '🍵' },
-  { match: 'mörk', icon: '🍫' },
-  { match: 'mork', icon: '🍫' },
-  { match: 'noisette', icon: '🥐' },
-  { match: 'pfd', icon: '🍗' },
-  { match: 'planetware', icon: '🥤' },
-  { match: 'product distribution', icon: '🥒' },
-  { match: 'redi milk', icon: '🥛' },
-  { match: 'redimilk', icon: '🥛' },
-  { match: 'sciclunas', icon: '🥬' },
-  { match: 'seven seeds', icon: '☕' },
-  { match: 'trio', icon: '📦' },
-  { match: 'uncle', icon: '🥩' },
-  { match: 'woolworths', icon: '🛍️' },
+const SUPPLIER_ICONS: { match: string; icon: LucideIcon | 'logo' }[] = [
+  { match: '5ways', icon: Ham },
+  { match: 'candied', icon: Cookie },
+  { match: 'dench', icon: Wheat },
+  { match: "g'day tiger", icon: 'logo' },
+  { match: 'gday tiger', icon: 'logo' },
+  { match: 'matsu', icon: Leaf },
+  { match: 'mörk', icon: Candy },
+  { match: 'mork', icon: Candy },
+  { match: 'noisette', icon: Croissant },
+  { match: 'pfd', icon: Drumstick },
+  { match: 'planetware', icon: CupSoda },
+  { match: 'product distribution', icon: Carrot },
+  { match: 'redi milk', icon: Milk },
+  { match: 'redimilk', icon: Milk },
+  { match: 'sciclunas', icon: LeafyGreen },
+  { match: 'seven seeds', icon: Coffee },
+  { match: 'trio', icon: Package },
+  { match: 'uncle', icon: Beef },
+  { match: 'woolworths', icon: ShoppingBag },
 ];
-function supplierIcon(name: string): string {
+function SupplierIcon({ name, size = 16 }: { name: string; size?: number }) {
   const n = (name || '').toLowerCase();
-  const hit = SUPPLIER_ICONS.find(s => n.includes(s.match));
-  return hit ? hit.icon : '📦';
+  const icon = SUPPLIER_ICONS.find(s => n.includes(s.match))?.icon ?? Package;
+  if (icon === 'logo') return <TigerLogo size={size + 2} />;
+  const Icon = icon;
+  return <Icon size={size} strokeWidth={2} aria-hidden style={{ display: 'block', color: 'var(--color-brand-bark)' }} />;
+}
+
+// Brand mark in place of the 🐯 emoji — the same /logo.png the header uses.
+function TigerLogo({ size = 18 }: { size?: number }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/logo.png" alt="" aria-hidden style={{ width: size, height: size, objectFit: 'contain', display: 'block', flexShrink: 0 }} />;
 }
 
 function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverride }: { p: CostingProduct; review?: MarginReviewItem; weeklyQty?: number; feePct?: number; simulate?: boolean; override?: number; onOverride?: (price: number) => void }) {
@@ -1621,7 +1631,7 @@ function ProductSearch({ value, onChange, placeholder }: { value: string; onChan
       {value && (
         <button onClick={() => onChange('')} aria-label="Clear search"
           className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-          style={{ fontSize: '13px', lineHeight: 1 }}>✕</button>
+          style={{ fontSize: '13px', lineHeight: 1 }}><X size={14} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>
       )}
     </div>
   );
@@ -2082,7 +2092,7 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
                         return (
                           <div key={group.supplier} className={open ? 'md:col-span-2' : ''}>
                             <div onClick={() => toggleSupplier(group.supplier)} role="button" className="rounded-2xl cursor-pointer flex items-center gap-3 px-3 py-2.5" style={tileStyle}>
-                              <span className="text-base">{supplierIcon(group.supplier)}</span>
+                              <SupplierIcon name={group.supplier} />
                               <span className="flex-1 min-w-0 text-sm font-normal uppercase truncate text-gray-800" style={{ fontFamily: '"stolzl", sans-serif' }}>{group.supplier}</span>
                               {changeCount > 0 && (
                                 <span className="flex items-center justify-center rounded-full font-bold" style={{ minWidth: '22px', height: '22px', padding: '0 6px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{changeCount}</span>
@@ -2161,7 +2171,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
       {/* ── Version + What's New (details revealed by tapping the version) ── */}
       <div className="rounded-2xl p-3 mb-4" style={{ ...TILE_STYLE }}>
         <div className="flex items-center gap-2">
-          <span className="text-base" style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' }}>🐯</span>
+          <TigerLogo size={18} />
           <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: 'var(--color-ink-label)' }}>TIGER OS</span>
           <button onClick={() => setShowVer(v => !v)} className="ml-auto flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full tabular-nums transition-colors cursor-pointer" style={{ background: 'var(--color-brand-peach)', color: '#333' }} title="Tap for what's new">
             {VERSION}
@@ -3194,7 +3204,7 @@ export default function Home() {
                       ) : (
                         <button onClick={() => { setEditingQtyId(item.id); setEditingQtyVal(String(qty)); }} className={`shrink-0 text-sm font-semibold tabular-nums px-2 py-1 rounded-lg transition-colors ${item.checked ? 'text-gray-300' : 'text-gray-400 hover:text-gray-600'}`} title="Change quantity" style={{ background: 'rgba(0,0,0,0.04)' }}>×{qty}</button>
                       )}
-                      <button onClick={e => { e.stopPropagation(); deleteShopping(item.id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" aria-label="Delete" title="Delete">✕</button>
+                      <button onClick={e => { e.stopPropagation(); deleteShopping(item.id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" aria-label="Delete" title="Delete"><X size={14} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>
                     </div>
                     </SwipeToDelete>
                   );
@@ -3208,7 +3218,7 @@ export default function Home() {
                     onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); }}
                     aria-label="Quantity" title="Quantity" className="w-12 text-sm text-center px-1 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
                   <button onClick={() => addShopping(newShoppingText, newShoppingQty)} disabled={!newShoppingText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>ADD</button>
-                  <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">✕</button>
+                  <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0"><X size={18} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>
                 </div>
               ) : (
                 <textarea
