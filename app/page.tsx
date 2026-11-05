@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -1735,10 +1735,13 @@ function ProductColumn({ items, height = 272, fill, reviews, sales, feePct, head
     <div className="flex-1 basis-0 min-w-0 rounded-2xl flex items-center gap-2 px-3"
       style={{ ...glassTileStyle, height: `${COSTING_TILE_H}px`, ...(simulate ? { background: 'rgba(217,119,6,0.14)' } : {}) }}>
       <button onClick={() => setSimulate(s => !s)}
-        className="text-sm font-semibold shrink-0 h-full text-left"
+        className="text-sm font-semibold shrink-0 h-full inline-flex items-center gap-2"
         style={{ color: simulate ? '#78350f' : '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}
         title="Preview margins at hypothetical prices — nothing is saved">
-        {simulate ? '✓ SIMULATING' : '⇅ SIMULATE'}
+        {simulate
+          ? <Check size={16} strokeWidth={2.5} aria-hidden style={{ display: 'block', flexShrink: 0 }} />
+          : <SlidersHorizontal size={16} strokeWidth={2.25} aria-hidden style={{ display: 'block', flexShrink: 0 }} />}
+        {simulate ? 'SIMULATING' : 'SIMULATE'}
       </button>
       {simulate && curAvg !== null && simAvg !== null && (
         <span className="text-xs text-gray-500 min-w-0 truncate" style={{ fontVariantNumeric: 'tabular-nums', fontFamily: '"stolzl", sans-serif' }} title="Category average margin (current → simulated)">
