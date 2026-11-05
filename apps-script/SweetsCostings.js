@@ -45,7 +45,6 @@ var SWEETS_HEADERS = [
 // [item, supplier, match, pack, inclGst, portions, freight%, sell, squareItem, squareVariation, lastInvoice]
 var SWEETS_SEED = [
   ['COOKIE (MARSHY)',          'Candied Bakery', 'Choc Marshmallow',        2.75,  'Y', 1,  0, 5.50,  'Cookie',  'Marsh',  '2026-11-05'],
-  ['COOKIE (PRETZEL OAT)',     '',               '',                        '',    '',  1,  0, 5.00,  '',        '',       ''],   // not in Square any more — supplier unknown
   ['BROWNIE',                  'Candied Bakery', 'Brownie SLAB',            55.00, 'Y', 20, 0, 6.50,  'Brownie', '',       '2026-11-05'],
   ['CAKE (CARROT)',            'Candied Bakery', 'Carrot Cakes?(?!\\s*logs)(?:\\s*slices)?', 4.20, 'Y', 1, 0, 8.50, 'Cake', 'Carrot Cake', '2026-11-05'],
   ['CAKE (MAPLE PECAN SLICE)', 'Candied Bakery', 'Maple Pecan',             3.40,  'Y', 1,  0, 7.00,  'Cake',    'Maple Pecan', '2026-11-05'],
