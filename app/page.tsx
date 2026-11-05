@@ -1622,28 +1622,30 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
         </div>
       </div>
       <div className="flex items-center gap-2">
-        {simulate && p.sellPrice !== null ? (
-          // Fixed 16px row height (same as the static price) so tiles don't grow.
-          <span className="inline-flex items-center shrink-0 rounded-md h-4 pl-1.5"
-            style={{ background: 'rgba(0,0,0,0.06)', color: edited ? 'var(--color-ink)' : 'var(--color-ink-muted)' }}>
-            <span className="text-xs leading-4">$</span>
+        {p.sellPrice !== null && (() => {
+          // Same size/font/box in both modes so nothing shifts when Simulate is
+          // toggled — only a dotted underline appears to show it's editable.
+          const priceCls = 'text-sm leading-5 h-5 p-0 m-0 bg-transparent border-0 shrink-0 focus:outline-none';
+          const priceStyle: React.CSSProperties = {
+            width: '3.75em', fontFamily: '"stolzl", sans-serif', fontVariantNumeric: 'tabular-nums',
+            color: edited ? 'var(--color-ink)' : 'var(--color-ink-muted)',
+          };
+          return simulate ? (
             <input
               type="text" inputMode="decimal" aria-label={`Simulated price for ${p.name}`}
-              value={priceDraft ?? simPrice.toFixed(2)}
-              onFocus={e => { setPriceDraft(simPrice.toFixed(2)); e.currentTarget.select(); }}
+              value={priceDraft ?? `$${simPrice.toFixed(2)}`}
+              onFocus={e => { setPriceDraft(`$${simPrice.toFixed(2)}`); e.currentTarget.select(); }}
               onChange={e => { setPriceDraft(e.target.value); commitPrice(e.target.value); }}
               onBlur={() => setPriceDraft(null)}
               onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-              className="text-xs leading-4 h-4 p-0 pr-1.5 bg-transparent border-0 focus:outline-none font-bold"
-              style={{ width: '40px', fontVariantNumeric: 'tabular-nums', color: 'inherit' }}
+              className={priceCls}
+              style={{ ...priceStyle, textDecoration: 'underline dotted', textUnderlineOffset: '3px' }}
             />
-          </span>
-        ) : (
-          p.sellPrice !== null && (
-            <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>${p.sellPrice.toFixed(2)}</span>
-          )
-        )}
-        <div className="flex-1 relative h-4 flex items-center">
+          ) : (
+            <span className={priceCls} style={priceStyle}>${p.sellPrice.toFixed(2)}</span>
+          );
+        })()}
+        <div className="flex-1 relative h-5 flex items-center">
           <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.07)' }}>
             <div className="h-full rounded-full" style={{ width: `${bar}%`, background: mc, transition: simulate ? 'none' : 'width 0.3s ease' }} />
           </div>
@@ -1651,7 +1653,7 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
             <input type="range" min={0} max={95} step={0.5} value={Math.min(95, Math.max(0, shown))}
               onChange={e => fromMargin(parseFloat(e.target.value))}
               aria-label={`Drag to set margin for ${p.name}`}
-              className="margin-slider absolute inset-0 w-full h-4 m-0 cursor-pointer" />
+              className="margin-slider absolute inset-0 w-full h-5 m-0 cursor-pointer" />
           )}
         </div>
         {weeklyDelta !== null ? (
@@ -1680,9 +1682,9 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
   );
 }
 
-// Height of a costing product tile (py-2.5 + margin stack + bar row). The
+// Height of a costing product tile (py-2.5 + margin stack + 20px price/bar row). The
 // summary tile, search and Simulate share it so the widget reads as one grid.
-const COSTING_TILE_H = 84;
+const COSTING_TILE_H = 88;
 
 // Product search for the Coffee / Food costings widgets — a tile-height glass
 // tile that sits on one row with the Simulate tile. Uppercase to match tiles.
