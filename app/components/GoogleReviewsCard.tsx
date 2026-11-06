@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import type { GoogleReviewsPayload, MenuSyncPayload, PendingReview } from '@/app/lib/gbp';
+import type { GoogleReviewsPayload, MenuSyncPayload, PendingReview, PoolSuggestion } from '@/app/lib/gbp';
 
 // Google card: new reviews with Claude-drafted replies (Post / Redraft / Skip),
 // a photo uploader for the Business Profile, and the Square→Google menu price
@@ -55,6 +55,57 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoCat, setPhotoCat] = useState('FOOD_AND_DRINK');
   const [photoDesc, setPhotoDesc] = useState('');
+
+  // Paul's gallery picker — 5 random photos not yet on Google.
+  const [pool, setPool] = useState<PoolSuggestion | null>(null);
+  const [poolBusy, setPoolBusy] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [poolCat, setPoolCat] = useState('FOOD_AND_DRINK');
+
+  const loadPool = useCallback(async (exclude: string[] = []) => {
+    setPoolBusy('load');
+    try {
+      const r = await fetch('/api/google-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'poolSuggest', exclude }) });
+      const d = await r.json();
+      if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
+      setPool(d as PoolSuggestion);
+      setPicked(new Set());
+    } catch (e) {
+      setPool({ ok: false, photos: [], remaining: 0, poolSize: 0, lastUploadAt: null, error: e instanceof Error ? e.message : 'error' });
+    } finally {
+      setPoolBusy(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!active || pool || poolBusy) return;
+    const t = setTimeout(() => { loadPool(); }, 0);
+    return () => clearTimeout(t);
+  }, [active, pool, poolBusy, loadPool]);
+
+  async function postPicked() {
+    const ids = [...picked];
+    if (!ids.length) return;
+    setPoolBusy('post'); setMsg(null);
+    try {
+      const categories = Object.fromEntries(ids.map(id => [id, poolCat]));
+      const r = await fetch('/api/google-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'poolUpload', ids, categories }) });
+      const d = await r.json();
+      if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
+      setMsg(`${d.posted} photo${d.posted === 1 ? '' : 's'} up on Google ✓`);
+      setPool(null);
+    } catch (e) {
+      setMsg(`Photos didn’t upload: ${e instanceof Error ? e.message : 'error'}`);
+    } finally {
+      setPoolBusy(null);
+    }
+  }
+
+  async function hidePhoto(id: string) {
+    setPool(prev => prev ? { ...prev, photos: prev.photos.filter(p => p.id !== id) } : prev);
+    setPicked(prev => { const n = new Set(prev); n.delete(id); return n; });
+    fetch('/api/google-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'poolHide', ids: [id] }) }).catch(() => {});
+  }
 
   const load = useCallback(() => {
     fetch('/api/google-reviews').then(r => r.json()).then((d: Data) => {
@@ -177,6 +228,60 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
             </div>
           );
         })}
+      </div>
+
+      {/* Paul's gallery → Google */}
+      <div style={box} className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div style={label}>Photos from Paul’s gallery</div>
+          <button style={ghost} disabled={!!poolBusy} onClick={() => loadPool(pool?.photos.map(p => p.id) ?? [])}>{poolBusy === 'load' ? 'Loading…' : 'Shuffle'}</button>
+        </div>
+        {pool && pool.ok !== false && (
+          <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>
+            {pool.lastUploadAt ? `Last photo on Google ${ago(pool.lastUploadAt)}` : 'No photos on Google yet'} · {pool.remaining} not yet posted
+          </div>
+        )}
+        {pool?.error && <div className="text-sm" style={{ color: 'var(--color-danger-deep)' }}>Couldn’t load photos: {pool.error}</div>}
+        {!pool && poolBusy === 'load' && <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>Picking 5 photos…</div>}
+        {pool && pool.ok !== false && pool.photos.length === 0 && <div className="text-sm">Every photo in the pool is already on Google. New ones arrive when Paul adds a set.</div>}
+        {pool && pool.photos.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {pool.photos.map(ph => {
+              const on = picked.has(ph.id);
+              return (
+                <div key={ph.id} className="relative">
+                  <button
+                    onClick={() => setPicked(prev => { const n = new Set(prev); if (n.has(ph.id)) n.delete(ph.id); else n.add(ph.id); return n; })}
+                    className="block w-full aspect-square rounded-xl overflow-hidden"
+                    style={{ outline: on ? '3px solid var(--color-brand-peach)' : '1px solid rgba(0,0,0,0.08)', outlineOffset: on ? '-3px' : '-1px', background: 'rgba(0,0,0,0.04)' }}
+                    aria-pressed={on}
+                    aria-label={`${on ? 'Unselect' : 'Select'} ${ph.name}`}
+                  >
+                    {ph.thumb
+                      // eslint-disable-next-line @next/next/no-img-element -- data-URI thumbnail from Apps Script
+                      ? <img src={ph.thumb} alt={ph.name} className="w-full h-full object-cover" />
+                      : <span className="text-[10px] p-1 block">{ph.name}</span>}
+                  </button>
+                  {on && <span className="absolute top-1 left-1 text-[11px] font-bold rounded-full px-1.5" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>✓</span>}
+                  <button onClick={() => hidePhoto(ph.id)} className="absolute top-1 right-1 text-[11px] font-bold rounded-full w-5 h-5 leading-5 text-center" style={{ background: 'rgba(255,255,255,0.85)', color: 'var(--color-ink-label)' }} aria-label={`Never show ${ph.name}`}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {pool && pool.photos.length > 0 && (
+          <>
+            <div className="flex gap-2 flex-wrap">
+              {PHOTO_CATEGORIES.map(([k, v]) => (
+                <button key={k} onClick={() => setPoolCat(k)} className="text-xs font-semibold px-3 py-1.5 rounded-full" style={poolCat === k ? { background: 'var(--color-brand-peach)', color: '#333' } : { background: 'rgba(0,0,0,0.05)', color: 'var(--color-ink-label)' }}>{v}</button>
+              ))}
+            </div>
+            <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>Tap photos to pick them · × hides one for good</div>
+            <button style={btn} disabled={!picked.size || !!poolBusy} onClick={postPicked} className="self-start">
+              {poolBusy === 'post' ? 'Posting…' : picked.size ? `Post ${picked.size} to Google` : 'Pick photos to post'}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Photo upload */}

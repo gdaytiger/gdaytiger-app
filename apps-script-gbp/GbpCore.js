@@ -179,6 +179,9 @@ function doPost(e) {
       case 'sync':     syncGoogleReviews(); result = { ok: true }; break;
       case 'photo':    result = gbpUploadPhoto_(p); break;
       case 'menuSync': result = syncGoogleMenuPrices(p.apply === true); break;
+      case 'poolSuggest': result = gbpPoolSuggest_(p); break;
+      case 'poolUpload':  result = gbpPoolUpload_(p); break;
+      case 'poolHide':    result = gbpPoolHide_(p); break;
       default:         result = { ok: false, error: 'unknown action ' + p.action };
     }
     return gbpJson_(result);
@@ -193,11 +196,13 @@ function gbpJson_(obj) {
 
 // Triggers: reviews every 30 min, menu prices hourly. Safe to re-run.
 function installGbpTriggers() {
-  var want = { syncGoogleReviews: 30, syncGoogleMenuPricesTrigger: 60 };
+  var want = { syncGoogleReviews: 30, syncGoogleMenuPricesTrigger: 60, gbpUnpackPool: 60, gbpPhotoNudge: 1440 };
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (want[t.getHandlerFunction()]) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('syncGoogleReviews').timeBased().everyMinutes(30).create();
   ScriptApp.newTrigger('syncGoogleMenuPricesTrigger').timeBased().everyHours(1).create();
-  Logger.log('Installed: reviews every 30 min, menu prices hourly.');
+  ScriptApp.newTrigger('gbpUnpackPool').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('gbpPhotoNudge').timeBased().everyDays(1).atHour(6).create();
+  Logger.log('Installed: reviews every 30 min, menu prices + photo pool unpack hourly, photo nudge daily ~6am.');
 }

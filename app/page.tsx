@@ -141,6 +141,8 @@ const SUPPLIER_LINKS: Record<string, string> = {
   "scicluna's": 'https://app.fresho.com/marketplace/products?company_id=82cf0122-77fc-43e9-aca1-68e2e87638e8&mode=buy&supplier_id=329089f3-dc98-4fb8-98c6-b21004264717',
   'mörk': 'https://app.ordermentum.com/retailer/be811b6f-26ab-4115-9cd7-91d26dec6e44/supplier/80cb587e-5134-486b-b18a-d94d4957ffc0',
   'mork': 'https://app.ordermentum.com/retailer/be811b6f-26ab-4115-9cd7-91d26dec6e44/supplier/80cb587e-5134-486b-b18a-d94d4957ffc0',
+  // Weekly nudge from the GBP Apps Script — opens the Google tile in TigerOS itself.
+  'add photos to google': '/?open=google',
 };
 
 const applyServerChecked = (todos: Todo[], date: string, state: Record<string, string[]>): Todo[] => {
@@ -757,7 +759,8 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
             ) : (() => {
               const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
               if (supplierUrl && !checked) {
-                return <a href={supplierUrl} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text.toUpperCase()}</a>;
+                const internal = supplierUrl.startsWith('/');
+                return <a href={supplierUrl} {...(internal ? {} : { target: '_blank', rel: 'noopener noreferrer' })} className="font-semibold underline underline-offset-2" style={{ color: '#c8926a' }} onClick={e => e.stopPropagation()}>{text.toUpperCase()}</a>;
               }
               return <span onClick={onRename ? handleTextTap : undefined} className={`transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'} ${onRename ? 'cursor-text' : ''}`}>{text.toUpperCase()}</span>;
             })()}
@@ -2396,7 +2399,7 @@ export default function Home() {
   // Tapping the 5am push opens /?open=morning — jump straight to the Morning card.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get('open');
-    if (p === 'morning') { window.history.replaceState(null, '', '/'); setTimeout(() => setOpenWidgets(new Set(['morning'])), 0); }
+    if (p === 'morning' || p === 'google') { window.history.replaceState(null, '', '/'); setTimeout(() => setOpenWidgets(new Set([p])), 0); }
   }, []);
   // Used by the Daily To Do shopping link row — opens the Shopping sheet.
   const openShoppingWidget = () => {

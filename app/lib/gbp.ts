@@ -41,6 +41,17 @@ export type MenuSyncPayload = {
   error: string | null;
 };
 
+export type PoolPhoto = { id: string; name: string; set: string; thumb: string | null };
+
+export type PoolSuggestion = {
+  ok: boolean;
+  photos: PoolPhoto[];
+  remaining: number;
+  poolSize: number;
+  lastUploadAt: string | null;
+  error?: string;
+};
+
 export async function callGbp(body: Record<string, unknown>): Promise<{ status: number; data: Record<string, unknown> }> {
   const url = process.env.GBP_WEBAPP_URL;
   const secret = process.env.GBP_SECRET;
