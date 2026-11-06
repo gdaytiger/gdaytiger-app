@@ -22,6 +22,10 @@ export type GoogleReviewsPayload = {
   updated: string | null;
   average: number | null;
   total: number | null;
+  exact?: number | null;
+  counts?: Record<string, number> | null;
+  nextShown?: number | null;
+  toNext?: number | null;
   pending: PendingReview[];
   replied: { name: string; reviewer: string; stars: number | null; reply: string; at: string }[];
   error: string | null;

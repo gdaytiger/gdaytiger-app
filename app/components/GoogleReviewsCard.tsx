@@ -113,7 +113,10 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
       <div style={box} className="flex items-center justify-between gap-3">
         <div>
           <div style={label}>Google rating</div>
-          <div className="text-lg font-bold tabular-nums">{reviews?.average != null ? `${reviews.average.toFixed(2)} ★` : '—'} <span className="text-sm font-semibold" style={{ color: 'var(--color-ink-muted)' }}>{reviews?.total != null ? `${reviews.total} reviews` : ''}</span></div>
+          <div className="text-lg font-bold tabular-nums">{reviews?.exact != null ? `${reviews.exact.toFixed(4)} ★` : reviews?.average != null ? `${reviews.average.toFixed(2)} ★` : '—'} <span className="text-sm font-semibold" style={{ color: 'var(--color-ink-muted)' }}>{reviews?.total != null ? `${reviews.total} reviews` : ''}</span></div>
+          {reviews?.toNext != null && reviews.nextShown != null && (
+            <div className="text-xs font-semibold">{reviews.toNext} × 5★ to show {reviews.nextShown.toFixed(1)}</div>
+          )}
           <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>{reviews?.updated ? `Checked ${ago(reviews.updated)}` : 'Not checked yet'}</div>
         </div>
         <button style={ghost} disabled={busy === 'sync'} onClick={() => act({ action: 'sync' }, 'sync', 'Checked for new reviews ✓')}>{busy === 'sync' ? 'Checking…' : 'Check now'}</button>

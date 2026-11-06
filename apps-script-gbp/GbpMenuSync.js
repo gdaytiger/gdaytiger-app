@@ -15,7 +15,16 @@
 // Google menu name → Square item name (optionally "Square item|Variation").
 // Fill in when a Google item shows under "Not matched" in TIGER OS.
 var GBP_MENU_ALIASES = {
-  // 'chicken schnitta': 'Chicken Schnitta Sanga',
+  'small black coffee': 'TA Black',
+  'large black coffee': 'LG Black',
+  'small white coffee': 'TA White',
+  'large white coffee': 'LG White',
+  'small batch brew': 'TA Batch Brew',
+  'large batch brew': 'LG Batch Brew',
+  'chicken schnitta': 'Schnitta',
+  'salami autogrill panino': 'Autogrill|Salami',
+  'house made banana bread': 'Banana Bread',
+  'passionfruit matcha milkshake': 'Milkshake|Passionfruit Matcha',
 };
 
 function syncGoogleMenuPricesTrigger() {
