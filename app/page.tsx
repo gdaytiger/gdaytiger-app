@@ -1595,8 +1595,8 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
   ) : null;
 
   return (
-    <div className="rounded-2xl px-3 py-2.5 mb-2 shrink-0" style={{ ...glassTileStyle, minHeight: `${COSTING_TILE_H}px` }}>
-      <div className="flex items-start justify-between gap-2 mb-1.5">
+    <div className="rounded-2xl px-3 py-2 mb-2 shrink-0" style={{ ...glassTileStyle, minHeight: `${COSTING_TILE_H}px` }}>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
         <p className="text-sm font-normal text-gray-800 leading-snug flex-1 min-w-0 truncate"
           style={{ fontFamily: '"stolzl", sans-serif', textTransform: 'uppercase' }}>
           {p.name.toUpperCase()}
@@ -1609,17 +1609,18 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
             </span>
           )}
           {netMargin !== null ? (
-            <div className="flex flex-col items-end gap-px">
+            // Single row (gross · NET net) so the tile matches the 62px Daily To Do tiles.
+            <div className="flex items-center gap-1.5">
               <span className="flex items-center gap-1 text-xs text-gray-400 leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}
                 title="Gross margin (before card fees)">
                 {prevGpTag}
                 {shown.toFixed(1)}%
               </span>
-              <span className="text-base font-black leading-tight" style={{ color: netColor, fontVariantNumeric: 'tabular-nums' }}
+              <span style={{ fontSize: '8px', color: 'var(--color-ink-muted)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1 }}>net</span>
+              <span className="text-base font-black leading-none" style={{ color: netColor, fontVariantNumeric: 'tabular-nums' }}
                 title="Net margin after Square card processing fees">
                 {netMargin.toFixed(1)}%
               </span>
-              <span style={{ fontSize: '8px', color: 'var(--color-ink-muted)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1 }}>net</span>
             </div>
           ) : (
             <div className="flex items-center gap-1">
@@ -1692,9 +1693,10 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
   );
 }
 
-// Height of a costing product tile (py-2.5 + margin stack + 20px price/bar row). The
-// summary tile, search and Simulate share it so the widget reads as one grid.
-const COSTING_TILE_H = 88;
+// Height of a costing product tile (py-2 + 20px name/margin row + 20px price/bar row).
+// Matches the 62px Daily To Do tiles. The summary tile, search, Simulate and the
+// category tabs share it so the widget reads as one grid.
+const COSTING_TILE_H = 62;
 
 // Product search for the Coffee / Food costings widgets — a tile-height glass
 // tile that sits on one row with the Simulate tile. Uppercase to match tiles.
