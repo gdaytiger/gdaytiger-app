@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { roleForToken } from '@/app/lib/auth';
 
-const SESSION_TOKEN = process.env.SESSION_TOKEN;
+// Partner (Isola Di Capri) login — the ONLY paths it can reach. Everything else
+// redirects to /document (pages) or 401s (APIs).
+const PARTNER_PATHS = ['/document', '/api/the-document', '/api/logout'];
+const partnerAllowed = (p: string) => PARTNER_PATHS.some(base => p === base || p.startsWith(base + '/'));
 
 // Next 16 renamed the "middleware" file convention to "proxy". Same behaviour —
 // this gates every route on the gdt_session cookie. The per-route requireSession()
@@ -20,14 +24,21 @@ export function proxy(request: NextRequest) {
   }
 
   // Check session cookie
-  const session = request.cookies.get('gdt_session')?.value;
+  const role = roleForToken(request.cookies.get('gdt_session')?.value);
 
-  if (!session || session !== SESSION_TOKEN) {
+  if (!role) {
     // For API routes return 401 JSON — don't redirect (fetch calls can't follow HTML redirects)
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  if (role === 'partner' && !partnerAllowed(pathname)) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    return NextResponse.redirect(new URL('/document', request.url));
   }
 
   return NextResponse.next();

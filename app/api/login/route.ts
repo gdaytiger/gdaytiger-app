@@ -3,16 +3,39 @@ import { NextRequest, NextResponse } from 'next/server';
 const APP_PASSWORD = process.env.APP_PASSWORD;
 const SESSION_TOKEN = process.env.SESSION_TOKEN;
 
-export async function POST(req: NextRequest) {
-  const { password } = await req.json();
+// Second login — Isola Di Capri, THE DOCUMENT only. All three must be set in
+// Vercel for it to work; if any is missing the partner login is simply off.
+const PARTNER_USERNAME = process.env.PARTNER_USERNAME;
+const PARTNER_PASSWORD = process.env.PARTNER_PASSWORD;
+const PARTNER_SESSION_TOKEN = process.env.PARTNER_SESSION_TOKEN;
 
-  if (!password || password !== APP_PASSWORD) {
-    return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
+export async function POST(req: NextRequest) {
+  const { username, password } = await req.json();
+  const user = typeof username === 'string' ? username.trim().toLowerCase() : '';
+
+  let token: string | undefined;
+  let redirect = '/';
+
+  // Owner: password alone (username ignored) — same as before, so saved
+  // iOS/Keychain logins keep working.
+  if (password && APP_PASSWORD && password === APP_PASSWORD) {
+    token = SESSION_TOKEN;
+  } else if (
+    PARTNER_USERNAME && PARTNER_PASSWORD && PARTNER_SESSION_TOKEN &&
+    user === PARTNER_USERNAME.trim().toLowerCase() &&
+    password === PARTNER_PASSWORD
+  ) {
+    token = PARTNER_SESSION_TOKEN;
+    redirect = '/document';
   }
 
-  const res = NextResponse.json({ success: true });
+  if (!token) {
+    return NextResponse.json({ error: 'Incorrect username or password' }, { status: 401 });
+  }
 
-  res.cookies.set('gdt_session', SESSION_TOKEN!, {
+  const res = NextResponse.json({ success: true, redirect });
+
+  res.cookies.set('gdt_session', token, {
     httpOnly: true,
     // Secure only in production (HTTPS on Vercel). Local dev is served over plain
     // HTTP on the LAN (e.g. http://192.168.x.x), where a secure cookie is dropped
