@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, FolderOpen, ImagePlus, Plus, RotateCcw, Shuffle, Trash2 } from 'lucide-react';
+import { Dices, Download, FolderOpen, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // Story Maker — TigerOS replacement for Adobe Express on the morning Instagram story.
@@ -335,7 +335,6 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   const pickedRef = useRef<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
 
   const tpl = TEMPLATES.find(t => t.id === tplId) ?? TEMPLATES[0];
@@ -482,11 +481,11 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
     return () => cancelAnimationFrame(raf);
   }, [bg, pan, shade, anchor, blocksKey, fontsV, clampPan]);
 
-  // ── Photo library ──
-  const loadLib = useCallback(async (set: string, page: number) => {
+  // ── Photo library — 5 random photos at a time, like the Google tab ──
+  const loadLib = useCallback(async (set: string) => {
     setLibBusy(true);
     try {
-      const r = await fetch('/api/story-photos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'browse', set, page }) });
+      const r = await fetch('/api/story-photos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'browse', set, random: true }) });
       const d: LibData = await r.json();
       if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
       setLib(d);
@@ -500,7 +499,7 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   // Load the library the first time the tile is opened (not on every TigerOS load).
   useEffect(() => {
     if (!active || lib || libBusy) return;
-    const t = setTimeout(() => { loadLib('', 0); }, 0);
+    const t = setTimeout(() => { loadLib(''); }, 0);
     return () => clearTimeout(t);
   }, [active, lib, libBusy, loadLib]);
 
@@ -512,7 +511,7 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
     if (p.thumb) {
       try { const img = await loadImage(p.thumb); if (pickedRef.current === p.id) setPhoto({ img, id: p.id, name: p.name, hiRes: false }); } catch { /* ignore */ }
     }
-    if (lib?.fallback) { setMsg('Using a preview-size photo — paste GbpStoryPhotos.js into the GBP script for full resolution.'); return; }
+    if (lib?.fallback) return; // GBP script without GbpStoryPhotos.js — preview size only
     setBusy('photo');
     try {
       const r = await fetch('/api/story-photos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'image', id: p.id }) });
@@ -527,30 +526,11 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
     }
   }
 
-  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    e.target.value = '';
-    if (!f) return;
-    pickedRef.current = `upload:${f.name}`;
-    try {
-      const img = await loadImage(URL.createObjectURL(f));
-      setPhoto({ img, id: null, name: f.name, hiRes: true });
-      setPan({ x: 0, y: 0 });
-      setZoom(1);
-      setMsg(null);
-    } catch {
-      setMsg('That file didn’t open as a photo.');
-    }
-  }
-
   function randomPhoto() {
     if (!lib?.photos?.length) return;
     pickPhoto(lib.photos[Math.floor(Math.random() * lib.photos.length)]);
   }
-  function shufflePage() {
-    const pages = lib?.pages ?? 1;
-    loadLib(libSet, Math.floor(Math.random() * pages));
-  }
+  const shuffle = () => loadLib(libSet);
 
   // ── Drag to reposition ──
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -729,33 +709,22 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
       {/* Photo library */}
       <div style={box} className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div style={label}>Photos from G’Day Tigers album {lib?.total != null && !lib.fallback ? `(${lib.total})` : ''}</div>
+          <div style={label}>Photos from G’Day Tigers album</div>
           <div className="flex gap-2">
-            <button style={ghost} onClick={randomPhoto} disabled={!lib?.photos?.length} title="Pick a random photo from this page"><Shuffle size={13} strokeWidth={2.25} aria-hidden />Random</button>
-            <button style={ghost} onClick={() => fileRef.current?.click()}><ImagePlus size={13} strokeWidth={2.25} aria-hidden />Upload</button>
-            <input ref={fileRef} type="file" accept="image/*" onChange={onUpload} className="hidden" />
+            <button style={ghost} onClick={randomPhoto} disabled={!lib?.photos?.length} title="Use one of these 5 at random"><Dices size={13} strokeWidth={2.25} aria-hidden />Random</button>
+            <button style={ghost} onClick={shuffle} disabled={libBusy} title="Show 5 different photos"><RefreshCw size={13} strokeWidth={2.25} aria-hidden />{libBusy ? 'Loading…' : 'Shuffle'}</button>
           </div>
         </div>
 
-        {lib?.sets && lib.sets.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 py-1">
-            <button onClick={() => { setLibSet(''); loadLib('', 0); }} style={chip(libSet === '')}>All</button>
-            {lib.sets.map(s => (
-              <button key={s.name} onClick={() => { setLibSet(s.name); loadLib(s.name, 0); }} style={chip(libSet === s.name)}>{s.name} · {s.count}</button>
-            ))}
-          </div>
-        )}
-
-        {lib?.fallback && <div className="text-[11px]" style={{ color: 'var(--color-warning)' }}>Showing 12 random photos at preview size — the full library switches on once GbpStoryPhotos.js is in the GBP script.</div>}
         {lib?.ok === false && <div className="text-sm" style={{ color: 'var(--color-danger-deep)' }}>Couldn’t load photos: {lib.error}</div>}
-        {!lib && libBusy && <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>Loading photos…</div>}
+        {!lib && libBusy && <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>Picking 5 photos…</div>}
 
         {lib?.photos && lib.photos.length > 0 && (
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2" style={{ opacity: libBusy ? 0.5 : 1 }}>
+          <div className="grid grid-cols-5 gap-2" style={{ opacity: libBusy ? 0.5 : 1 }}>
             {lib.photos.map(p => {
               const on = photo?.id === p.id;
               return (
-                <button key={p.id} onClick={() => pickPhoto(p)} className="block w-full aspect-[3/4] rounded-2xl overflow-hidden"
+                <button key={p.id} onClick={() => pickPhoto(p)} className="block w-full aspect-square rounded-3xl overflow-hidden"
                   style={{ ...glassTileStyle, padding: 0, ...(on ? { border: '1.5px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow), var(--glass-ring)' } : {}) }}
                   aria-pressed={on} aria-label={`Use ${p.name}`}>
                   {p.thumb
@@ -768,15 +737,14 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
           </div>
         )}
 
-        {lib && !lib.fallback && (lib.pages ?? 1) > 1 && (
-          <div className="flex items-center justify-between gap-2">
-            <button style={ghost} disabled={libBusy || (lib.page ?? 0) === 0} onClick={() => loadLib(libSet, (lib.page ?? 0) - 1)}>‹ Prev</button>
-            <button style={ghost} disabled={libBusy} onClick={shufflePage}><Shuffle size={13} strokeWidth={2.25} aria-hidden />Shuffle</button>
-            <span className="text-[11px] tabular-nums" style={{ color: 'var(--color-ink-muted)' }}>{(lib.page ?? 0) + 1} / {lib.pages}</span>
-            <button style={ghost} disabled={libBusy || (lib.page ?? 0) >= (lib.pages ?? 1) - 1} onClick={() => loadLib(libSet, (lib.page ?? 0) + 1)}>Next ›</button>
+        {lib?.sets && lib.sets.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 py-1">
+            <button onClick={() => { setLibSet(''); loadLib(''); }} style={chip(libSet === '')}>All</button>
+            {lib.sets.map(s => (
+              <button key={s.name} onClick={() => { setLibSet(s.name); loadLib(s.name); }} style={chip(libSet === s.name)}>{s.name}</button>
+            ))}
           </div>
         )}
-        {lib?.fallback && <button style={ghost} className="self-start" disabled={libBusy} onClick={() => loadLib('', 0)}><Shuffle size={13} strokeWidth={2.25} aria-hidden />{libBusy ? 'Loading…' : 'Shuffle'}</button>}
       </div>
     </div>
   );

@@ -5,7 +5,7 @@
 //  gallery), but browsable: every photo, including ones already posted to
 //  Google (stories don't care), minus anything hidden with × in the Google tile.
 //
-//    storyBrowse { set?, page?, pageSize? } → { ok, sets:[{name,count}], photos:[{id,name,set,thumb}], page, pages, total }
+//    storyBrowse { set?, page?, pageSize?, random? } → { ok, sets:[{name,count}], photos:[{id,name,set,thumb}], page, pages, total }
 //    storyImage  { id, size? }              → { ok, id, dataUri }   (~1920px JPEG for the 1080×1920 canvas)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -22,10 +22,14 @@ function gbpStoryBrowse_(p) {
   var sets = Object.keys(counts).sort().map(function (n) { return { name: n, count: counts[n] }; });
 
   var list = p.set ? all.filter(function (x) { return x.set === p.set; }) : all;
-  list.sort(function (a, b) {
-    if (a.set !== b.set) return a.set < b.set ? -1 : 1;
-    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-  });
+  if (p.random) {                                // Story tab: a fresh random handful each time
+    for (var i = list.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = list[i]; list[i] = list[j]; list[j] = t; }
+  } else {
+    list.sort(function (a, b) {
+      if (a.set !== b.set) return a.set < b.set ? -1 : 1;
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
+  }
 
   var size = Math.min(Math.max(Number(p.pageSize) || 24, 1), 36);
   var pages = Math.max(1, Math.ceil(list.length / size));
