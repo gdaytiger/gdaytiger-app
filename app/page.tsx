@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, GalleryVerticalEnd, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, GalleryVerticalEnd, Megaphone, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -122,10 +122,10 @@ const btnChip = (on: boolean): React.CSSProperties => (on ? { ...glassButtonStyl
 // ── Widget icons (Lucide) ────────────────────────────────────────────────────
 // One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
 // falls back to ~56% of the chip. Colour: neutral grey (--color-ink-label).
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings' | 'story';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings' | 'story' | 'socials';
 
 const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
-  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt, story: GalleryVerticalEnd,
+  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt, story: GalleryVerticalEnd, socials: Megaphone,
 };
 
 function WidgetIcon({ name, chip = 28, glyph }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -2389,7 +2389,9 @@ export default function Home() {
   const togglePinExpanded = (id: string) => setExpandedPins(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   // Which of the four launcher widgets are expanded to full cards. Empty = all
   // collapsed to square tiles (resets every load by design).
-  const [openWidgets, setOpenWidgets] = useState<Set<string>>(new Set());
+  // Socials (Daily Story + Google) opens by default on load.
+  const [openWidgets, setOpenWidgets] = useState<Set<string>>(() => new Set(['socials']));
+  const [socialTab, setSocialTab] = useState<'story' | 'google'>('story');
   const shoppingWidgetRef = useRef<HTMLDivElement>(null);
   // Single-open: tapping a tile opens that widget in the bottom sheet and closes
   // any other. Tapping the same tile (or the sheet's close/▲) closes it. The
@@ -2403,7 +2405,12 @@ export default function Home() {
   // Tapping the 5am push opens /?open=morning — jump straight to the Morning card.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get('open');
-    if (p === 'morning' || p === 'google' || p === 'story') { window.history.replaceState(null, '', '/'); setTimeout(() => setOpenWidgets(new Set([p])), 0); }
+    if (p === 'morning') { window.history.replaceState(null, '', '/'); setTimeout(() => setOpenWidgets(new Set([p])), 0); }
+    // Old Google / Daily Story links land on the matching Socials tab.
+    if (p === 'google' || p === 'story' || p === 'socials') {
+      window.history.replaceState(null, '', '/');
+      setTimeout(() => { setOpenWidgets(new Set(['socials'])); if (p !== 'socials') setSocialTab(p); }, 0);
+    }
   }, []);
   // Used by the Daily To Do shopping link row — opens the Shopping sheet.
   const openShoppingWidget = () => {
@@ -3281,13 +3288,12 @@ export default function Home() {
 
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
         <LauncherGrid>
+          <LauncherTile icon={<WidgetIcon name="socials" chip={48} glyph={26} />} title="Socials" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('socials')} onClick={() => toggleWidget('socials')} />
           <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
           <LauncherTile icon={<WidgetIcon name="costings" chip={48} glyph={26} />} title="Costings" badgeText={(coffeeCount + foodCount + sweetsCount) || undefined} alert={coffeeAlert || foodAlert || sweetsAlert} active={openWidgets.has('costings')} onClick={() => toggleWidget('costings')} />
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Tiger OS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
-          <LauncherTile icon={<WidgetIcon name="google" chip={48} glyph={26} />} title="Google" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('google')} onClick={() => toggleWidget('google')} />
-          <LauncherTile icon={<WidgetIcon name="story" chip={48} glyph={26} />} title="Daily Story" active={openWidgets.has('story')} onClick={() => toggleWidget('story')} />
         </LauncherGrid>
 
         </div>{/* end stable grid */}
@@ -3380,17 +3386,35 @@ export default function Home() {
           </Card>
         </div>
 
-        {/* GOOGLE — new reviews + drafted replies, photo upload, menu price check */}
-        <div style={{ display: openWidgets.has('google') ? 'block' : 'none' }}>
-          <Card bare icon={<WidgetIcon name="google" chip={28} glyph={17} />} title="Google" onCollapse={() => toggleWidget('google')}>
-            <GoogleReviewsCard active={openWidgets.has('google')} onCount={setGooglePending} />
-          </Card>
-        </div>
-
-        {/* DAILY STORY — Instagram story maker (replaces Adobe Express): templates, brand fonts, Paul's photos */}
-        <div style={{ display: openWidgets.has('story') ? 'block' : 'none' }}>
-          <Card bare icon={<WidgetIcon name="story" chip={28} glyph={17} />} title="Daily Story" onCollapse={() => toggleWidget('story')}>
-            <StoryMakerCard active={openWidgets.has('story')} />
+        {/* SOCIALS — Daily Story (Instagram story maker) + Google (reviews, photos, menu check),
+            switched by a tile-height selector like Costings. Both stay mounted so the
+            Google badge keeps counting and story edits survive a tab switch. */}
+        <div style={{ display: openWidgets.has('socials') ? 'block' : 'none' }}>
+          <Card bare icon={<WidgetIcon name="socials" chip={28} glyph={17} />} title="Socials" onCollapse={() => toggleWidget('socials')}>
+            <div className="flex items-stretch gap-2 mb-4" role="tablist" aria-label="Socials">
+              {([
+                { key: 'story', label: 'DAILY STORY', count: undefined },
+                { key: 'google', label: 'GOOGLE', count: googlePending || undefined },
+              ] as const).map(({ key, label, count }) => {
+                const selected = socialTab === key;
+                return (
+                  <button key={key} role="tab" aria-selected={selected} onClick={() => setSocialTab(key)}
+                    className="flex-1 basis-0 min-w-0 rounded-2xl flex items-center justify-center gap-2 px-2 text-sm font-semibold"
+                    style={{ ...glassTileStyle, height: `${COSTING_TILE_H}px`, color: 'var(--color-ink-label)', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em',
+                      ...(selected ? { background: 'rgba(251,205,173,0.12)', border: '1px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow)' } : {}) }}>
+                    <WidgetIcon name={key} chip={28} glyph={17} />
+                    <span className="truncate">{label}</span>
+                    {count !== undefined && <span className="text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: socialTab === 'story' ? 'block' : 'none' }}>
+              <StoryMakerCard active={openWidgets.has('socials') && socialTab === 'story'} />
+            </div>
+            <div style={{ display: socialTab === 'google' ? 'block' : 'none' }}>
+              <GoogleReviewsCard active={openWidgets.has('socials') && socialTab === 'google'} onCount={setGooglePending} />
+            </div>
           </Card>
         </div>
 
