@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, GalleryVerticalEnd, Megaphone, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, GalleryVerticalEnd, Megaphone, ScrollText, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -14,6 +14,9 @@ import AddIngredientModal from './components/AddIngredientModal';
 import MorningCard from './components/MorningCard';
 import GoogleReviewsCard from './components/GoogleReviewsCard';
 import StoryMakerCard from './components/StoryMakerCard';
+import TheDocumentCard from './components/TheDocumentCard';
+import Greeting from './components/Greeting';
+import WeatherLine from './components/WeatherLine';
 import WeeklyFlashCard, { type WeeklyFlashData, type FlashExtrasData } from './components/WeeklyFlashCard';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
 import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from './lib/theme';
@@ -122,10 +125,10 @@ const btnChip = (on: boolean): React.CSSProperties => (on ? { ...glassButtonStyl
 // ── Widget icons (Lucide) ────────────────────────────────────────────────────
 // One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
 // falls back to ~56% of the chip. Colour: neutral grey (--color-ink-label).
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings' | 'story' | 'socials';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings' | 'story' | 'socials' | 'document';
 
 const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
-  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt, story: GalleryVerticalEnd, socials: Megaphone,
+  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt, story: GalleryVerticalEnd, socials: Megaphone, document: ScrollText,
 };
 
 function WidgetIcon({ name, chip = 28, glyph }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -1485,31 +1488,6 @@ function ChangeCard({ c }: { c: MarginChange }) {
 
 // Per-supplier emoji. Matched case-insensitively by substring so name variants
 // (e.g. "Redi Milk" / "RediMilk") resolve. Falls back to a box.
-// Weather line — the API string is "<emoji> 15° — Light drizzle" (the emoji is
-// kept for the morning push). Here we drop the emoji and pick a Lucide icon
-// from the description so it matches the rest of the dashboard.
-function weatherIcon(desc: string): LucideIcon {
-  const d = desc.toLowerCase();
-  if (d.includes('thunder')) return CloudLightning;
-  if (d.includes('drizzle')) return CloudDrizzle;
-  if (d.includes('shower')) return CloudSunRain;
-  if (d.includes('rain')) return CloudRain;
-  if (d.includes('fog')) return CloudFog;
-  if (d.includes('overcast')) return Cloud;
-  if (d.includes('partly') || d.includes('mainly')) return CloudSun;
-  if (d.includes('clear')) return Sun;
-  return Thermometer;
-}
-function WeatherLine({ text }: { text: string }) {
-  const clean = (text || '').replace(/^[^\p{L}\p{N}]+/u, '').trim();
-  const Icon = weatherIcon(clean);
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <Icon size={14} strokeWidth={2.25} aria-hidden style={{ display: 'block', flexShrink: 0 }} />
-      {clean}
-    </span>
-  );
-}
 
 const SUPPLIER_ICONS: { match: string; icon: LucideIcon | 'logo' }[] = [
   { match: '5ways', icon: Ham },
@@ -2392,6 +2370,8 @@ export default function Home() {
   // Socials (Daily Story + Google) opens by default on load.
   const [openWidgets, setOpenWidgets] = useState<Set<string>>(() => new Set(['socials']));
   const [socialTab, setSocialTab] = useState<'story' | 'google'>('story');
+  // THE DOCUMENT launcher badge — net $ owed either way (Isola tally).
+  const [docBalance, setDocBalance] = useState<number | null>(null);
   const shoppingWidgetRef = useRef<HTMLDivElement>(null);
   // Single-open: tapping a tile opens that widget in the bottom sheet and closes
   // any other. Tapping the same tile (or the sheet's close/▲) closes it. The
@@ -3101,6 +3081,7 @@ export default function Home() {
           </h1>
           <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}>{data.dateStr}</p>
           <p className="text-xs text-gray-400 mt-0.5 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }}><WeatherLine text={data.weather} /></p>
+          <Greeting className="text-xs text-gray-500 mt-1 uppercase tracking-widest" style={{ fontFamily: '"stolzl", sans-serif' }} />
         </div>
         <img src="/logo.png" alt="G'Day Tiger" style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0px 4px 12px rgba(0,0,0,0.3))' }} />
       </div>
@@ -3294,6 +3275,7 @@ export default function Home() {
           <LauncherTile icon={<WidgetIcon name="socials" chip={48} glyph={26} />} title="Socials" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('socials')} onClick={() => toggleWidget('socials')} />
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="TigerOS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
+          <LauncherTile icon={<WidgetIcon name="document" chip={48} glyph={26} />} title="The Document" badgeText={docBalance != null && Math.abs(docBalance) >= 1 ? `${docBalance > 0 ? '+' : '−'}$${Math.round(Math.abs(docBalance))}` : undefined} active={openWidgets.has('document')} onClick={() => toggleWidget('document')} />
         </LauncherGrid>
 
         </div>{/* end stable grid */}
@@ -3415,6 +3397,14 @@ export default function Home() {
             <div style={{ display: socialTab === 'google' ? 'block' : 'none' }}>
               <GoogleReviewsCard active={openWidgets.has('socials') && socialTab === 'google'} onCount={setGooglePending} />
             </div>
+          </Card>
+        </div>
+
+        {/* THE DOCUMENT — G'Day Tiger × Isola Di Capri stock tally (also the Isola login's only page, /document).
+            Badge: + = Isola owes us, − = we owe Isola. Mounted always so the badge loads on open of the dashboard. */}
+        <div style={{ display: openWidgets.has('document') ? 'block' : 'none' }}>
+          <Card bare icon={<WidgetIcon name="document" chip={28} glyph={17} />} title="The Document" onCollapse={() => toggleWidget('document')}>
+            <TheDocumentCard active={openWidgets.has('document')} onBalance={(b) => setDocBalance(b)} />
           </Card>
         </div>
 

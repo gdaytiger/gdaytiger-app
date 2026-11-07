@@ -2,6 +2,29 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const SESSION_TOKEN = process.env.SESSION_TOKEN;
+// Second login (Isola Di Capri) — only sees THE DOCUMENT. Unset = partner login disabled.
+const PARTNER_SESSION_TOKEN = process.env.PARTNER_SESSION_TOKEN;
+
+export type Role = 'owner' | 'partner';
+
+// Which account a gdt_session cookie belongs to (null = not logged in).
+export function roleForToken(token: string | undefined): Role | null {
+  if (!token) return null;
+  if (SESSION_TOKEN && token === SESSION_TOKEN) return 'owner';
+  if (PARTNER_SESSION_TOKEN && token === PARTNER_SESSION_TOKEN) return 'partner';
+  return null;
+}
+
+// Name shown in the dashboard greeting — from the login usernames, capitalised.
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+export function displayName(role: Role): string {
+  if (role === 'owner') return cap((process.env.OWNER_USERNAME || 'jono').trim());
+  return cap((process.env.PARTNER_USERNAME || 'Isola').trim());
+}
+
+export function getRole(req: NextRequest): Role | null {
+  return roleForToken(req.cookies.get('gdt_session')?.value);
+}
 
 // Defence-in-depth session check for mutating API routes.
 //
@@ -11,14 +34,23 @@ const SESSION_TOKEN = process.env.SESSION_TOKEN;
 // mean it can be skipped. Re-checking the session inside each write route
 // ensures a bypass can't post to Notion, delete tasks, or burn the Anthropic API key.
 //
+// OWNER ONLY — the partner (Isola) session fails this, so every existing route
+// stays locked to Jonathan. THE DOCUMENT route uses requireDocumentAccess instead.
+//
 // Returns a 401 NextResponse when the session is missing/invalid, or null when
 // the request is authorised. Usage at the top of a handler:
 //   const denied = requireSession(req);
 //   if (denied) return denied;
 export function requireSession(req: NextRequest): NextResponse | null {
-  const session = req.cookies.get('gdt_session')?.value;
-  if (!session || session !== SESSION_TOKEN) {
+  if (getRole(req) !== 'owner') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   return null;
+}
+
+// THE DOCUMENT — owner or partner. Returns the role, or a 401 response.
+export function requireDocumentAccess(req: NextRequest): Role | NextResponse {
+  const role = getRole(req);
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  return role;
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { ensureBankingTally } from '@/app/lib/banking';
 import { DAY_PAGES, parseDayTaskBlocks, formatYMD, shiftYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
 import { melbNowDate } from '@/app/lib/melbTime';
+import { getWeather } from '@/app/lib/weather';
 
 // Permanent (never-expiring) key in the checked-state JSON for completed [STICKY]
 // tasks. cleanOldDates() in /api/checked-state only strips keys that sort below
@@ -14,8 +15,6 @@ const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const PROJECTS_DB_ID = 'f7712afe4c7247d7b1690f2e1ecc1a0d';
 const NOTION_PAGE_ID = '3403c99c0e858113a941c2118b3cdef9';
 const SHOPPING_PAGE_ID = '3683c99c0e8581c7b19cc2eec6b27b47';
-const WEATHER_LAT = -38.4552;
-const WEATHER_LNG = 145.2305;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function notionFetch(path: string, method = 'GET', body?: object): Promise<any> {
@@ -40,27 +39,6 @@ async function notionFetch(path: string, method = 'GET', body?: object): Promise
   }
 }
 
-async function getWeather() {
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_LAT}&longitude=${WEATHER_LNG}&daily=temperature_2m_max,weathercode&timezone=Australia/Melbourne&forecast_days=1`;
-    const res = await fetch(url, { cache: 'no-store' });
-    const data = await res.json();
-    const temp = Math.round(data.daily.temperature_2m_max[0]);
-    const code = data.daily.weathercode[0];
-    const weatherMap: Record<number, [string, string]> = {
-      0: ['Clear sky', '☀️'], 1: ['Mainly clear', '🌤️'], 2: ['Partly cloudy', '⛅'],
-      3: ['Overcast', '☁️'], 45: ['Foggy', '🌫️'], 48: ['Icy fog', '🌫️'],
-      51: ['Light drizzle', '🌦️'], 53: ['Drizzle', '🌦️'], 55: ['Heavy drizzle', '🌧️'],
-      61: ['Light rain', '🌧️'], 63: ['Rain', '🌧️'], 65: ['Heavy rain', '🌧️'],
-      80: ['Light showers', '🌦️'], 81: ['Showers', '🌧️'], 82: ['Heavy showers', '⛈️'],
-      95: ['Thunderstorm', '⛈️'], 99: ['Thunderstorm', '⛈️'],
-    };
-    const [desc, emoji] = weatherMap[code] || ['Unknown', '🌡️'];
-    return `${emoji} ${temp}° — ${desc}`;
-  } catch {
-    return '🌡️ Weather unavailable';
-  }
-}
 
 // Both getCheckedState and getPersonalTodos need every block on the OS page —
 // they used to each paginate it separately (2x the Notion calls for the same
