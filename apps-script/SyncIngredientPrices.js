@@ -83,12 +83,14 @@ function sipCollectPrices_() {
   // The row-name loop above doesn't cover these, so they never reached the
   // dashboard even though the scanner keeps the cells current:
   //   B10 Matsu Matcha (parseMatsuText) · F6 B-Honey Squeeze (5Ways BHS750, used in matcha)
+//   F7 Milk Gelato (Isola Di Capri) — also prices gelato in THE DOCUMENT
   // Keys match CELL_TO_INGREDIENT_KEY so drift badges join correctly.
   const COFFEE_MASTER_CELLS = [
     { key: 'fbomb',         name: 'F.Bomb Filter Blend (1kg)', col: 2, row: 8,  unit: '1kg',  supplier: 'Seven Seeds' },
     { key: 'decaf_beans',   name: 'Decaf Beans (1kg)',         col: 2, row: 9,  unit: '1kg',  supplier: 'Seven Seeds' },
     { key: 'matcha',        name: 'Matsu Matcha (500g)',       col: 2, row: 10, unit: '500g', supplier: 'Matsu Tea' },
     { key: 'honey_squeeze', name: 'B-Honey Squeeze (750g)',    col: 6, row: 6,  unit: '750g', supplier: '5Ways' },
+    { key: 'milk_gelato',   name: 'Milk Gelato (6L)',          col: 6, row: 7,  unit: '6L',   supplier: 'Isola Di Capri' },
   ];
   COFFEE_MASTER_CELLS.forEach(function (c) {
     const price = cc(c.col, c.row);
