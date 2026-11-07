@@ -118,7 +118,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
       const r = await fetch('/api/google-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'poolUpload', ids, categories }) });
       const d = await r.json();
       if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
-      setMsg(`${d.posted} photo${d.posted === 1 ? '' : 's'} up on Google ✓`);
+      setMsg(`${d.posted} photo${d.posted === 1 ? '' : 's'} sent to Google ✓ Usually visible within 48 hours`);
       setPool(null);
     } catch (e) {
       setMsg(`Photos didn’t upload: ${e instanceof Error ? e.message : 'error'}`);
@@ -170,7 +170,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
       const r = await fetch('/api/google-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: photoCat, mimeType: 'image/jpeg', base64, description: photoDesc || undefined }) });
       const d = await r.json();
       if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
-      setMsg('Photo is up on Google ✓');
+      setMsg('Photo sent to Google ✓ Usually visible within 48 hours');
       setPhoto(null); setPhotoDesc('');
     } catch (e) {
       setMsg(`Photo didn’t upload: ${e instanceof Error ? e.message : 'error'}`);
