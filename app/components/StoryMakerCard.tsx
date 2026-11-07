@@ -701,6 +701,8 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
         setTimeout(() => URL.revokeObjectURL(url), 5000);
         setMsg(`Saved ${name} ✓${await linkNote()}`);
       }
+      // Rest this album photo for 30 days so the daily story doesn't repeat it (any device).
+      if (photo?.id) postStory({ action: 'used', id: photo.id }).catch(() => {});
     } catch (e) {
       if (!(e instanceof DOMException && e.name === 'AbortError')) setMsg(`Export didn’t work: ${e instanceof Error ? e.message : 'error'}`);
     } finally {

@@ -9,6 +9,7 @@
 //    storyImage    { id, size? }                → { ok, id, dataUri }   (~1920px JPEG for the 1080×1920 canvas)
 //    storyTagQueue { count?, size?, exclude? }  → { ok, photos:[{id,name,set,thumb}], remaining }  — untagged photos
 //    storyTag      { tags: {id: CATEGORY} }     → { ok, saved, total }   (kept quick: no pool listing)
+//    storyUse      { id }                       → { ok }  — photo went into a saved story; hidden from browse for STORY_REST_DAYS
 //
 //  Tags are our own (COFFEE, FOOD, PARMA, INSIDE, OUTSIDE, TEAM — each maps to a
 //  Google category, see app/lib/photoTags.ts), stored per photo in the `story_photo_tags`
@@ -37,6 +38,9 @@ function gbpStoryBrowse_(p) {
 
   var list = p.set ? all.filter(function (x) { return x.set === p.set; }) : all;
   if (p.cat) list = list.filter(function (x) { return x.tag === p.cat; });
+  // Rest photos used in a story recently so the daily story doesn't repeat itself.
+  var restCut = Date.now() - STORY_REST_DAYS * 86400000;
+  list = list.filter(function (x) { var u = ts.used[x.id]; return !u || Date.parse(u) < restCut; });
   if (p.random) {                                // Story tab: a fresh random handful each time
     for (var i = list.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = list[i]; list[i] = list[j]; list[j] = t; }
   } else {
@@ -114,9 +118,32 @@ function gbpStoryInPool_(id) {
 // ─── Category tags ───────────────────────────────────────────────────────────
 var STORY_CATS = ['COFFEE', 'FOOD', 'PARMA', 'INSIDE', 'OUTSIDE', 'TEAM'];   // keep in sync with app/lib/photoTags.ts
 
+var STORY_REST_DAYS = 30;
+
+// One block holds both: tags {id: TAG} and used {id: ISO date last used in a story}.
 function gbpStoryTagState_() {
   var s = gbpReadOsBlock_('story_photo_tags') || {};
-  return { tags: s.tags || {} };
+  return { tags: s.tags || {}, used: s.used || {} };
+}
+
+function gbpStorySaveState_(ts) {
+  var keep = Date.now() - 2 * STORY_REST_DAYS * 86400000, used = {};
+  Object.keys(ts.used).forEach(function (id) { if (Date.parse(ts.used[id]) >= keep) used[id] = ts.used[id]; });   // prune old
+  gbpWriteOsBlock_('story_photo_tags', { tags: ts.tags, used: used, updated: new Date().toISOString() });
+}
+
+function gbpStoryUse_(p) {
+  if (!p || !/^[\w-]{10,100}$/.test(String(p.id || ''))) return { ok: false, error: 'bad photo id' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var ts = gbpStoryTagState_();
+    ts.used[p.id] = new Date().toISOString();
+    gbpStorySaveState_(ts);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // Untagged, not-hidden pool photos in a stable order (set, then name).
@@ -160,7 +187,7 @@ function gbpStoryTag_(p) {
       ts.tags[id] = tags[id];
       saved++;
     });
-    gbpWriteOsBlock_('story_photo_tags', { tags: ts.tags, updated: new Date().toISOString() });
+    gbpStorySaveState_(ts);
     return { ok: true, saved: saved, total: Object.keys(ts.tags).length };
   } finally {
     lock.releaseLock();

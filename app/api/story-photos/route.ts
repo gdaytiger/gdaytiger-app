@@ -8,6 +8,7 @@ import { isPhotoTag } from '@/app/lib/photoTags';
 //   { action: 'image', id }                          → GBP storyImage  (~1920px JPEG data URI)
 //   { action: 'queue', exclude? }                    → GBP storyTagQueue (untagged photos for hand tagging)
 //   { action: 'tag', tags: {id: CATEGORY} }          → GBP storyTag
+//   { action: 'used', id }                           → GBP storyUse (photo went into a saved story → rests 30 days)
 // If the GBP script hasn't been updated with GbpStoryPhotos.js yet, browse falls
 // back to the random picker (poolSuggest) so the widget still works, low-res.
 
@@ -51,6 +52,13 @@ export async function POST(req: NextRequest) {
   if (body.action === 'queue') {
     const exclude = Array.isArray(body.exclude) ? body.exclude.filter((x): x is string => typeof x === 'string' && ID_RE.test(x)).slice(0, 100) : [];
     const r = await callGbp({ action: 'storyTagQueue', count: 6, size: 600, exclude });
+    return NextResponse.json(r.data, { status: r.status });
+  }
+
+  if (body.action === 'used') {
+    const id = typeof body.id === 'string' && ID_RE.test(body.id) ? body.id : '';
+    if (!id) return NextResponse.json({ ok: false, error: 'bad photo id' }, { status: 400 });
+    const r = await callGbp({ action: 'storyUse', id });
     return NextResponse.json(r.data, { status: r.status });
   }
 
