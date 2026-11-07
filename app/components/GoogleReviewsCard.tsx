@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import type { GoogleReviewsPayload, MenuSyncPayload, PendingReview, PoolSuggestion } from '@/app/lib/gbp';
+import { glassTileStyle } from '@/app/lib/theme';
 
 // Google card: new reviews with Claude-drafted replies (Post / Redraft / Skip),
 // a photo uploader for the Business Profile, and the Square→Google menu price
@@ -259,7 +260,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
       {/* Paul's gallery → Google */}
       <div style={box} className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <div style={label}>Photos from Paul’s gallery</div>
+          <div style={label}>Photos from G’Day Tigers album</div>
           <button style={ghost} disabled={!!poolBusy} onClick={shuffle}>{poolBusy === 'load' ? 'Loading…' : 'Shuffle'}</button>
         </div>
         {pool && pool.ok !== false && (
@@ -271,15 +272,15 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
         {!pool && poolBusy === 'load' && <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>Picking 5 photos…</div>}
         {pool && pool.ok !== false && pool.photos.length === 0 && <div className="text-sm">Every photo in the pool is already on Google. New ones arrive when Paul adds a set.</div>}
         {pool && pool.photos.length > 0 && (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-5 gap-3">
             {pool.photos.map(ph => {
               const on = picked.has(ph.id);
               return (
                 <div key={ph.id} className="relative">
                   <button
                     onClick={() => setPicked(prev => { const n = new Set(prev); if (n.has(ph.id)) n.delete(ph.id); else n.add(ph.id); return n; })}
-                    className="block w-full aspect-square rounded-xl overflow-hidden"
-                    style={{ outline: on ? '3px solid var(--color-brand-peach)' : '1px solid rgba(0,0,0,0.08)', outlineOffset: on ? '-3px' : '-1px', background: 'rgba(0,0,0,0.04)' }}
+                    className="block w-full aspect-square rounded-3xl overflow-hidden transition-all"
+                    style={{ ...glassTileStyle, padding: 0, ...(on ? { border: '1.5px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow), var(--glass-ring)' } : {}) }}
                     aria-pressed={on}
                     aria-label={`${on ? 'Unselect' : 'Select'} ${ph.name}`}
                   >
@@ -288,8 +289,8 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
                       ? <img src={ph.thumb} alt={ph.name} className="w-full h-full object-cover" />
                       : <span className="text-[10px] p-1 block">{ph.name}</span>}
                   </button>
-                  {on && <span className="absolute top-1 left-1 text-[11px] font-bold rounded-full px-1.5" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>✓</span>}
-                  <button onClick={() => hidePhoto(ph.id)} className="absolute top-1 right-1 text-[11px] font-bold rounded-full w-5 h-5 leading-5 text-center" style={{ background: 'rgba(255,255,255,0.85)', color: 'var(--color-ink-label)' }} aria-label={`Never show ${ph.name}`}>×</button>
+                  {on && <span className="absolute top-1.5 left-1.5 text-[11px] font-bold rounded-full px-1.5" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>✓</span>}
+                  <button onClick={() => hidePhoto(ph.id)} className="absolute top-1.5 right-1.5 text-[11px] font-bold rounded-full w-5 h-5 leading-5 text-center" style={{ background: 'rgba(255,255,255,0.85)', color: 'var(--color-ink-label)' }} aria-label={`Never show ${ph.name}`}>×</button>
                 </div>
               );
             })}
