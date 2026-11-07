@@ -2367,8 +2367,7 @@ export default function Home() {
   const togglePinExpanded = (id: string) => setExpandedPins(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   // Which of the four launcher widgets are expanded to full cards. Empty = all
   // collapsed to square tiles (resets every load by design).
-  // Socials (Daily Story + Google) opens by default on load.
-  const [openWidgets, setOpenWidgets] = useState<Set<string>>(() => new Set(['socials']));
+  const [openWidgets, setOpenWidgets] = useState<Set<string>>(() => new Set());
   const [socialTab, setSocialTab] = useState<'story' | 'google'>('story');
   // THE DOCUMENT launcher badge — net $ owed either way (Isola tally).
   const [docBalance, setDocBalance] = useState<number | null>(null);
