@@ -12,7 +12,7 @@ Live operational dashboard for G'Day Tiger café. `main` deploys straight to pro
 ## Deploying
 - Commit only the files you changed: `git add <files>` — never `git add .` or `-A`.
 - Never commit `.env*` (`.env.ship` holds a GitHub token).
-- **UI / visual changes:** commit on `main`, then `./deploy.sh` (pushes main, then `clasp push` for Apps Script). Live in ~30s.
+- **UI / visual changes:** commit on `main`, then `./deploy.sh` (pushes main, then `clasp push` for `apps-script/` and for `apps-script-gbp/`, which also republishes the GBP web app). Live in ~30s.
 - **Costing, margin, pricing, data-sync or `apps-script/` logic changes:** push a preview branch first and stop for Jonathan to check it — `git checkout -b preview/<name> && git push -u origin preview/<name>`. Do NOT run `./deploy.sh` from a branch (it merges into main).
 - If `clasp push` fails with `invalid_grant` / `invalid_rapt`, the Google login expired — tell Jonathan to run `npx clasp login`. The Vercel deploy has already gone out; don't retry in a loop.
 

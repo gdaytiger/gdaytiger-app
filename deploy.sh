@@ -31,4 +31,14 @@ else
   echo "⚠ clasp not configured — skipped Apps Script push (see README 'Deploying')."
 fi
 
+# ── GBP Apps Script (apps-script-gbp/ → "TIGER OS - Google") ─────────────────
+# Separate project (business.manage scope). Push the files, then move the live
+# web app deployment to the new version so TIGER OS sees the change (same URL).
+GBP_DEPLOYMENT_ID="AKfycbzQl6vR6p7KpKFFEKVgbjgPrPCDC2bgId_1lj8apctCS0TrmksDZWL3fem_Yb_Ar9oZpQ"
+if command -v clasp >/dev/null 2>&1 && [ -f apps-script-gbp/.clasp.json ]; then
+  echo "→ Pushing GBP Apps Script (clasp)..."
+  ( cd apps-script-gbp && clasp push -f && clasp update-deployment "$GBP_DEPLOYMENT_ID" -d "deploy.sh $(git rev-parse --short HEAD)" )
+  echo "✓ GBP Apps Script pushed and web app redeployed."
+fi
+
 echo "✓ Deployed. Vercel will be live in ~30 seconds."
