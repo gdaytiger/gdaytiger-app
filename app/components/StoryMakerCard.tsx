@@ -300,8 +300,8 @@ async function clearOld(dir: DirHandle): Promise<number> {
 
 // ── Library types ─────────────────────────────────────────────────────────────
 type LibPhoto = { id: string; name: string; set: string; thumb: string | null; tag?: string | null };
-type LibData = { ok: boolean; photos?: LibPhoto[]; total?: number; fallback?: boolean; error?: string; untagged?: number; auto?: boolean };
-type QueueData = { ok: boolean; photos?: LibPhoto[]; remaining?: number; auto?: boolean; error?: string };
+type LibData = { ok: boolean; photos?: LibPhoto[]; total?: number; fallback?: boolean; error?: string; untagged?: number };
+type QueueData = { ok: boolean; photos?: LibPhoto[]; remaining?: number; error?: string };
 
 // Our photo tags (each maps to a Google category — see app/lib/photoTags.ts).
 const PHOTO_CATS: [string, string][] = PHOTO_TAGS.map(t => [t.key, t.label]);
@@ -350,7 +350,6 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   const [tagLeft, setTagLeft] = useState(0);
   const saveChain = useRef<Promise<unknown>>(Promise.resolve());
   const tagged = useRef<string[]>([]);
-  const autoRan = useRef(false);
   const pickedRef = useRef<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -583,26 +582,13 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
     setTagLeft(left);
     setQueue(q => q.slice(1));
     if (left <= 0) {
-      setMsg('All photos tagged ✓ — Claude will tag new photos from now on.');
+      setMsg('All photos tagged ✓ — new photos from Paul will show up here to tag.');
       finishTagging();
     } else if (queue.length === 1) {
       saveChain.current.then(fetchQueue);   // batch used up — next 6 once the saves land
     }
   }
 
-  // Once the backlog is done (auto on), Claude tags new arrivals when the tab opens.
-  useEffect(() => {
-    if (!lib?.auto || !lib.untagged || autoRan.current) return;
-    autoRan.current = true;
-    (async () => {
-      for (let i = 0; i < 4; i++) {          // up to 32 photos per visit
-        try {
-          const d = await postStory<{ remaining?: number; saved?: number }>({ action: 'autotag' });
-          if (!d.saved || !d.remaining) break;
-        } catch { break; }
-      }
-    })();
-  }, [lib]);
 
   // ── Drag to reposition ──
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -808,7 +794,7 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
           </div>
         )}
 
-        {!tagging && lib && !lib.fallback && !lib.auto && (lib.untagged ?? 0) > 0 && (
+        {!tagging && lib && !lib.fallback && (lib.untagged ?? 0) > 0 && (
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span className="text-sm" style={{ color: 'var(--color-ink-label)' }}>{lib.untagged} photos need a category</span>
             <button style={btn} onClick={startTagging}><Tags size={13} strokeWidth={2.25} aria-hidden />Tag photos</button>

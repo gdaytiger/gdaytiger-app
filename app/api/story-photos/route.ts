@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import { requireSession } from '@/app/lib/auth';
 import { callGbp } from '@/app/lib/gbp';
-import { PHOTO_TAGS, PHOTO_TAG_KEYS, isPhotoTag } from '@/app/lib/photoTags';
+import { isPhotoTag } from '@/app/lib/photoTags';
 
 // Story Maker photo library — same Drive pool as the Google tile (Paul's gallery).
 //   { action: 'browse', set?, cat?, page?, random? } → GBP storyBrowse (random → 5 at random; cat filters by tag)
 //   { action: 'image', id }                          → GBP storyImage  (~1920px JPEG data URI)
 //   { action: 'queue', exclude? }                    → GBP storyTagQueue (untagged photos for hand tagging)
 //   { action: 'tag', tags: {id: CATEGORY} }          → GBP storyTag
-//   { action: 'autotag' }                            → Claude tags up to 8 untagged photos, saved via storyTag
 // If the GBP script hasn't been updated with GbpStoryPhotos.js yet, browse falls
 // back to the random picker (poolSuggest) so the widget still works, low-res.
 
@@ -63,25 +61,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(r.data, { status: r.status });
   }
 
-  if (body.action === 'autotag') {
-    const q = await callGbp({ action: 'storyTagQueue', count: 8, size: 400 });
-    if (q.data.ok === false) return NextResponse.json(q.data, { status: q.status });
-    if (q.data.auto !== true) return NextResponse.json({ ok: false, error: 'auto-tagging starts once the backlog is tagged by hand' }, { status: 409 });
-    const photos = (Array.isArray(q.data.photos) ? q.data.photos : []) as { id: string; thumb: string | null }[];
-    const withThumbs = photos.filter(p => typeof p.thumb === 'string' && p.thumb.startsWith('data:image/'));
-    if (!withThumbs.length) return NextResponse.json({ ok: true, saved: 0, remaining: q.data.remaining ?? 0 });
-    try {
-      const tags = await classify(withThumbs as { id: string; thumb: string }[]);
-      if (!Object.keys(tags).length) return NextResponse.json({ ok: false, error: 'Claude returned no tags' }, { status: 502 });
-      const r = await callGbp({ action: 'storyTag', tags });
-      return NextResponse.json({ ...r.data, tagged: tags }, { status: r.status });
-    } catch (e) {
-      console.error('story autotag failed:', e);
-      const status = e instanceof Anthropic.APIError ? 502 : 500;
-      return NextResponse.json({ ok: false, error: 'auto-tag failed' }, { status });
-    }
-  }
-
   return NextResponse.json({ ok: false, error: 'unknown action' }, { status: 400 });
 }
 
@@ -93,59 +72,4 @@ function cleanTags(raw: unknown): Record<string, string> {
     if (Object.keys(out).length >= 20) break;
   }
   return out;
-}
-
-// One vision request for the batch. Each image is preceded by a text label with its
-// photo id so the answer can be mapped back; structured output keeps it parseable.
-async function classify(photos: { id: string; thumb: string }[]): Promise<Record<string, string>> {
-  const client = new Anthropic(); // ANTHROPIC_API_KEY from the Vercel env
-  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
-  for (const p of photos) {
-    const m = /^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/.exec(p.thumb);
-    if (!m) continue;
-    content.push({ type: 'text', text: `Photo id: ${p.id}` });
-    content.push({ type: 'image', source: { type: 'base64', media_type: m[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: m[2] } });
-  }
-  content.push({
-    type: 'text',
-    text: `These are photos from G'Day Tiger, a café. Put each photo in exactly one category:
-${PHOTO_TAGS.map(t => `${t.key} — ${t.hint}.`).join('\n')}
-If a photo could fit two, pick the one its main subject belongs to. Return one entry per photo id.`,
-  });
-
-  const response = await client.beta.messages.create({
-    model: 'claude-opus-5-5',
-    max_tokens: 2000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    output_config: {
-      effort: 'low',
-      format: {
-        type: 'json_schema',
-        schema: {
-          type: 'object',
-          properties: {
-            photos: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: { id: { type: 'string' }, category: { type: 'string', enum: [...PHOTO_TAG_KEYS] } },
-                required: ['id', 'category'],
-                additionalProperties: false,
-              },
-            },
-          },
-          required: ['photos'],
-          additionalProperties: false,
-        },
-      },
-    },
-    messages: [{ role: 'user', content }],
-  });
-
-  if (response.stop_reason === 'refusal') throw new Error('refused');
-  const text = response.content.find((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')?.text ?? '';
-  const parsed = JSON.parse(text) as { photos?: { id: string; category: string }[] };
-  const ids = new Set(photos.map(p => p.id));
-  return cleanTags(Object.fromEntries((parsed.photos ?? []).filter(x => ids.has(x.id)).map(x => [x.id, x.category])));
 }

@@ -5,15 +5,15 @@
 //  gallery), but browsable: every photo, including ones already posted to
 //  Google (stories don't care), minus anything hidden with × in the Google tile.
 //
-//    storyBrowse   { set?, cat?, page?, pageSize?, random? } → { ok, sets, photos:[{id,name,set,tag,thumb}], page, pages, total, untagged, auto, cats }
+//    storyBrowse   { set?, cat?, page?, pageSize?, random? } → { ok, sets, photos:[{id,name,set,tag,thumb}], page, pages, total, untagged, cats }
 //    storyImage    { id, size? }                → { ok, id, dataUri }   (~1920px JPEG for the 1080×1920 canvas)
-//    storyTagQueue { count?, size?, exclude? }  → { ok, photos:[{id,name,set,thumb}], remaining, auto }  — untagged photos
-//    storyTag      { tags: {id: CATEGORY} }     → { ok, saved, remaining, auto }
+//    storyTagQueue { count?, size?, exclude? }  → { ok, photos:[{id,name,set,thumb}], remaining }  — untagged photos
+//    storyTag      { tags: {id: CATEGORY} }     → { ok, saved, remaining }
 //
 //  Tags are our own (COFFEE, FOOD, PARMA, INSIDE, OUTSIDE, TEAM — each maps to a
 //  Google category, see app/lib/photoTags.ts), stored per photo in the `story_photo_tags`
-//  block on the OS page. Jono tags the backlog by hand in TIGER OS; once nothing is
-//  left untagged `auto` flips on and TIGER OS has Claude tag new arrivals.
+//  block on the OS page. Jono tags them by hand in TIGER OS — new photos from Paul
+//  show up as untagged and wait for him.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function gbpStoryBrowse_(p) {
@@ -54,7 +54,7 @@ function gbpStoryBrowse_(p) {
 
   return {
     ok: true, sets: sets, total: list.length, page: page, pages: pages,
-    untagged: untagged, auto: ts.auto, cats: cats,
+    untagged: untagged, cats: cats,
     photos: slice.map(function (x, i) { return { id: x.id, name: x.name, set: x.set, tag: x.tag, thumb: thumbs[i] }; })
   };
 }
@@ -116,7 +116,7 @@ var STORY_CATS = ['COFFEE', 'FOOD', 'PARMA', 'INSIDE', 'OUTSIDE', 'TEAM'];   // 
 
 function gbpStoryTagState_() {
   var s = gbpReadOsBlock_('story_photo_tags') || {};
-  return { tags: s.tags || {}, auto: !!s.auto };
+  return { tags: s.tags || {} };
 }
 
 // Untagged, not-hidden pool photos in a stable order (set, then name).
@@ -143,7 +143,7 @@ function gbpStoryTagQueue_(p) {
   var slice = list.slice(0, n);
   var thumbs = gbpStoryThumbs_(slice.map(function (x) { return x.id; }), px);
   return {
-    ok: true, remaining: list.length, auto: ts.auto,
+    ok: true, remaining: list.length,
     photos: slice.map(function (x, i) { return { id: x.id, name: x.name, set: x.set, thumb: thumbs[i] }; })
   };
 }
@@ -161,9 +161,8 @@ function gbpStoryTag_(p) {
       saved++;
     });
     var remaining = gbpStoryUntagged_(ts).length;
-    if (!remaining) ts.auto = true;             // backlog done by hand → Claude takes new arrivals
-    gbpWriteOsBlock_('story_photo_tags', { tags: ts.tags, auto: ts.auto, updated: new Date().toISOString() });
-    return { ok: true, saved: saved, remaining: remaining, auto: ts.auto };
+    gbpWriteOsBlock_('story_photo_tags', { tags: ts.tags, updated: new Date().toISOString() });
+    return { ok: true, saved: saved, remaining: remaining };
   } finally {
     lock.releaseLock();
   }
