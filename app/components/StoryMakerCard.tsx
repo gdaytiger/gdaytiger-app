@@ -29,7 +29,7 @@ type Block = { kind: Kind; label: string; text: string; gap?: number; key?: 'hou
 // sections: the template takes extra heading / details / price sections (like the Parma block).
 type Template = { id: string; name: string; blocks: Block[]; blur?: number; shade?: number; anchor?: 'top' | 'bottom'; sections?: boolean };
 type Section = { title: string; body: string; price: string };
-const NEW_SECTION: Section = { title: 'CHICKEN PARMA SANGA', body: '+ ANY SMALL COFFEE\nOR CAN OF DRINK.', price: '$20' };
+const NEW_SECTION: Section = { title: '', body: '', price: '' };
 const SECTION_GAP = 106; // between sections, as between Espresso and Filter
 
 // cap = cap height in px, gap = space from previous baseline to this cap-top,
@@ -68,6 +68,7 @@ const TEMPLATES: Template[] = [
     HEAD, HOURS,
     { kind: 'title', label: 'Special', text: 'PORCHETTA ROLLS!' },
     { kind: 'body', label: 'Description', text: 'ROAST PORCHETTA,\nLEMON, MAYONNAISE, ONION.\n\nFENNEL, GREEN APPLE + DILL SLAW.' },
+    { kind: 'price', label: 'Price', text: '' }, // appended last so saved edits keep their slots
   ] },
   // Espresso / Filter sections sit 106px apart; the first title uses the standard gap like every template.
   { id: 'coffee', name: 'Seasonal Coffees', blocks: [
