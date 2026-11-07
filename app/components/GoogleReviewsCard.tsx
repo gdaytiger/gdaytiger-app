@@ -6,7 +6,7 @@ import { glassTileStyle } from '@/app/lib/theme';
 
 // Google card: new reviews with Claude-drafted replies (Post / Redraft / Skip),
 // a photo uploader for the Business Profile, and the Square→Google menu price
-// check. Self-contained — fetches /api/google-reviews and /api/google-photo.
+// check. Self-contained — fetches /api/google-reviews and /api/google-pool.
 // Nothing posts to Google without a tap here.
 
 type Data = { reviews: GoogleReviewsPayload | null; menu: MenuSyncPayload | null } | null;
@@ -30,21 +30,6 @@ const ago = (iso: string | null) => {
 };
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 
-// Shrink to ≤2000px JPEG so the upload stays small (phone photos are 4–10 MB).
-async function shrinkImage(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
-    const scale = Math.min(1, 2000 / Math.max(img.width, img.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(img.width * scale);
-    canvas.height = Math.round(img.height * scale);
-    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
 
 export default function GoogleReviewsCard({ active, onCount }: { active: boolean; onCount?: (n: number) => void }) {
   const [data, setData] = useState<Data>(null);
@@ -53,9 +38,6 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoCat, setPhotoCat] = useState('FOOD_AND_DRINK');
-  const [photoDesc, setPhotoDesc] = useState('');
 
   // Paul's gallery picker — 5 random photos not yet on Google.
   const [pool, setPool] = useState<PoolSuggestion | null>(null);
@@ -163,22 +145,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
     }
   }
 
-  async function uploadPhoto() {
-    if (!photo) return;
-    setBusy('photo'); setMsg(null);
-    try {
-      const base64 = await shrinkImage(photo);
-      const r = await fetch('/api/google-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: photoCat, mimeType: 'image/jpeg', base64, description: photoDesc || undefined }) });
-      const d = await r.json();
-      if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
-      setMsg('Photo sent to Google ✓ Usually visible within 48 hours');
-      setPhoto(null); setPhotoDesc('');
-    } catch (e) {
-      setMsg(`Photo didn’t upload: ${e instanceof Error ? e.message : 'error'}`);
-    } finally {
-      setBusy(null);
-    }
-  }
+
 
   const reviews = data?.reviews ?? null;
   const menu = data?.menu ?? null;
@@ -309,19 +276,6 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
             </button>
           </>
         )}
-      </div>
-
-      {/* Photo upload */}
-      <div style={box} className="flex flex-col gap-2">
-        <div style={label}>Add a photo to Google</div>
-        <input type="file" accept="image/*" onChange={e => setPhoto(e.target.files?.[0] ?? null)} className="text-sm" aria-label="Choose photo" />
-        <div className="flex gap-2 flex-wrap">
-          {PHOTO_CATEGORIES.map(([k, v]) => (
-            <button key={k} onClick={() => setPhotoCat(k)} className="text-xs font-semibold px-3 py-1.5 rounded-full" style={photoCat === k ? { background: 'var(--color-brand-peach)', color: '#333' } : { background: 'rgba(0,0,0,0.05)', color: 'var(--color-ink-label)' }}>{v}</button>
-          ))}
-        </div>
-        <input value={photoDesc} onChange={e => setPhotoDesc(e.target.value)} placeholder="Caption (optional)" className="w-full text-sm rounded-xl px-3 py-2 focus:outline-none" style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.1)' }} />
-        <button style={btn} disabled={!photo || !!busy} onClick={uploadPhoto} className="self-start">{busy === 'photo' ? 'Uploading…' : 'Upload to Google'}</button>
       </div>
 
       {/* Menu price sync */}
