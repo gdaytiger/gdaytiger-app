@@ -71,16 +71,14 @@ export const glassButtonStyle: CSSProperties = {
   cursor: 'pointer',
 };
 
-// Selected state — the peach outline + ring the launcher tiles use when open.
+// Selected state — the peach outline + ring the launcher tiles use when open. Text stays grey.
 export const glassButtonActiveStyle: CSSProperties = {
   border: '1.5px solid var(--color-brand-peach)',
   boxShadow: 'var(--glass-shadow), var(--glass-ring)',
-  color: 'var(--color-brand-bark)',
 };
 
-// Main action — peach-tinted glass.
+// Main action — peach-tinted glass. Text stays grey.
 export const glassButtonPrimaryStyle: CSSProperties = {
   background: 'var(--glass-fill-peach)',
   border: '1.5px solid var(--color-brand-peach)',
-  color: 'var(--color-brand-bark)',
 };

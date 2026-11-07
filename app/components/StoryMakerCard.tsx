@@ -53,7 +53,7 @@ const TEMPLATES: Template[] = [
   ] },
   { id: 'event', name: 'Saturdays', blur: 36, blocks: [
     HEAD, HOURS,
-    { kind: 'title', label: 'Run club', text: 'RUN PHILLIP ISLAND', gap: 89 },
+    { kind: 'title', label: 'Run club', text: 'RUN PHILLIP ISLAND' },
     { kind: 'body', label: 'Details', text: "7AM EVERY SATURDAY.\nKICKING OFF AT THE ESPLANADE.\n15% OFF AT G'DAY TIGER\nAFTERWARDS." },
   ] },
   { id: 'sunday', name: 'Sundays', blocks: [
@@ -65,13 +65,13 @@ const TEMPLATES: Template[] = [
     { kind: 'title', label: 'Special', text: 'PORCHETTA ROLLS!' },
     { kind: 'body', label: 'Description', text: 'ROAST PORCHETTA,\nLEMON, MAYONNAISE, ONION.\n\nFENNEL, GREEN APPLE + DILL SLAW.' },
   ] },
-  // Gaps measured off the Express "Seasonal Coffees" story.
+  // Espresso / Filter sections sit 106px apart; the first title uses the standard gap like every template.
   { id: 'coffee', name: 'Seasonal Coffees', blocks: [
     HEAD, HOURS,
-    { kind: 'title', label: 'Heading', text: 'SEASONAL COFFEES', gap: 209 },
+    { kind: 'title', label: 'Heading', text: 'SEASONAL COFFEES' },
     { kind: 'title', label: 'Espresso heading', text: 'ESPRESSO', gap: 106 },
     { kind: 'body', label: 'Espresso — roaster / origin / notes', text: 'SEVEN SEEDS\nKENYA - GICHERORI\nJUICY, APRICOT, MOLASSESS', gap: 33 },
-    { kind: 'title', label: 'Filter heading', text: 'FILTER', gap: 104 },
+    { kind: 'title', label: 'Filter heading', text: 'FILTER', gap: 106 },
     { kind: 'body', label: 'Filter — roaster / origin / notes', text: 'SEVEN SEEDS\nPERU- ALEJANDRO PADILLA CHINGUEL\nSPARKLING, BLOOD ORANGE', gap: 33 },
   ] },
 ];
@@ -537,9 +537,9 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
             aria-label="Story preview — drag to reposition the photo"
           />
           <div className="text-[11px] text-center" style={{ color: 'var(--color-ink-muted)' }}>
-            {photo ? `${photo.name}${photo.hiRes ? '' : ' · preview size'}${busy === 'photo' ? ' · loading full size…' : ''} · drag to move` : 'Pick a photo below'}
+            {photo ? `${photo.name}${photo.hiRes ? '' : ' · preview size'}${busy === 'photo' ? ' · loading full size…' : ''} · drag to move` : ''}
           </div>
-          <div className="flex gap-2 flex-wrap justify-center">
+          <div className="flex gap-2 flex-wrap justify-start self-stretch">
             {canShare && (
               <button style={btn} disabled={!!busy && busy !== 'photo'} onClick={() => exportStory(true)}>
                 <Share2 size={13} strokeWidth={2.25} aria-hidden />{busy === 'share' ? 'Sharing…' : 'Share'}
@@ -562,8 +562,8 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
             </div>
             {tpl.blocks.map((b, i) => (
               <label key={`${tpl.id}-${i}`} className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold" style={{ color: 'var(--color-ink-label)' }}>
-                  {b.label}{hoursKey(b) === 'sundayHours' ? ' · Sunday, shared' : hoursKey(b) ? ' · Mon–Sat, shared' : ''}
+                <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-label)' }}>
+                  {b.label}
                 </span>
                 {b.kind === 'body' ? (
                   <textarea value={textFor(tpl, i)} onChange={e => setText(i, e.target.value)} rows={Math.max(2, textFor(tpl, i).split('\n').length)}
@@ -574,7 +574,6 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
                 )}
               </label>
             ))}
-            <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>Blank a field to hide it · new line = line break · edits are remembered</div>
           </div>
 
           <div style={box} className="flex flex-col gap-2">
