@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, Pencil, Search, Trash2, X, IceCreamCone } from 'lucide-react';
+import { ArrowRight, Check, Pencil, Search, Trash2, X, IceCreamCone, Minus, Plus } from 'lucide-react';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // THE DOCUMENT — running stock tally between G'Day Tiger and Isola Di Capri.
@@ -64,7 +64,7 @@ function ItemSearch({ catalogue, value, onChange, onPick }: {
       <div className="flex items-center gap-2 rounded-xl px-3" style={input}>
         <Search size={14} strokeWidth={2.25} aria-hidden style={{ color: 'var(--color-ink-muted)', flexShrink: 0 }} />
         <input value={value} onChange={e => onChange(e.target.value)} onFocus={() => setFocused(true)} onBlur={() => setTimeout(() => setFocused(false), 150)}
-          placeholder="SEARCH SUPPLIER PRICES OR TYPE ITEM" className="w-full bg-transparent text-sm py-2 uppercase focus:outline-none text-gray-800" />
+          placeholder="SEARCH ITEM" className="w-full bg-transparent text-sm py-2 uppercase focus:outline-none text-gray-800" />
       </div>
       {focused && hits.length > 0 && (
         <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.97)', border: '1px solid rgba(0,0,0,0.08)', boxShadow: 'var(--glass-shadow)' }}>
@@ -90,6 +90,35 @@ function FromToggle({ from, onChange, verb }: { from: Venue; onChange: (v: Venue
         </button>
       ))}
       <span className="sr-only">Venue that {verb} the item</span>
+    </div>
+  );
+}
+
+// Venue column in Log Stock: name, − n + counter (how many that venue RECEIVED), and its current tab.
+function VenueCounter({ venue, count, onChange, tab, items }: {
+  venue: Venue; count: number; onChange: (n: number) => void; tab: number; items: number;
+}) {
+  const on = count > 0;
+  const step: React.CSSProperties = { ...glassButtonStyle, padding: 0, width: '31px', justifyContent: 'center', flexShrink: 0 };
+  return (
+    <div className="flex flex-col items-center gap-2 p-2 rounded-2xl text-center min-w-0"
+      style={{ background: on ? 'rgba(251,205,173,0.12)' : 'rgba(255,255,255,0.55)', border: `1px solid ${on ? 'var(--color-brand-peach)' : 'transparent'}` }}>
+      <div style={{ ...label, color: 'var(--color-ink-label)' }} className="leading-tight">{NAME[venue]}</div>
+      <input type="number" inputMode="numeric" min={0} value={count || ''} placeholder="0"
+        onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+        className="w-full text-center text-2xl font-bold tabular-nums bg-transparent focus:outline-none text-gray-800 leading-none" aria-label={`Qty to ${NAME[venue]}`} />
+      <div className="flex items-center justify-center gap-1.5">
+        <button type="button" style={step} onClick={() => onChange(Math.max(0, count - 1))} aria-label={`One less to ${NAME[venue]}`} disabled={!on} className="disabled:opacity-40">
+          <Minus size={13} strokeWidth={2.5} aria-hidden />
+        </button>
+        <button type="button" style={step} onClick={() => onChange(count + 1)} aria-label={`One more to ${NAME[venue]}`}>
+          <Plus size={13} strokeWidth={2.5} aria-hidden />
+        </button>
+      </div>
+      <div className="text-xs text-gray-400 leading-tight">
+        TAB <span className="font-semibold tabular-nums" style={{ color: 'var(--color-ink-label)' }}>{money(tab)}</span>
+        {items > 0 && <div>{items} item{items === 1 ? '' : 's'}</div>}
+      </div>
     </div>
   );
 }
@@ -131,9 +160,9 @@ function EditRow({ row, onSave, onDelete, onCancel, priced }: {
 
 // ── Part 1: THE DOCUMENT ──
 function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>) => Promise<void> }) {
-  const [from, setFrom] = useState<Venue>(data.venue);
+  // Counters = how many each venue RECEIVED (G'Day gets a gelato from Isola → G'Day's counter).
+  const [got, setGot] = useState<Record<Venue, number>>({ GDT: 0, ISOLA: 0 });
   const [item, setItem] = useState('');
-  const [qty, setQty] = useState('1');
   const [price, setPrice] = useState('');
   const [unit, setUnit] = useState('');
   const [category, setCategory] = useState('Other');
@@ -144,18 +173,28 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
   const [gUnit, setGUnit] = useState(data.gelato?.unit || '5L tub');
   const [showOlder, setShowOlder] = useState(false);
 
-  const reset = () => { setItem(''); setQty('1'); setPrice(''); setUnit(''); setCategory('Other'); };
+  const reset = () => { setItem(''); setGot({ GDT: 0, ISOLA: 0 }); setPrice(''); setUnit(''); setCategory('Other'); };
   const pickGelato = () => {
     if (!data.gelato) { setGelatoEdit(true); return; }
-    setItem('GELATO'); setPrice(String(data.gelato.price)); setUnit(data.gelato.unit); setCategory('Gelato'); setFrom('ISOLA');
+    setItem('GELATO'); setPrice(String(data.gelato.price)); setUnit(data.gelato.unit); setCategory('Gelato');
   };
-  const total = (Number(qty) || 0) * (Number(price) || 0);
-  const canAdd = item.trim() && Number(qty) > 0 && price !== '';
+  const unitP = Number(price) || 0;
+  const canAdd = item.trim() && (got.GDT > 0 || got.ISOLA > 0) && price !== '';
+  const addAll = async () => {
+    for (const v of ['GDT', 'ISOLA'] as Venue[]) {
+      if (got[v] > 0) await api('POST', { section: 'Document', from: other(v), item, qty: got[v], unitPrice: unitP, unit, category });
+    }
+    reset();
+  };
 
   // History since the last settlement up top; anything older tucked away.
   const lastSettleIdx = data.document.findIndex(r => r.kind === 'Settlement');
   const current = lastSettleIdx === -1 ? data.document : data.document.slice(0, lastSettleIdx);
   const older = lastSettleIdx === -1 ? [] : data.document.slice(lastSettleIdx);
+  // Each venue's tab since the last settle-up: what it has received.
+  const tabOf = (v: Venue) => current.filter(r => r.kind === 'Entry' && r.from === other(v))
+    .reduce((a, r) => ({ value: a.value + r.qty * r.unitPrice, items: a.items + r.qty }), { value: 0, items: 0 });
+  const tabs = { GDT: tabOf('GDT'), ISOLA: tabOf('ISOLA') };
 
   const bal = data.balance;
   const debtor: Venue | null = Math.abs(bal) < 0.005 ? null : bal > 0 ? 'ISOLA' : 'GDT';
@@ -216,23 +255,28 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
       {/* Add */}
       <div className="flex flex-col gap-2 p-3 rounded-2xl" style={glassTileStyle}>
         <div style={label}>Log stock</div>
-        <FromToggle from={from} onChange={setFrom} verb="supplied" />
-        <div className="flex gap-2 items-center">
-          <button type="button" onClick={pickGelato} style={chip(category === 'Gelato')} title={data.gelato ? `Gelato ${money(data.gelato.price)} / ${data.gelato.unit}` : 'Set the gelato price first'}>
-            <IceCreamCone size={13} strokeWidth={2.25} aria-hidden /> GELATO
-          </button>
-          <ItemSearch catalogue={data.catalogue} value={item}
-            onChange={v => { setItem(v.toUpperCase()); setCategory(/^gelato$/i.test(v.trim()) ? 'Gelato' : guessCategory(v)); }}
-            onPick={c => { setItem(c.name.toUpperCase()); setPrice(String(c.price)); setUnit(c.unit); setCategory(guessCategory(c.name)); }} />
+        <div className="grid gap-2 items-stretch" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,2fr) minmax(0,1fr)' }}>
+          <VenueCounter venue="GDT" count={got.GDT} onChange={n => setGot(g => ({ ...g, GDT: n }))} tab={tabs.GDT.value} items={tabs.GDT.items} />
+          {/* Product */}
+          <div className="flex flex-col gap-2 justify-center min-w-0">
+            <button type="button" onClick={pickGelato} className="self-center" style={chip(category === 'Gelato')} title={data.gelato ? `Gelato ${money(data.gelato.price)} / ${data.gelato.unit}` : 'Set the gelato price first'}>
+              <IceCreamCone size={13} strokeWidth={2.25} aria-hidden /> GELATO
+            </button>
+            <ItemSearch catalogue={data.catalogue} value={item}
+              onChange={v => { setItem(v.toUpperCase()); setCategory(/^gelato$/i.test(v.trim()) ? 'Gelato' : guessCategory(v)); }}
+              onPick={c => { setItem(c.name.toUpperCase()); setPrice(String(c.price)); setUnit(c.unit); setCategory(guessCategory(c.name)); }} />
+            <div className="flex gap-2 items-center justify-center">
+              <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className={`${inputClass} w-24 text-center`} style={input} aria-label="Unit price" placeholder="$ each" />
+              {unit && <span className="text-xs text-gray-400 truncate">/ {unit}</span>}
+            </div>
+          </div>
+          <VenueCounter venue="ISOLA" count={got.ISOLA} onChange={n => setGot(g => ({ ...g, ISOLA: n }))} tab={tabs.ISOLA.value} items={tabs.ISOLA.items} />
         </div>
-        <div className="flex gap-2 items-center flex-wrap">
-          <input type="number" inputMode="decimal" min={0} value={qty} onChange={e => setQty(e.target.value)} className={`${inputClass} w-20 text-center`} style={input} aria-label="Qty" placeholder="Qty" />
-          <span className="text-gray-400 text-sm">×</span>
-          <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className={`${inputClass} w-24 text-center`} style={input} aria-label="Unit price" placeholder="$ each" />
-          {unit && <span className="text-xs text-gray-400">/ {unit}</span>}
-          <span className="ml-auto text-sm font-bold tabular-nums" style={{ color: 'var(--color-ink-label)' }}>{money(total)}</span>
-          <button type="button" disabled={!canAdd} className="disabled:opacity-40" style={BTN_PRIMARY}
-            onClick={() => run(async () => { await api('POST', { section: 'Document', from, item, qty: Number(qty), unitPrice: Number(price), unit, category }); reset(); })}>
+        <div className="flex gap-2 items-center">
+          <span className="text-xs text-gray-400 tabular-nums">
+            {got.GDT > 0 && `${got.GDT} to G'Day ${money(got.GDT * unitP)}`}{got.GDT > 0 && got.ISOLA > 0 && ' · '}{got.ISOLA > 0 && `${got.ISOLA} to Isola ${money(got.ISOLA * unitP)}`}
+          </span>
+          <button type="button" disabled={!canAdd} className="ml-auto disabled:opacity-40" style={BTN_PRIMARY} onClick={() => run(addAll)}>
             ADD
           </button>
         </div>
