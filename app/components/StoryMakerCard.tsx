@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, ImagePlus, RotateCcw, Share2, Shuffle } from 'lucide-react';
+import { Download, ImagePlus, Plus, RotateCcw, Share2, Shuffle, Trash2 } from 'lucide-react';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // Story Maker — TigerOS replacement for Adobe Express on the morning Instagram story.
@@ -26,7 +26,11 @@ const SUNDAY_HOURS_DEFAULT = '6.30 - 2ISH';
 type Kind = 'head' | 'sub' | 'title' | 'body' | 'price';
 // key 'hours' = today's hours (Sunday hours on a Sunday); 'sundayHours' = always Sunday's.
 type Block = { kind: Kind; label: string; text: string; gap?: number; key?: 'hours' | 'sundayHours' };
-type Template = { id: string; name: string; blocks: Block[]; blur?: number; shade?: number; anchor?: 'top' | 'bottom' };
+// sections: the template takes extra heading / details / price sections (like the Parma block).
+type Template = { id: string; name: string; blocks: Block[]; blur?: number; shade?: number; anchor?: 'top' | 'bottom'; sections?: boolean };
+type Section = { title: string; body: string; price: string };
+const NEW_SECTION: Section = { title: 'CHICKEN PARMA SANGA', body: '+ ANY SMALL COFFEE\nOR CAN OF DRINK.', price: '$20' };
+const SECTION_GAP = 106; // between sections, as between Espresso and Filter
 
 // cap = cap height in px, gap = space from previous baseline to this cap-top,
 // pitch = baseline-to-baseline for wrapped lines, x = left edge.
@@ -43,7 +47,7 @@ const HOURS: Block = { kind: 'sub', label: 'Hours', text: HOURS_DEFAULT, key: 'h
 
 // Ids 'deal' / 'event' kept from the first version so saved edits carry over.
 const TEMPLATES: Template[] = [
-  { id: 'open', name: 'Open Today', blocks: [HEAD, HOURS] },
+  { id: 'open', name: 'Open Today', sections: true, blocks: [HEAD, HOURS] },
   { id: 'deal', name: 'Thursdays', blocks: [
     HEAD,
     { kind: 'sub', label: 'Tagline', text: "IT'S PARMA THURSDAY!" },
@@ -87,8 +91,8 @@ function defaultTemplateId(): string {
   return 'open';
 }
 
-type Store = { hours: string; sundayHours: string; fields: Record<string, string[]> };
-const EMPTY_STORE: Store = { hours: HOURS_DEFAULT, sundayHours: SUNDAY_HOURS_DEFAULT, fields: {} };
+type Store = { hours: string; sundayHours: string; fields: Record<string, string[]>; sections: Record<string, Section[]> };
+const EMPTY_STORE: Store = { hours: HOURS_DEFAULT, sundayHours: SUNDAY_HOURS_DEFAULT, fields: {}, sections: {} };
 function loadStore(): Store {
   try {
     const s = JSON.parse(localStorage.getItem(STORE) || 'null');
@@ -96,6 +100,7 @@ function loadStore(): Store {
       hours: typeof s.hours === 'string' ? s.hours : HOURS_DEFAULT,
       sundayHours: typeof s.sundayHours === 'string' ? s.sundayHours : SUNDAY_HOURS_DEFAULT,
       fields: s.fields && typeof s.fields === 'object' ? s.fields : {},
+      sections: s.sections && typeof s.sections === 'object' ? s.sections : {},
     };
   } catch { /* storage blocked */ }
   return EMPTY_STORE;
@@ -338,9 +343,20 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   };
   const resetTemplate = () => setStore(prev => {
     const fields = { ...prev.fields };
+    const sections = { ...prev.sections };
     delete fields[tpl.id];
-    return { ...prev, fields };
+    delete sections[tpl.id];
+    return { ...prev, fields, sections };
   });
+
+  // ── Extra sections (heading / details / price) ──
+  const sections = tpl.sections ? (store.sections[tpl.id] ?? []) : [];
+  const setSections = (fn: (s: Section[]) => Section[]) =>
+    setStore(prev => ({ ...prev, sections: { ...prev.sections, [tpl.id]: fn(prev.sections[tpl.id] ?? []) } }));
+  const addSection = () => setSections(s => [...s, { ...NEW_SECTION }]);
+  const removeSection = (i: number) => setSections(s => s.filter((_, j) => j !== i));
+  const editSection = (i: number, key: keyof Section, value: string) =>
+    setSections(s => s.map((x, j) => (j === i ? { ...x, [key]: value } : x)));
 
   const chooseTemplate = (t: Template) => {
     setTplId(t.id);
@@ -363,7 +379,13 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   }, []);
 
   // Draw.
-  const blocksNow = tpl.blocks.map((b, i) => ({ kind: b.kind, gap: b.gap, text: textFor(tpl, i) }));
+  const blocksNow: { kind: Kind; gap?: number; text: string }[] = tpl.blocks.map((b, i) => ({ kind: b.kind, gap: b.gap, text: textFor(tpl, i) }));
+  sections.forEach((sec, i) => {
+    // First section sits the standard distance below the header; later ones SECTION_GAP apart.
+    blocksNow.push({ kind: 'title', gap: i === 0 ? undefined : SECTION_GAP, text: sec.title });
+    blocksNow.push({ kind: 'body', text: sec.body });
+    blocksNow.push({ kind: 'price', text: sec.price });
+  });
   const blocksKey = JSON.stringify(blocksNow);
   useEffect(() => {
     const cv = canvasRef.current;
@@ -574,6 +596,35 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
                 )}
               </label>
             ))}
+
+            {sections.map((sec, i) => (
+              <div key={`sec-${i}`} className="flex flex-col gap-2 pt-2" style={{ borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                <div className="flex items-center justify-between">
+                  <span style={label}>Section {i + 1}</span>
+                  <button onClick={() => removeSection(i)} style={ghost} title="Remove this section">
+                    <Trash2 size={13} strokeWidth={2.25} aria-hidden />Remove
+                  </button>
+                </div>
+                {([['title', 'Heading'], ['body', 'Details'], ['price', 'Price']] as const).map(([key, name]) => (
+                  <label key={key} className="flex flex-col gap-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-label)' }}>{name}</span>
+                    {key === 'body' ? (
+                      <textarea value={sec.body} onChange={e => editSection(i, 'body', e.target.value)} rows={Math.max(2, sec.body.split('\n').length)}
+                        className="w-full text-sm rounded-xl px-3 py-2 uppercase focus:outline-none focus:ring-2 focus:ring-orange-300" style={field} />
+                    ) : (
+                      <input value={sec[key]} onChange={e => editSection(i, key, e.target.value)}
+                        className="w-full text-sm rounded-xl px-3 py-2 uppercase focus:outline-none focus:ring-2 focus:ring-orange-300" style={field} />
+                    )}
+                  </label>
+                ))}
+              </div>
+            ))}
+
+            {tpl.sections && (
+              <button onClick={addSection} style={ghost} className="self-start mt-1">
+                <Plus size={13} strokeWidth={2.25} aria-hidden />Add section
+              </button>
+            )}
           </div>
 
           <div style={box} className="flex flex-col gap-2">
@@ -651,7 +702,7 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
 function Slider({ name, value, min, max, step, onChange }: { name: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
   return (
     <label className="flex items-center gap-3">
-      <span className="text-[11px] font-semibold w-12 shrink-0" style={{ color: 'var(--color-ink-label)' }}>{name}</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wider w-14 shrink-0" style={{ color: 'var(--color-ink-label)' }}>{name}</span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))} className="flex-1 accent-orange-300" />
       <span className="text-[11px] tabular-nums w-8 text-right" style={{ color: 'var(--color-ink-muted)' }}>{value}</span>
     </label>
