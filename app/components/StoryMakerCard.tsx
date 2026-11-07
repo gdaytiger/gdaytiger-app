@@ -68,7 +68,7 @@ const TEMPLATES: Template[] = [
     HEAD, HOURS,
     { kind: 'title', label: 'Special', text: 'PORCHETTA ROLLS!' },
     { kind: 'body', label: 'Description', text: 'ROAST PORCHETTA,\nLEMON, MAYONNAISE, ONION.\n\nFENNEL, GREEN APPLE + DILL SLAW.' },
-    { kind: 'price', label: 'Price', text: '' }, // appended last so saved edits keep their slots
+    { kind: 'price', label: 'Price', text: '$23' }, // appended last so saved edits keep their slots
   ] },
   // Espresso / Filter sections sit 106px apart; the first title uses the standard gap like every template.
   { id: 'coffee', name: 'Seasonal Coffees', blocks: [
