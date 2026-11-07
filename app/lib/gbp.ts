@@ -41,7 +41,8 @@ export type MenuSyncPayload = {
   error: string | null;
 };
 
-export type PoolPhoto = { id: string; name: string; set: string; thumb: string | null };
+// tag: our photo tag (app/lib/photoTags.ts) if the photo has been tagged in Daily Story.
+export type PoolPhoto = { id: string; name: string; set: string; thumb: string | null; tag?: string | null };
 
 export type PoolSuggestion = {
   ok: boolean;

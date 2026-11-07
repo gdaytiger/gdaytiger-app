@@ -98,8 +98,11 @@ function gbpPoolSuggest_(p) {
   for (var i = fresh.length - 1; i > 0; i--) {            // shuffle
     var j = Math.floor(Math.random() * (i + 1)), t = fresh[i]; fresh[i] = fresh[j]; fresh[j] = t;
   }
+  // Story tags (GbpStoryPhotos.js) ride along so TIGER OS can post with the matching Google category.
+  var tags = typeof gbpStoryTagState_ === 'function' ? gbpStoryTagState_().tags : {};
   var pick = fresh.slice(0, (p && p.count) || 5).map(function (x) {
     x.thumb = gbpThumb_(x.id);
+    x.tag = tags[x.id] || null;
     return x;
   });
   var sets = {}; all.forEach(function (x) { sets[x.set] = true; });

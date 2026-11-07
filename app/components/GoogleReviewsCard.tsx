@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import type { GoogleReviewsPayload, MenuSyncPayload, PendingReview, PoolSuggestion } from '@/app/lib/gbp';
+import { googleCategoryFor, PHOTO_TAGS } from '@/app/lib/photoTags';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // Google card: new reviews with Claude-drafted replies (Post / Redraft / Skip),
@@ -98,7 +99,9 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
     if (!ids.length) return;
     setPoolBusy('post'); setMsg(null);
     try {
-      const categories = Object.fromEntries(ids.map(id => [id, poolCat]));
+      // Tagged photos post under their tag's Google category; untagged ones use the chosen chip.
+      const tagOf = new Map((pool?.photos ?? []).map(p => [p.id, p.tag ?? null]));
+      const categories = Object.fromEntries(ids.map(id => { const t = tagOf.get(id); return [id, t ? googleCategoryFor(t) : poolCat]; }));
       const r = await fetch('/api/google-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'poolUpload', ids, categories }) });
       const d = await r.json();
       if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
@@ -258,6 +261,11 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
                       : <span className="text-[10px] p-1 block">{ph.name}</span>}
                   </button>
                   {on && <span className="absolute top-1.5 left-1.5 text-[11px] font-bold rounded-full px-1.5" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>✓</span>}
+                  {ph.tag && (
+                    <span className="absolute bottom-1.5 left-1.5 text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5" style={{ background: 'rgba(255,255,255,0.85)', color: 'var(--color-ink-label)' }}>
+                      {PHOTO_TAGS.find(t => t.key === ph.tag)?.label ?? ph.tag}
+                    </span>
+                  )}
                   <button onClick={() => hidePhoto(ph.id)} className="absolute top-1.5 right-1.5 text-[11px] font-bold rounded-full w-5 h-5 leading-5 text-center" style={{ background: 'rgba(255,255,255,0.85)', color: 'var(--color-ink-label)' }} aria-label={`Never show ${ph.name}`}>×</button>
                 </div>
               );
@@ -266,11 +274,17 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
         )}
         {pool && pool.photos.length > 0 && (
           <>
-            <div className="flex gap-2 flex-wrap">
-              {PHOTO_CATEGORIES.map(([k, v]) => (
-                <button key={k} onClick={() => setPoolCat(k)} style={chip(poolCat === k)}>{v}</button>
-              ))}
-            </div>
+            {/* Category chips only matter for untagged photos — tagged ones use their tag's category. */}
+            {pool.photos.some(p => !p.tag) && (
+              <>
+                {pool.photos.some(p => p.tag) && <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>Category for untagged photos:</div>}
+                <div className="flex gap-2 flex-wrap">
+                  {PHOTO_CATEGORIES.map(([k, v]) => (
+                    <button key={k} onClick={() => setPoolCat(k)} style={chip(poolCat === k)}>{v}</button>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>Tap photos to pick them · × hides one for good</div>
             <button style={btn} disabled={!picked.size || !!poolBusy} onClick={postPicked} className="self-start">
               {poolBusy === 'post' ? 'Posting…' : picked.size ? `Post ${picked.size} to Google` : 'Pick photos to post'}
