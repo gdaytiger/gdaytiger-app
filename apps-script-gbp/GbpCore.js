@@ -184,6 +184,8 @@ function doPost(e) {
       case 'poolHide':    result = gbpPoolHide_(p); break;
       case 'storyBrowse': result = gbpStoryBrowse_(p); break;
       case 'storyImage':  result = gbpStoryImage_(p); break;
+      case 'storyTagQueue': result = gbpStoryTagQueue_(p); break;
+      case 'storyTag':    result = gbpStoryTag_(p); break;
       default:         result = { ok: false, error: 'unknown action ' + p.action };
     }
     return gbpJson_(result);

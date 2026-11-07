@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Dices, Download, FolderOpen, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
+import { Dices, Download, FolderOpen, Plus, RefreshCw, RotateCcw, Tags, Trash2 } from 'lucide-react';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // Story Maker — TigerOS replacement for Adobe Express on the morning Instagram story.
@@ -298,8 +298,21 @@ async function clearOld(dir: DirHandle): Promise<number> {
 }
 
 // ── Library types ─────────────────────────────────────────────────────────────
-type LibPhoto = { id: string; name: string; set: string; thumb: string | null };
-type LibData = { ok: boolean; sets?: { name: string; count: number }[]; photos?: LibPhoto[]; page?: number; pages?: number; total?: number; fallback?: boolean; error?: string };
+type LibPhoto = { id: string; name: string; set: string; thumb: string | null; tag?: string | null };
+type LibData = { ok: boolean; photos?: LibPhoto[]; total?: number; fallback?: boolean; error?: string; untagged?: number; auto?: boolean };
+type QueueData = { ok: boolean; photos?: LibPhoto[]; remaining?: number; auto?: boolean; error?: string };
+
+// Google Business Profile photo categories — the same set the Google tab posts with.
+const PHOTO_CATS: [string, string][] = [
+  ['FOOD_AND_DRINK', 'Food & drink'], ['INTERIOR', 'Inside'], ['EXTERIOR', 'Outside'],
+  ['TEAMS', 'Team'], ['AT_WORK', 'At work'], ['ADDITIONAL', 'Other'],
+];
+const postStory = async <T,>(body: object): Promise<T> => {
+  const r = await fetch('/api/story-photos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const d = await r.json();
+  if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
+  return d as T;
+};
 
 const label: React.CSSProperties = { fontFamily: '"stolzl", sans-serif', fontWeight: 700, fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-ink-label)' };
 const box: React.CSSProperties = { background: 'rgba(255,255,255,0.55)', borderRadius: '16px', padding: '12px 14px' };
@@ -330,8 +343,16 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   const [busy, setBusy] = useState<string | null>(null);
 
   const [lib, setLib] = useState<LibData | null>(null);
-  const [libSet, setLibSet] = useState('');
+  const [libCat, setLibCat] = useState('');
   const [libBusy, setLibBusy] = useState(false);
+  // Hand tagging: one photo at a time, saved in order (saveChain) so no tap is lost.
+  const [tagging, setTagging] = useState(false);
+  const [queue, setQueue] = useState<LibPhoto[]>([]);
+  const [queueBusy, setQueueBusy] = useState(false);
+  const [tagLeft, setTagLeft] = useState(0);
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+  const tagged = useRef<string[]>([]);
+  const autoRan = useRef(false);
   const pickedRef = useRef<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -482,13 +503,10 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   }, [bg, pan, shade, anchor, blocksKey, fontsV, clampPan]);
 
   // ── Photo library — 5 random photos at a time, like the Google tab ──
-  const loadLib = useCallback(async (set: string) => {
+  const loadLib = useCallback(async (cat: string) => {
     setLibBusy(true);
     try {
-      const r = await fetch('/api/story-photos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'browse', set, random: true }) });
-      const d: LibData = await r.json();
-      if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
-      setLib(d);
+      setLib(await postStory<LibData>({ action: 'browse', cat, random: true }));
     } catch (e) {
       setLib({ ok: false, error: e instanceof Error ? e.message : 'error' });
     } finally {
@@ -530,7 +548,63 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
     if (!lib?.photos?.length) return;
     pickPhoto(lib.photos[Math.floor(Math.random() * lib.photos.length)]);
   }
-  const shuffle = () => loadLib(libSet);
+  const shuffle = () => loadLib(libCat);
+  const chooseCat = (cat: string) => { setLibCat(cat); loadLib(cat); };
+
+  // ── Category tagging ──
+  const fetchQueue = useCallback(async () => {
+    setQueueBusy(true);
+    try {
+      const d = await postStory<QueueData>({ action: 'queue', exclude: tagged.current });
+      setQueue(d.photos ?? []);
+      setTagLeft(d.remaining ?? 0);
+      if (!d.photos?.length) setTagging(false); // nothing left to tag
+    } catch (e) {
+      setMsg(`Couldn’t load photos to tag: ${e instanceof Error ? e.message : 'error'}`);
+      setTagging(false);
+    } finally {
+      setQueueBusy(false);
+    }
+  }, []);
+
+  function startTagging() { setTagging(true); setQueue([]); fetchQueue(); }
+
+  function finishTagging() {
+    setTagging(false);
+    saveChain.current.then(() => loadLib(libCat));
+  }
+
+  function tagPhoto(cat: string) {
+    const p = queue[0];
+    if (!p) return;
+    tagged.current.push(p.id);
+    saveChain.current = saveChain.current
+      .then(() => postStory({ action: 'tag', tags: { [p.id]: cat } }))
+      .catch(() => setMsg('A tag didn’t save — it’ll come back round next time.'));
+    const left = tagLeft - 1;
+    setTagLeft(left);
+    setQueue(q => q.slice(1));
+    if (left <= 0) {
+      setMsg('All photos tagged ✓ — Claude will tag new photos from now on.');
+      finishTagging();
+    } else if (queue.length === 1) {
+      saveChain.current.then(fetchQueue);   // batch used up — next 6 once the saves land
+    }
+  }
+
+  // Once the backlog is done (auto on), Claude tags new arrivals when the tab opens.
+  useEffect(() => {
+    if (!lib?.auto || !lib.untagged || autoRan.current) return;
+    autoRan.current = true;
+    (async () => {
+      for (let i = 0; i < 4; i++) {          // up to 32 photos per visit
+        try {
+          const d = await postStory<{ remaining?: number; saved?: number }>({ action: 'autotag' });
+          if (!d.saved || !d.remaining) break;
+        } catch { break; }
+      }
+    })();
+  }, [lib]);
 
   // ── Drag to reposition ──
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -716,10 +790,41 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
           </div>
         </div>
 
+        {tagging && (
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="w-full sm:w-[240px] aspect-square rounded-3xl overflow-hidden shrink-0" style={{ ...glassTileStyle, padding: 0 }}>
+              {queue[0]?.thumb
+                // eslint-disable-next-line @next/next/no-img-element -- data-URI thumbnail from Apps Script
+                ? <img src={queue[0].thumb} alt={queue[0].name} className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center text-sm" style={{ color: 'var(--color-ink-muted)' }}>{queueBusy ? 'Loading…' : queue[0]?.name ?? ''}</div>}
+            </div>
+            <div className="flex-1 flex flex-col gap-2">
+              <div style={label}>Which category? · {tagLeft} left</div>
+              <div className="grid grid-cols-2 gap-2">
+                {PHOTO_CATS.map(([k, v]) => (
+                  <button key={k} style={ghost} disabled={!queue[0] || queueBusy} onClick={() => tagPhoto(k)}>{v}</button>
+                ))}
+              </div>
+              <button style={ghost} className="self-start mt-1" onClick={finishTagging}>Done for now</button>
+            </div>
+          </div>
+        )}
+
+        {!tagging && lib && !lib.fallback && !lib.auto && (lib.untagged ?? 0) > 0 && (
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-sm" style={{ color: 'var(--color-ink-label)' }}>{lib.untagged} photos need a category</span>
+            <button style={btn} onClick={startTagging}><Tags size={13} strokeWidth={2.25} aria-hidden />Tag photos</button>
+          </div>
+        )}
+
         {lib?.ok === false && <div className="text-sm" style={{ color: 'var(--color-danger-deep)' }}>Couldn’t load photos: {lib.error}</div>}
         {!lib && libBusy && <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>Picking 5 photos…</div>}
 
-        {lib?.photos && lib.photos.length > 0 && (
+        {!tagging && lib?.ok !== false && libCat && lib?.photos?.length === 0 && (
+          <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>No photos tagged {PHOTO_CATS.find(([k]) => k === libCat)?.[1]} yet.</div>
+        )}
+
+        {!tagging && lib?.photos && lib.photos.length > 0 && (
           <div className="grid grid-cols-5 gap-2" style={{ opacity: libBusy ? 0.5 : 1 }}>
             {lib.photos.map(p => {
               const on = photo?.id === p.id;
@@ -737,11 +842,11 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
           </div>
         )}
 
-        {lib?.sets && lib.sets.length > 1 && (
+        {!tagging && lib && !lib.fallback && (
           <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 py-1">
-            <button onClick={() => { setLibSet(''); loadLib(''); }} style={chip(libSet === '')}>All</button>
-            {lib.sets.map(s => (
-              <button key={s.name} onClick={() => { setLibSet(s.name); loadLib(s.name); }} style={chip(libSet === s.name)}>{s.name}</button>
+            <button onClick={() => chooseCat('')} style={chip(libCat === '')}>All</button>
+            {PHOTO_CATS.map(([k, v]) => (
+              <button key={k} onClick={() => chooseCat(k)} style={chip(libCat === k)}>{v}</button>
             ))}
           </div>
         )}

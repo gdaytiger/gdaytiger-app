@@ -5,8 +5,14 @@
 //  gallery), but browsable: every photo, including ones already posted to
 //  Google (stories don't care), minus anything hidden with × in the Google tile.
 //
-//    storyBrowse { set?, page?, pageSize?, random? } → { ok, sets:[{name,count}], photos:[{id,name,set,thumb}], page, pages, total }
-//    storyImage  { id, size? }              → { ok, id, dataUri }   (~1920px JPEG for the 1080×1920 canvas)
+//    storyBrowse   { set?, cat?, page?, pageSize?, random? } → { ok, sets, photos:[{id,name,set,tag,thumb}], page, pages, total, untagged, auto, cats }
+//    storyImage    { id, size? }                → { ok, id, dataUri }   (~1920px JPEG for the 1080×1920 canvas)
+//    storyTagQueue { count?, size?, exclude? }  → { ok, photos:[{id,name,set,thumb}], remaining, auto }  — untagged photos
+//    storyTag      { tags: {id: CATEGORY} }     → { ok, saved, remaining, auto }
+//
+//  Categories are Google's photo categories, stored per photo in the `story_photo_tags`
+//  block on the OS page. Jono tags the backlog by hand in TIGER OS; once nothing is
+//  left untagged `auto` flips on and TIGER OS has Claude tag new arrivals.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function gbpStoryBrowse_(p) {
@@ -21,7 +27,15 @@ function gbpStoryBrowse_(p) {
   all.forEach(function (x) { counts[x.set] = (counts[x.set] || 0) + 1; });
   var sets = Object.keys(counts).sort().map(function (n) { return { name: n, count: counts[n] }; });
 
+  var ts = gbpStoryTagState_();
+  var untagged = 0, cats = {};
+  all.forEach(function (x) {
+    x.tag = ts.tags[x.id] || null;
+    if (x.tag) cats[x.tag] = (cats[x.tag] || 0) + 1; else untagged++;
+  });
+
   var list = p.set ? all.filter(function (x) { return x.set === p.set; }) : all;
+  if (p.cat) list = list.filter(function (x) { return x.tag === p.cat; });
   if (p.random) {                                // Story tab: a fresh random handful each time
     for (var i = list.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = list[i]; list[i] = list[j]; list[j] = t; }
   } else {
@@ -39,7 +53,8 @@ function gbpStoryBrowse_(p) {
 
   return {
     ok: true, sets: sets, total: list.length, page: page, pages: pages,
-    photos: slice.map(function (x, i) { return { id: x.id, name: x.name, set: x.set, thumb: thumbs[i] }; })
+    untagged: untagged, auto: ts.auto, cats: cats,
+    photos: slice.map(function (x, i) { return { id: x.id, name: x.name, set: x.set, tag: x.tag, thumb: thumbs[i] }; })
   };
 }
 
@@ -93,4 +108,62 @@ function gbpStoryInPool_(id) {
     }
   } catch (e) { /* not found / no access */ }
   return false;
+}
+
+// ─── Category tags ───────────────────────────────────────────────────────────
+var STORY_CATS = ['FOOD_AND_DRINK', 'INTERIOR', 'EXTERIOR', 'TEAMS', 'AT_WORK', 'ADDITIONAL'];
+
+function gbpStoryTagState_() {
+  var s = gbpReadOsBlock_('story_photo_tags') || {};
+  return { tags: s.tags || {}, auto: !!s.auto };
+}
+
+// Untagged, not-hidden pool photos in a stable order (set, then name).
+function gbpStoryUntagged_(ts) {
+  gbpUnpackPool();
+  var hidden = {};
+  gbpPoolState_().hidden.forEach(function (id) { hidden[id] = true; });
+  return gbpPoolPhotos_()
+    .filter(function (x) { return !hidden[x.id] && !ts.tags[x.id]; })
+    .sort(function (a, b) {
+      if (a.set !== b.set) return a.set < b.set ? -1 : 1;
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
+}
+
+function gbpStoryTagQueue_(p) {
+  p = p || {};
+  var ts = gbpStoryTagState_();
+  var skip = {};
+  (p.exclude || []).forEach(function (id) { skip[id] = true; });
+  var list = gbpStoryUntagged_(ts).filter(function (x) { return !skip[x.id]; });
+  var n = Math.min(Math.max(Number(p.count) || 6, 1), 12);
+  var px = Math.min(Math.max(Number(p.size) || 600, 200), 1000);
+  var slice = list.slice(0, n);
+  var thumbs = gbpStoryThumbs_(slice.map(function (x) { return x.id; }), px);
+  return {
+    ok: true, remaining: list.length, auto: ts.auto,
+    photos: slice.map(function (x, i) { return { id: x.id, name: x.name, set: x.set, thumb: thumbs[i] }; })
+  };
+}
+
+function gbpStoryTag_(p) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);                         // tags arrive one tap at a time — don't lose any
+  try {
+    var ts = gbpStoryTagState_();
+    var saved = 0;
+    var tags = (p && p.tags) || {};
+    Object.keys(tags).forEach(function (id) {
+      if (STORY_CATS.indexOf(tags[id]) < 0 || !/^[\w-]{10,100}$/.test(id)) return;
+      ts.tags[id] = tags[id];
+      saved++;
+    });
+    var remaining = gbpStoryUntagged_(ts).length;
+    if (!remaining) ts.auto = true;             // backlog done by hand → Claude takes new arrivals
+    gbpWriteOsBlock_('story_photo_tags', { tags: ts.tags, auto: ts.auto, updated: new Date().toISOString() });
+    return { ok: true, saved: saved, remaining: remaining, auto: ts.auto };
+  } finally {
+    lock.releaseLock();
+  }
 }
