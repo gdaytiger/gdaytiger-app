@@ -43,3 +43,44 @@ export const glassDangerStyle: CSSProperties = {
   border: 'var(--glass-border)',
   boxShadow: 'var(--glass-shadow-soft)',
 };
+
+// ── Universal button ─────────────────────────────────────────────────────────
+// Same frosted surface as the Daily To Do tiles (62px), at half the height.
+// Label: Stolzl bold, capitals, wide tracking — like the launcher tile titles.
+// Spread `glassButtonStyle`, then add `glassButtonActiveStyle` for a selected
+// chip or `glassButtonPrimaryStyle` for the main action (Save / Share).
+export const BUTTON_H = 31;
+
+export const glassButtonStyle: CSSProperties = {
+  ...glassTileStyle,
+  height: `${BUTTON_H}px`,
+  padding: '0 14px',
+  borderRadius: '12px',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '6px',
+  flexShrink: 0,
+  whiteSpace: 'nowrap',
+  fontFamily: '"stolzl", sans-serif',
+  fontWeight: 700,
+  fontSize: '11px',
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
+  color: 'var(--color-ink-label)',
+  cursor: 'pointer',
+};
+
+// Selected state — the peach outline + ring the launcher tiles use when open.
+export const glassButtonActiveStyle: CSSProperties = {
+  border: '1.5px solid var(--color-brand-peach)',
+  boxShadow: 'var(--glass-shadow), var(--glass-ring)',
+  color: 'var(--color-brand-bark)',
+};
+
+// Main action — peach-tinted glass.
+export const glassButtonPrimaryStyle: CSSProperties = {
+  background: 'var(--glass-fill-peach)',
+  border: '1.5px solid var(--color-brand-peach)',
+  color: 'var(--color-brand-bark)',
+};

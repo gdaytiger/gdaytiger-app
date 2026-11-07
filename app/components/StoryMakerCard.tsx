@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, ImagePlus, RotateCcw, Share2, Shuffle } from 'lucide-react';
-import { glassTileStyle } from '@/app/lib/theme';
+import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // Story Maker — TigerOS replacement for Adobe Express on the morning Instagram story.
 // 1080×1920 canvas in brand type (Stolzl Bold + Bodoni PT Bold Italic — the TIGER OS header face — both from the
@@ -58,7 +58,7 @@ const TEMPLATES: Template[] = [
   ] },
   { id: 'sunday', name: 'Sundays', blocks: [
     HEAD,
-    { kind: 'sub', label: 'Sunday hours', text: SUNDAY_HOURS_DEFAULT, key: 'sundayHours' },
+    { kind: 'sub', label: 'Hours', text: SUNDAY_HOURS_DEFAULT, key: 'sundayHours' },
   ] },
   { id: 'special', name: 'Special', blocks: [
     HEAD, HOURS,
@@ -245,9 +245,9 @@ type LibData = { ok: boolean; sets?: { name: string; count: number }[]; photos?:
 
 const label: React.CSSProperties = { fontFamily: '"stolzl", sans-serif', fontWeight: 700, fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-ink-label)' };
 const box: React.CSSProperties = { background: 'rgba(255,255,255,0.55)', borderRadius: '16px', padding: '12px 14px' };
-const btn: React.CSSProperties = { padding: '8px 14px', borderRadius: '999px', background: 'var(--color-brand-peach)', color: '#333', fontWeight: 700, fontSize: '13px', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' };
-const ghost: React.CSSProperties = { ...btn, background: 'rgba(0,0,0,0.05)', color: 'var(--color-ink-label)' };
-const chip = (on: boolean): React.CSSProperties => (on ? { background: 'var(--color-brand-peach)', color: '#333' } : { background: 'rgba(0,0,0,0.05)', color: 'var(--color-ink-label)' });
+const btn: React.CSSProperties = { ...glassButtonStyle, ...glassButtonPrimaryStyle };
+const ghost: React.CSSProperties = glassButtonStyle;
+const chip = (on: boolean): React.CSSProperties => (on ? { ...glassButtonStyle, ...glassButtonActiveStyle } : glassButtonStyle);
 const field: React.CSSProperties = { background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.1)' };
 
 type Photo = { img: HTMLImageElement; id: string | null; name: string; hiRes: boolean };
@@ -515,9 +515,9 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   return (
     <div className="flex flex-col gap-4">
       {/* Templates */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 py-1">
         {TEMPLATES.map(t => (
-          <button key={t.id} onClick={() => chooseTemplate(t)} className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap" style={chip(t.id === tplId)}>{t.name}</button>
+          <button key={t.id} onClick={() => chooseTemplate(t)} style={chip(t.id === tplId)}>{t.name}</button>
         ))}
       </div>
 
@@ -542,11 +542,11 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
           <div className="flex gap-2 flex-wrap justify-center">
             {canShare && (
               <button style={btn} disabled={!!busy && busy !== 'photo'} onClick={() => exportStory(true)}>
-                <Share2 size={14} strokeWidth={2.25} aria-hidden />{busy === 'share' ? 'Sharing…' : 'Share'}
+                <Share2 size={13} strokeWidth={2.25} aria-hidden />{busy === 'share' ? 'Sharing…' : 'Share'}
               </button>
             )}
             <button style={canShare ? ghost : btn} disabled={!!busy && busy !== 'photo'} onClick={() => exportStory(false)}>
-              <Download size={14} strokeWidth={2.25} aria-hidden />{busy === 'save' ? 'Saving…' : 'Save JPG'}
+              <Download size={13} strokeWidth={2.25} aria-hidden />{busy === 'save' ? 'Saving…' : 'Save JPG'}
             </button>
           </div>
         </div>
@@ -556,8 +556,8 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
           <div style={box} className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div style={label}>Text</div>
-              <button onClick={resetTemplate} className="text-[11px] font-semibold inline-flex items-center gap-1" style={{ color: 'var(--color-ink-muted)' }} title="Back to the template's default text">
-                <RotateCcw size={11} strokeWidth={2.25} aria-hidden />Reset
+              <button onClick={resetTemplate} style={ghost} title="Back to the template's default text">
+                <RotateCcw size={13} strokeWidth={2.25} aria-hidden />Reset
               </button>
             </div>
             {tpl.blocks.map((b, i) => (
@@ -581,7 +581,7 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
             <div style={label}>Look</div>
             <div className="flex gap-2">
               {(['top', 'bottom'] as const).map(a => (
-                <button key={a} onClick={() => setAnchor(a)} className="text-xs font-semibold px-3 py-1.5 rounded-full" style={chip(anchor === a)}>{a === 'top' ? 'Text top' : 'Text bottom'}</button>
+                <button key={a} onClick={() => setAnchor(a)} style={chip(anchor === a)}>{a === 'top' ? 'Text top' : 'Text bottom'}</button>
               ))}
             </div>
             <Slider name="Blur" value={blur} min={0} max={60} step={2} onChange={setBlur} />
@@ -598,17 +598,17 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div style={label}>Photos from G’Day Tigers album {lib?.total != null && !lib.fallback ? `(${lib.total})` : ''}</div>
           <div className="flex gap-2">
-            <button style={ghost} onClick={randomPhoto} disabled={!lib?.photos?.length} title="Pick a random photo from this page"><Shuffle size={14} strokeWidth={2.25} aria-hidden />Random</button>
-            <button style={ghost} onClick={() => fileRef.current?.click()}><ImagePlus size={14} strokeWidth={2.25} aria-hidden />Upload</button>
+            <button style={ghost} onClick={randomPhoto} disabled={!lib?.photos?.length} title="Pick a random photo from this page"><Shuffle size={13} strokeWidth={2.25} aria-hidden />Random</button>
+            <button style={ghost} onClick={() => fileRef.current?.click()}><ImagePlus size={13} strokeWidth={2.25} aria-hidden />Upload</button>
             <input ref={fileRef} type="file" accept="image/*" onChange={onUpload} className="hidden" />
           </div>
         </div>
 
         {lib?.sets && lib.sets.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            <button onClick={() => { setLibSet(''); loadLib('', 0); }} className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap" style={chip(libSet === '')}>All</button>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 py-1">
+            <button onClick={() => { setLibSet(''); loadLib('', 0); }} style={chip(libSet === '')}>All</button>
             {lib.sets.map(s => (
-              <button key={s.name} onClick={() => { setLibSet(s.name); loadLib(s.name, 0); }} className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap" style={chip(libSet === s.name)}>{s.name} · {s.count}</button>
+              <button key={s.name} onClick={() => { setLibSet(s.name); loadLib(s.name, 0); }} style={chip(libSet === s.name)}>{s.name} · {s.count}</button>
             ))}
           </div>
         )}
@@ -638,12 +638,12 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
         {lib && !lib.fallback && (lib.pages ?? 1) > 1 && (
           <div className="flex items-center justify-between gap-2">
             <button style={ghost} disabled={libBusy || (lib.page ?? 0) === 0} onClick={() => loadLib(libSet, (lib.page ?? 0) - 1)}>‹ Prev</button>
-            <button style={ghost} disabled={libBusy} onClick={shufflePage}><Shuffle size={14} strokeWidth={2.25} aria-hidden />Shuffle</button>
+            <button style={ghost} disabled={libBusy} onClick={shufflePage}><Shuffle size={13} strokeWidth={2.25} aria-hidden />Shuffle</button>
             <span className="text-[11px] tabular-nums" style={{ color: 'var(--color-ink-muted)' }}>{(lib.page ?? 0) + 1} / {lib.pages}</span>
             <button style={ghost} disabled={libBusy || (lib.page ?? 0) >= (lib.pages ?? 1) - 1} onClick={() => loadLib(libSet, (lib.page ?? 0) + 1)}>Next ›</button>
           </div>
         )}
-        {lib?.fallback && <button style={ghost} className="self-start" disabled={libBusy} onClick={() => loadLib('', 0)}><Shuffle size={14} strokeWidth={2.25} aria-hidden />{libBusy ? 'Loading…' : 'Shuffle'}</button>}
+        {lib?.fallback && <button style={ghost} className="self-start" disabled={libBusy} onClick={() => loadLib('', 0)}><Shuffle size={13} strokeWidth={2.25} aria-hidden />{libBusy ? 'Loading…' : 'Shuffle'}</button>}
       </div>
     </div>
   );
