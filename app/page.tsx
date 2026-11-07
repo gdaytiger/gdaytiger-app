@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSunRain, CloudLightning, Thermometer, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, GalleryVerticalEnd, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -13,6 +13,7 @@ import { CSS } from '@dnd-kit/utilities';
 import AddIngredientModal from './components/AddIngredientModal';
 import MorningCard from './components/MorningCard';
 import GoogleReviewsCard from './components/GoogleReviewsCard';
+import StoryMakerCard from './components/StoryMakerCard';
 import WeeklyFlashCard, { type WeeklyFlashData, type FlashExtrasData } from './components/WeeklyFlashCard';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
 import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle } from './lib/theme';
@@ -117,10 +118,10 @@ const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
 // ── Widget icons (Lucide) ────────────────────────────────────────────────────
 // One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
 // falls back to ~56% of the chip. Colour: neutral grey (--color-ink-label).
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings' | 'story';
 
 const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
-  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt,
+  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt, story: GalleryVerticalEnd,
 };
 
 function WidgetIcon({ name, chip = 28, glyph }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -2399,7 +2400,7 @@ export default function Home() {
   // Tapping the 5am push opens /?open=morning — jump straight to the Morning card.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get('open');
-    if (p === 'morning' || p === 'google') { window.history.replaceState(null, '', '/'); setTimeout(() => setOpenWidgets(new Set([p])), 0); }
+    if (p === 'morning' || p === 'google' || p === 'story') { window.history.replaceState(null, '', '/'); setTimeout(() => setOpenWidgets(new Set([p])), 0); }
   }, []);
   // Used by the Daily To Do shopping link row — opens the Shopping sheet.
   const openShoppingWidget = () => {
@@ -3283,6 +3284,7 @@ export default function Home() {
           <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="Tiger OS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
           <LauncherTile icon={<WidgetIcon name="google" chip={48} glyph={26} />} title="Google" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('google')} onClick={() => toggleWidget('google')} />
+          <LauncherTile icon={<WidgetIcon name="story" chip={48} glyph={26} />} title="Daily Story" active={openWidgets.has('story')} onClick={() => toggleWidget('story')} />
         </LauncherGrid>
 
         </div>{/* end stable grid */}
@@ -3379,6 +3381,13 @@ export default function Home() {
         <div style={{ display: openWidgets.has('google') ? 'block' : 'none' }}>
           <Card bare icon={<WidgetIcon name="google" chip={28} glyph={17} />} title="Google" onCollapse={() => toggleWidget('google')}>
             <GoogleReviewsCard active={openWidgets.has('google')} onCount={setGooglePending} />
+          </Card>
+        </div>
+
+        {/* DAILY STORY — Instagram story maker (replaces Adobe Express): templates, brand fonts, Paul's photos */}
+        <div style={{ display: openWidgets.has('story') ? 'block' : 'none' }}>
+          <Card bare icon={<WidgetIcon name="story" chip={28} glyph={17} />} title="Daily Story" onCollapse={() => toggleWidget('story')}>
+            <StoryMakerCard active={openWidgets.has('story')} />
           </Card>
         </div>
 
