@@ -94,9 +94,14 @@ function FromToggle({ from, onChange, verb }: { from: Venue; onChange: (v: Venue
   );
 }
 
+const tabFoot = (value: number, items: number) => (
+  <>TAB <span className="font-semibold tabular-nums" style={{ color: 'var(--color-ink-label)' }}>{money(value)}</span>
+    {items > 0 && <div>{items} item{items === 1 ? '' : 's'}</div>}</>
+);
+
 // Venue column in Log Stock: name, − n + counter (how many that venue RECEIVED), and its current tab.
-function VenueCounter({ venue, count, onChange, tab, items }: {
-  venue: Venue; count: number; onChange: (n: number) => void; tab: number; items: number;
+function VenueCounter({ venue, count, onChange, foot }: {
+  venue: Venue; count: number; onChange: (n: number) => void; foot: React.ReactNode;
 }) {
   const on = count > 0;
   const step: React.CSSProperties = { ...glassButtonStyle, padding: 0, width: '31px', justifyContent: 'center', flexShrink: 0 };
@@ -115,10 +120,7 @@ function VenueCounter({ venue, count, onChange, tab, items }: {
           <Plus size={13} strokeWidth={2.5} aria-hidden />
         </button>
       </div>
-      <div className="text-xs text-gray-400 leading-tight">
-        TAB <span className="font-semibold tabular-nums" style={{ color: 'var(--color-ink-label)' }}>{money(tab)}</span>
-        {items > 0 && <div>{items} item{items === 1 ? '' : 's'}</div>}
-      </div>
+      <div className="text-xs text-gray-400 leading-tight">{foot}</div>
     </div>
   );
 }
@@ -256,9 +258,9 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
       <div className="flex flex-col gap-2 p-3 rounded-2xl" style={glassTileStyle}>
         <div style={label}>Log stock</div>
         <div className="grid gap-2 items-stretch" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,2fr) minmax(0,1fr)' }}>
-          <VenueCounter venue="GDT" count={got.GDT} onChange={n => setGot(g => ({ ...g, GDT: n }))} tab={tabs.GDT.value} items={tabs.GDT.items} />
+          <VenueCounter venue="GDT" count={got.GDT} onChange={n => setGot(g => ({ ...g, GDT: n }))} foot={tabFoot(tabs.GDT.value, tabs.GDT.items)} />
           {/* Product */}
-          <div className="flex flex-col gap-2 justify-center min-w-0">
+          <div className="flex flex-col gap-2 justify-center min-w-0 [&>*]:flex-none">
             <button type="button" onClick={pickGelato} className="self-center" style={chip(category === 'Gelato')} title={data.gelato ? `Gelato ${money(data.gelato.price)} / ${data.gelato.unit}` : 'Set the gelato price first'}>
               <IceCreamCone size={13} strokeWidth={2.25} aria-hidden /> GELATO
             </button>
@@ -270,7 +272,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
               {unit && <span className="text-xs text-gray-400 truncate">/ {unit}</span>}
             </div>
           </div>
-          <VenueCounter venue="ISOLA" count={got.ISOLA} onChange={n => setGot(g => ({ ...g, ISOLA: n }))} tab={tabs.ISOLA.value} items={tabs.ISOLA.items} />
+          <VenueCounter venue="ISOLA" count={got.ISOLA} onChange={n => setGot(g => ({ ...g, ISOLA: n }))} foot={tabFoot(tabs.ISOLA.value, tabs.ISOLA.items)} />
         </div>
         <div className="flex gap-2 items-center">
           <span className="text-xs text-gray-400 tabular-nums">
@@ -314,16 +316,24 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
 
 // ── Part 2: CLEAN TRANSACTIONS ──
 function CleanPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>) => Promise<void> }) {
-  const [lender, setLender] = useState<Venue>(data.venue);
+  // Counters = how many each venue BORROWED (G'Day borrows milk from Isola → G'Day's counter).
+  const [got, setGot] = useState<Record<Venue, number>>({ GDT: 0, ISOLA: 0 });
   const [item, setItem] = useState('');
-  const [qty, setQty] = useState('1');
   const [note, setNote] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [showSquared, setShowSquared] = useState(false);
 
   const open = data.clean.filter(r => r.status !== 'Squared');
   const squared = data.clean.filter(r => r.status === 'Squared');
-  const canAdd = item.trim() && Number(qty) > 0;
+  const canAdd = item.trim() && (got.GDT > 0 || got.ISOLA > 0);
+  const owes = (v: Venue) => open.filter(r => r.from === other(v)).length;
+  const addAll = async () => {
+    for (const v of ['GDT', 'ISOLA'] as Venue[]) {
+      if (got[v] > 0) await api('POST', { section: 'Clean', from: other(v), item, qty: got[v], note });
+    }
+    setItem(''); setGot({ GDT: 0, ISOLA: 0 }); setNote('');
+  };
+  const oweFoot = (v: Venue) => { const n = owes(v); return n ? <>OWES <span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{n}</span> open</> : 'ALL SQUARE'; };
 
   const renderRow = (r: Row) => {
     if (editing === r.id) {
@@ -360,14 +370,20 @@ function CleanPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>
       </div>
 
       <div className="flex flex-col gap-2 p-3 rounded-2xl" style={glassTileStyle}>
-        <div style={label}>Borrowed — lent by</div>
-        <FromToggle from={lender} onChange={setLender} verb="lent" />
-        <ItemSearch catalogue={data.catalogue} value={item} onChange={v => setItem(v.toUpperCase())} onPick={c => setItem(c.name.toUpperCase())} />
+        <div style={label}>Borrowed</div>
+        <div className="grid gap-2 items-stretch" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,2fr) minmax(0,1fr)' }}>
+          <VenueCounter venue="GDT" count={got.GDT} onChange={n => setGot(g => ({ ...g, GDT: n }))} foot={oweFoot('GDT')} />
+          <div className="flex flex-col gap-2 justify-center min-w-0 [&>*]:flex-none">
+            <ItemSearch catalogue={data.catalogue} value={item} onChange={v => setItem(v.toUpperCase())} onPick={c => setItem(c.name.toUpperCase())} />
+            <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)" className={`${inputClass} w-full min-w-0`} style={input} aria-label="Note" />
+          </div>
+          <VenueCounter venue="ISOLA" count={got.ISOLA} onChange={n => setGot(g => ({ ...g, ISOLA: n }))} foot={oweFoot('ISOLA')} />
+        </div>
         <div className="flex gap-2 items-center">
-          <input type="number" inputMode="decimal" min={0} value={qty} onChange={e => setQty(e.target.value)} className={`${inputClass} w-20 text-center`} style={input} aria-label="Qty" />
-          <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)" className={`${inputClass} flex-1 min-w-0`} style={input} aria-label="Note" />
-          <button type="button" disabled={!canAdd} className="disabled:opacity-40" style={BTN_PRIMARY}
-            onClick={() => run(async () => { await api('POST', { section: 'Clean', from: lender, item, qty: Number(qty), note }); setItem(''); setQty('1'); setNote(''); })}>
+          <span className="text-xs text-gray-400 tabular-nums">
+            {got.GDT > 0 && `G'Day borrows ${got.GDT}`}{got.GDT > 0 && got.ISOLA > 0 && ' · '}{got.ISOLA > 0 && `Isola borrows ${got.ISOLA}`}
+          </span>
+          <button type="button" disabled={!canAdd} className="ml-auto disabled:opacity-40" style={BTN_PRIMARY} onClick={() => run(addAll)}>
             ADD
           </button>
         </div>
