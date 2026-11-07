@@ -119,31 +119,42 @@ type Line = { text: string; font: string; peach: boolean; x: number; y: number }
 
 function layoutText(ctx: CanvasRenderingContext2D, blocks: { kind: Kind; text: string; gap?: number }[], anchor: 'top' | 'bottom', fontsV: number): Line[] {
   const lines: Line[] = [];
+  const clean = (t: string) => t.toUpperCase().replace(/\s+$/, '');
+
+  // Pass 1 — one scale per text style. If any line of a style is too wide (fit styles),
+  // or a typed line is only a little too wide (others — much wider ones word-wrap),
+  // every block in that style shrinks by the same amount so they all match.
+  const scaleOf: Partial<Record<Kind, number>> = {};
+  for (const b of blocks) {
+    const raw = clean(b.text);
+    if (!raw.trim()) continue;
+    const k = KIND[b.kind];
+    const maxW = W - k.x - 16;
+    ctx.font = fontFor(k.serif, k.cap / capRatio(ctx, k.serif, fontsV));
+    const paras = k.fit ? [raw.replace(/\n+/g, ' ')] : raw.split('\n');
+    let s = scaleOf[b.kind] ?? 1;
+    for (const para of paras) {
+      const w = ctx.measureText(para.trim()).width;
+      if (w > maxW && (k.fit || w <= maxW * 1.15)) s = Math.min(s, (maxW - 2) / w); // -2: font size is rounded to 0.1px
+    }
+    scaleOf[b.kind] = s;
+  }
+
+  // Pass 2 — lay out.
   let y = 0;
   let first = true;
   for (const b of blocks) {
-    const raw = b.text.toUpperCase().replace(/\s+$/, '');
+    const raw = clean(b.text);
     if (!raw.trim()) continue;
     const k = KIND[b.kind];
     const ratio = capRatio(ctx, k.serif, fontsV);
-    let size = k.cap / ratio;
+    const size = (k.cap / ratio) * (scaleOf[b.kind] ?? 1);
     const maxW = W - k.x - 16;
     ctx.font = fontFor(k.serif, size);
     let rows: string[] = [];
     if (k.fit) {
-      const one = raw.replace(/\n+/g, ' ');
-      const w = ctx.measureText(one).width;
-      if (w > maxW) size *= maxW / w;
-      rows = [one];
+      rows = [raw.replace(/\n+/g, ' ')];
     } else {
-      // A typed line that's only a little too wide shrinks the whole block (keeps the
-      // line breaks you typed); anything much wider word-wraps instead.
-      let scale = 1;
-      for (const para of raw.split('\n')) {
-        const w = ctx.measureText(para.trim()).width;
-        if (w > maxW && w <= maxW * 1.15) scale = Math.min(scale, (maxW - 2) / w); // -2: font size is rounded to 0.1px
-      }
-      if (scale < 1) { size *= scale; ctx.font = fontFor(k.serif, size); }
       for (const para of raw.split('\n')) {
         if (!para.trim()) { rows.push(''); continue; }
         let cur = '';
