@@ -5,7 +5,7 @@ import { Download, ImagePlus, RotateCcw, Share2, Shuffle } from 'lucide-react';
 import { glassTileStyle } from '@/app/lib/theme';
 
 // Story Maker — TigerOS replacement for Adobe Express on the morning Instagram story.
-// 1080×1920 canvas in brand type (Stolzl Bold + Bodoni PT Italic, both from the
+// 1080×1920 canvas in brand type (Stolzl Bold + Bodoni PT Bold Italic — the TIGER OS header face — both from the
 // Typekit kit in layout.tsx) and brand peach (--color-brand-peach). Photos come
 // from the same Drive pool as the Google tile (Paul's gallery) via
 // /api/story-photos, or straight from the phone. Layout numbers (cap heights,
@@ -102,7 +102,7 @@ function loadStore(): Store {
 }
 
 // ── Canvas helpers ────────────────────────────────────────────────────────────
-const fontFor = (serif: boolean, px: number) => (serif ? `italic 400 ${px.toFixed(1)}px ${SERIF}` : `700 ${px.toFixed(1)}px ${SANS}`);
+const fontFor = (serif: boolean, px: number) => (serif ? `italic 700 ${px.toFixed(1)}px ${SERIF}` : `700 ${px.toFixed(1)}px ${SANS}`);
 
 const capCache = new Map<string, number>();
 function capRatio(ctx: CanvasRenderingContext2D, serif: boolean, v: number): number {
@@ -136,6 +136,14 @@ function layoutText(ctx: CanvasRenderingContext2D, blocks: { kind: Kind; text: s
       if (w > maxW) size *= maxW / w;
       rows = [one];
     } else {
+      // A typed line that's only a little too wide shrinks the whole block (keeps the
+      // line breaks you typed); anything much wider word-wraps instead.
+      let scale = 1;
+      for (const para of raw.split('\n')) {
+        const w = ctx.measureText(para.trim()).width;
+        if (w > maxW && w <= maxW * 1.15) scale = Math.min(scale, (maxW - 2) / w); // -2: font size is rounded to 0.1px
+      }
+      if (scale < 1) { size *= scale; ctx.font = fontFor(k.serif, size); }
       for (const para of raw.split('\n')) {
         if (!para.trim()) { rows.push(''); continue; }
         let cur = '';
