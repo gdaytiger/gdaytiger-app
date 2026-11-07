@@ -62,26 +62,52 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [poolCat, setPoolCat] = useState('FOOD_AND_DRINK');
 
+  // Next 5, fetched in the background so Shuffle is instant.
+  const [nextPool, setNextPool] = useState<PoolSuggestion | null>(null);
+
+  const fetchPool = useCallback(async (exclude: string[]): Promise<PoolSuggestion> => {
+    const r = await fetch('/api/google-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'poolSuggest', exclude }) });
+    const d = await r.json();
+    if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
+    return d as PoolSuggestion;
+  }, []);
+
+  const prefetchNext = useCallback((exclude: string[]) => {
+    setNextPool(null);
+    fetchPool(exclude).then(setNextPool).catch(() => {});
+  }, [fetchPool]);
+
   const loadPool = useCallback(async (exclude: string[] = []) => {
     setPoolBusy('load');
     try {
-      const r = await fetch('/api/google-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'poolSuggest', exclude }) });
-      const d = await r.json();
-      if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
-      setPool(d as PoolSuggestion);
+      const d = await fetchPool(exclude);
+      setPool(d);
       setPicked(new Set());
+      prefetchNext([...exclude, ...d.photos.map(p => p.id)]);
     } catch (e) {
       setPool({ ok: false, photos: [], remaining: 0, poolSize: 0, lastUploadAt: null, error: e instanceof Error ? e.message : 'error' });
     } finally {
       setPoolBusy(null);
     }
-  }, []);
+  }, [fetchPool, prefetchNext]);
 
+  function shuffle() {
+    const shown = pool?.photos.map(p => p.id) ?? [];
+    if (nextPool && nextPool.photos.length) {
+      setPool(nextPool);
+      setPicked(new Set());
+      prefetchNext([...shown, ...nextPool.photos.map(p => p.id)]);
+    } else {
+      loadPool(shown);
+    }
+  }
+
+  // Load as soon as TigerOS opens (this card is always mounted), not when the tile opens.
   useEffect(() => {
-    if (!active || pool || poolBusy) return;
+    if (pool || poolBusy) return;
     const t = setTimeout(() => { loadPool(); }, 0);
     return () => clearTimeout(t);
-  }, [active, pool, poolBusy, loadPool]);
+  }, [pool, poolBusy, loadPool]);
 
   async function postPicked() {
     const ids = [...picked];
@@ -234,7 +260,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
       <div style={box} className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <div style={label}>Photos from Paul’s gallery</div>
-          <button style={ghost} disabled={!!poolBusy} onClick={() => loadPool(pool?.photos.map(p => p.id) ?? [])}>{poolBusy === 'load' ? 'Loading…' : 'Shuffle'}</button>
+          <button style={ghost} disabled={!!poolBusy} onClick={shuffle}>{poolBusy === 'load' ? 'Loading…' : 'Shuffle'}</button>
         </div>
         {pool && pool.ok !== false && (
           <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>
