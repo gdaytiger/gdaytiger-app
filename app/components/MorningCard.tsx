@@ -1,5 +1,7 @@
 'use client';
 
+import { glassButtonStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
+
 import React, { useCallback, useEffect, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import type { MorningSnapshot } from '@/app/lib/morning';
@@ -14,7 +16,7 @@ const money = (n: number) => `$${Math.round(n).toLocaleString('en-AU')}`;
 const signed = (n: number | null, suffix: string) => (n == null ? null : `${n >= 0 ? '+' : ''}${n}% ${suffix}`);
 const label: React.CSSProperties = { fontFamily: '"stolzl", sans-serif', fontWeight: 700, fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-ink-label)' };
 const box: React.CSSProperties = { background: 'rgba(255,255,255,0.55)', borderRadius: '16px', padding: '12px 14px' };
-const btn: React.CSSProperties = { padding: '8px 14px', borderRadius: '999px', background: 'var(--color-brand-peach)', color: '#333', fontWeight: 700, fontSize: '13px', border: 'none' };
+const btn: React.CSSProperties = { ...glassButtonStyle, ...glassButtonPrimaryStyle };
 
 function urlB64ToUint8Array(base64: string) {
   const padded = (base64 + '='.repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
@@ -121,7 +123,7 @@ export default function MorningCard({ active }: { active: boolean }) {
         {pushState === 'on' && (
           <div className="flex items-center gap-3" style={{ marginTop: 6 }}>
             <span className="text-sm">On — arrives 5–6am daily</span>
-            <button style={btn} onClick={sendTest}>Send test</button>
+            <button style={glassButtonStyle} onClick={sendTest}>Send test</button>
           </div>
         )}
       </div>

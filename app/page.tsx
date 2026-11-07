@@ -16,7 +16,7 @@ import GoogleReviewsCard from './components/GoogleReviewsCard';
 import StoryMakerCard from './components/StoryMakerCard';
 import WeeklyFlashCard, { type WeeklyFlashData, type FlashExtrasData } from './components/WeeklyFlashCard';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
-import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle } from './lib/theme';
+import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from './lib/theme';
 import { melbNowDate } from '@/app/lib/melbTime';
 
 // Blended "True Payment Cost" — Square processing fees as a % of total revenue,
@@ -114,6 +114,10 @@ const CATEGORY_ORDER = ['ORDER', 'ADMIN', 'MAINTENANCE', 'STAFF', 'COSTING', 'ME
 // Shared "tile" look used by action items, the brain-dump capture box, and the
 // collapsible project headers so they all read as the same component.
 const TILE_STYLE: React.CSSProperties = { ...glassTileStyle };
+// Universal buttons (half-height Daily To Do tile) — see app/lib/theme.ts.
+const BTN: React.CSSProperties = glassButtonStyle;
+const BTN_PRIMARY: React.CSSProperties = { ...glassButtonStyle, ...glassButtonPrimaryStyle };
+const btnChip = (on: boolean): React.CSSProperties => (on ? { ...glassButtonStyle, ...glassButtonActiveStyle } : glassButtonStyle);
 
 // ── Widget icons (Lucide) ────────────────────────────────────────────────────
 // One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
@@ -860,7 +864,7 @@ function AddSubtaskRow({ onAdd }: { onAdd: (text: string) => void }) {
       <input value={text} onChange={e => setText(e.target.value)} autoFocus
         onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setAdding(false); setText(''); } }}
         placeholder="NEW SUBTASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-      <button onClick={submit} disabled={!text.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
+      <button onClick={submit} disabled={!text.trim()} className="disabled:opacity-40" style={BTN_PRIMARY}>Add</button>
       <button onClick={() => { setAdding(false); setText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
     </div>
   );
@@ -949,16 +953,15 @@ function RosterRow({ shift, isToday, isHighlighted, taskCount, onAdd, onSelectDa
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold shrink-0 text-gray-500 uppercase">{shift.label.split(' ')[0]}</span>
           <input ref={inputRef} value={taskText} onChange={e => setTaskText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') close(); }} placeholder="ADD TASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-          <button onClick={submit} disabled={saving || !taskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>{saving ? '...' : 'ADD'}</button>
+          <button onClick={submit} disabled={saving || !taskText.trim()} className="disabled:opacity-40" style={BTN_PRIMARY}>{saving ? '...' : 'ADD'}</button>
           <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0"><X size={18} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>
         </div>
-        <div className="flex items-center gap-1.5 overflow-x-auto pl-7" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex items-center gap-1.5 overflow-x-auto pl-7 py-1 pr-1" style={{ scrollbarWidth: 'none' }}>
           {RECURRENCE_OPTIONS.map(opt => (
             <button
               key={opt.value}
               onClick={() => setRecurrence(opt.value)}
-              className="text-[10px] uppercase font-semibold px-2 py-1 rounded-full transition-colors shrink-0 tracking-wide"
-              style={{ background: recurrence === opt.value ? 'var(--color-brand-peach)' : 'rgba(0,0,0,0.05)', color: recurrence === opt.value ? '#333' : '#999' }}
+              style={btnChip(recurrence === opt.value)}
             >
               {opt.label}
             </button>
@@ -2284,7 +2287,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
         <div className="flex items-center gap-2">
           <TigerLogo size={18} />
           <span className="text-xs font-bold tracking-widest uppercase" style={{ fontFamily: '"stolzl", sans-serif', color: 'var(--color-ink-label)' }}>TIGER OS</span>
-          <button onClick={() => setShowVer(v => !v)} className="ml-auto flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full tabular-nums transition-colors cursor-pointer" style={{ background: 'var(--color-brand-peach)', color: '#333' }} title="Tap for what's new">
+          <button onClick={() => setShowVer(v => !v)} className="ml-auto tabular-nums" style={btnChip(showVer)} title="Tap for what's new">
             {VERSION}
             <span style={{ fontSize: '8px', opacity: 0.7 }}>{showVer ? '▲' : '▼'}</span>
           </button>
@@ -2301,7 +2304,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
                 </div>
               ))}
               {COMMITS.length > 5 && (
-                <button onClick={() => setShowAllLog(v => !v)} className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors pt-0.5">
+                <button onClick={() => setShowAllLog(v => !v)} className="mt-1" style={BTN}>
                   {showAllLog ? '▲ Less' : `▼ ${COMMITS.length - 5} more`}
                 </button>
               )}
@@ -2314,7 +2317,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
       <div className="flex items-center gap-2 mb-2">
         <span className="text-[10px] font-bold tracking-widest uppercase text-gray-400">To Do</span>
         <span className="text-xs text-gray-400">{openCount} open</span>
-        <button onClick={() => { setAddingTask(true); setNewTaskText(''); }} className="ml-auto text-xs font-semibold px-2 py-1 rounded-lg transition-colors" style={{ background: 'rgba(0,0,0,0.06)', color: '#374151', fontFamily: '"stolzl", sans-serif', letterSpacing: '0.04em' }}>+ TASK</button>
+        <button onClick={() => { setAddingTask(true); setNewTaskText(''); }} className="ml-auto" style={BTN}>+ TASK</button>
       </div>
 
       {addingTask && (
@@ -2322,7 +2325,7 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
           <input value={newTaskText} onChange={e => setNewTaskText(e.target.value.toUpperCase())} autoFocus
             onKeyDown={e => { if (e.key === 'Enter') submitTask(); if (e.key === 'Escape') { setAddingTask(false); setNewTaskText(''); } }}
             placeholder="NEW TASK..." className="flex-1 min-w-0 text-sm px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-          <button onClick={submitTask} disabled={!newTaskText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
+          <button onClick={submitTask} disabled={!newTaskText.trim()} className="disabled:opacity-40" style={BTN_PRIMARY}>Add</button>
           <button onClick={() => { setAddingTask(false); setNewTaskText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
         </div>
       )}
@@ -2355,11 +2358,11 @@ function UpdateWidget({ tasks, onAddTask, onAddSubtask, onToggleSubtask, onToggl
                         <input value={newSubText} onChange={e => setNewSubText(e.target.value.toUpperCase())} autoFocus
                           onKeyDown={e => { if (e.key === 'Enter') submitSub(task.id); if (e.key === 'Escape') { setAddingSubFor(null); setNewSubText(''); } }}
                           placeholder="NEW SUBTASK..." className="flex-1 min-w-0 text-xs px-3 py-1.5 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                        <button onClick={() => submitSub(task.id)} disabled={!newSubText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold uppercase transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Add</button>
+                        <button onClick={() => submitSub(task.id)} disabled={!newSubText.trim()} className="disabled:opacity-40" style={BTN_PRIMARY}>Add</button>
                         <button onClick={() => { setAddingSubFor(null); setNewSubText(''); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0">&times;</button>
                       </div>
                     ) : (
-                      <button onClick={() => { setAddingSubFor(task.id); setNewSubText(''); }} className="text-xs text-gray-400 hover:text-gray-600 transition-colors uppercase">+ Add subtask</button>
+                      <button onClick={() => { setAddingSubFor(task.id); setNewSubText(''); }} style={BTN}>+ Add subtask</button>
                     )}
                   </div>
                 )}
@@ -3019,7 +3022,7 @@ export default function Home() {
   if (!data) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-8 text-center" style={{ background: 'linear-gradient(135deg, #f0f4ff 0%, #fef9f0 50%, #f0fff4 100%)' }}>
       <p className="text-gray-500 text-sm">Couldn&apos;t load — check your connection.</p>
-      <button onClick={() => window.location.reload()} className="text-xs uppercase tracking-widest px-5 py-2 rounded-full font-semibold" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Reload</button>
+      <button onClick={() => window.location.reload()} style={BTN_PRIMARY}>Reload</button>
     </div>
   );
 
@@ -3107,7 +3110,7 @@ export default function Home() {
           headerRight={
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-400 uppercase tracking-widest">{dailyDone}/{dailyTasks.length} Done</span>
-              {isViewingOtherDay && <button onClick={() => setSelectedDate(null)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← BACK</button>}
+              {isViewingOtherDay && <button onClick={() => setSelectedDate(null)} style={BTN}>← BACK</button>}
             </div>
           }>
           <div className="space-y-2">
@@ -3331,7 +3334,7 @@ export default function Home() {
                   <input type="number" min={1} value={newShoppingQty} onChange={e => setNewShoppingQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
                     onKeyDown={e => { if (e.key === 'Enter') addShopping(newShoppingText, newShoppingQty); }}
                     aria-label="Quantity" title="Quantity" className="w-12 text-sm text-center px-1 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 shrink-0" style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)' }} />
-                  <button onClick={() => addShopping(newShoppingText, newShoppingQty)} disabled={!newShoppingText.trim()} className="text-xs disabled:opacity-40 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>ADD</button>
+                  <button onClick={() => addShopping(newShoppingText, newShoppingQty)} disabled={!newShoppingText.trim()} className="disabled:opacity-40" style={BTN_PRIMARY}>ADD</button>
                   <button onClick={() => { setAddingShopping(false); setNewShoppingText(''); setNewShoppingQty(1); }} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none shrink-0"><X size={18} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>
                 </div>
               ) : (

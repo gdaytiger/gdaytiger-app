@@ -1,5 +1,7 @@
 'use client';
 
+import { glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
+
 import { useEffect, useState } from 'react';
 import { CircleCheck } from 'lucide-react';
 
@@ -210,7 +212,7 @@ export default function AddIngredientModal({
             <p className="text-[10px] text-gray-400 mt-1">
               {done.scannerWired ? 'Wired into the invoice scanner — future invoices will auto-update this price.' : 'Not wired to the scanner — this price won’t auto-update from future invoices.'}
             </p>
-            <button onClick={onClose} className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: 'var(--color-brand-peach)', color: '#333' }}>Done</button>
+            <button onClick={onClose} className="mt-4" style={{ ...glassButtonStyle, ...glassButtonPrimaryStyle }}>Done</button>
           </div>
         ) : (
           <div className="p-5 space-y-4">
@@ -230,8 +232,8 @@ export default function AddIngredientModal({
                 <button
                   onClick={runSearch}
                   disabled={query.trim().length < 2 || searching}
-                  className="shrink-0 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-40 transition-colors"
-                  style={{ background: 'var(--color-brand-peach)', color: '#333' }}
+                  className="disabled:opacity-40"
+                  style={{ ...glassButtonStyle, ...glassButtonPrimaryStyle }}
                 >{searching ? 'Searching…' : 'Find price'}</button>
               </div>
             </div>
@@ -327,8 +329,8 @@ export default function AddIngredientModal({
                         <button
                           key={t}
                           onClick={() => { setType(t); setCategory(''); }}
-                          className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold capitalize transition-colors"
-                          style={{ background: type === t ? 'var(--color-brand-peach)' : 'rgba(0,0,0,0.05)', color: type === t ? '#333' : 'var(--color-ink-label)' }}
+                          className="flex-1"
+                          style={type === t ? { ...glassButtonStyle, ...glassButtonActiveStyle } : glassButtonStyle}
                         >{t}</button>
                       ))}
                     </div>
@@ -352,8 +354,8 @@ export default function AddIngredientModal({
                 <button
                   onClick={submit}
                   disabled={!canSubmit}
-                  className="w-full px-4 py-2.5 rounded-lg text-sm font-bold disabled:opacity-40 transition-colors"
-                  style={{ background: 'var(--color-brand-peach)', color: '#333' }}
+                  className="w-full disabled:opacity-40"
+                  style={{ ...glassButtonStyle, ...glassButtonPrimaryStyle, width: '100%' }}
                 >{submitting ? 'Adding…' : 'Add to Supplier Prices'}</button>
               </div>
             )}

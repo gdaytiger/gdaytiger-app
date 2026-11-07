@@ -1,5 +1,7 @@
 'use client';
 
+import { glassButtonStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
+
 import { useRef, useState } from 'react';
 
 export default function Login() {
@@ -54,8 +56,8 @@ export default function Login() {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full text-xs uppercase tracking-widest px-5 py-3 rounded-xl font-semibold disabled:opacity-40"
-          style={{ background: 'var(--color-brand-peach)', color: '#333' }}
+          className="w-full disabled:opacity-40"
+          style={{ ...glassButtonStyle, ...glassButtonPrimaryStyle, width: '100%' }}
         >
           {submitting ? '…' : 'Enter'}
         </button>

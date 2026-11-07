@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import type { GoogleReviewsPayload, MenuSyncPayload, PendingReview, PoolSuggestion } from '@/app/lib/gbp';
-import { glassTileStyle } from '@/app/lib/theme';
+import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // Google card: new reviews with Claude-drafted replies (Post / Redraft / Skip),
 // a photo uploader for the Business Profile, and the Square→Google menu price
@@ -13,8 +13,9 @@ type Data = { reviews: GoogleReviewsPayload | null; menu: MenuSyncPayload | null
 
 const label: React.CSSProperties = { fontFamily: '"stolzl", sans-serif', fontWeight: 700, fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-ink-label)' };
 const box: React.CSSProperties = { background: 'rgba(255,255,255,0.55)', borderRadius: '16px', padding: '12px 14px' };
-const btn: React.CSSProperties = { padding: '8px 14px', borderRadius: '999px', background: 'var(--color-brand-peach)', color: '#333', fontWeight: 700, fontSize: '13px', border: 'none' };
-const ghost: React.CSSProperties = { ...btn, background: 'rgba(0,0,0,0.05)', color: 'var(--color-ink-label)' };
+const btn: React.CSSProperties = { ...glassButtonStyle, ...glassButtonPrimaryStyle };
+const ghost: React.CSSProperties = glassButtonStyle;
+const chip = (on: boolean): React.CSSProperties => (on ? { ...glassButtonStyle, ...glassButtonActiveStyle } : glassButtonStyle);
 
 const PHOTO_CATEGORIES: [string, string][] = [
   ['FOOD_AND_DRINK', 'Food & drink'], ['INTERIOR', 'Inside'], ['EXTERIOR', 'Outside'], ['TEAMS', 'Team'], ['AT_WORK', 'At work'], ['ADDITIONAL', 'Other'],
@@ -267,7 +268,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
           <>
             <div className="flex gap-2 flex-wrap">
               {PHOTO_CATEGORIES.map(([k, v]) => (
-                <button key={k} onClick={() => setPoolCat(k)} className="text-xs font-semibold px-3 py-1.5 rounded-full" style={poolCat === k ? { background: 'var(--color-brand-peach)', color: '#333' } : { background: 'rgba(0,0,0,0.05)', color: 'var(--color-ink-label)' }}>{v}</button>
+                <button key={k} onClick={() => setPoolCat(k)} style={chip(poolCat === k)}>{v}</button>
               ))}
             </div>
             <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>Tap photos to pick them · × hides one for good</div>

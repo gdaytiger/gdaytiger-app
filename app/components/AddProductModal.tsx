@@ -1,5 +1,7 @@
 'use client';
 
+import { glassButtonStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
+
 import { useEffect, useMemo, useState } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -243,7 +245,7 @@ export default function AddProductModal({
               <p className="text-xs text-gray-500 mt-3">Recipe map and TIGEROS will refresh automatically.</p>
             </div>
             <div className="mt-4 flex justify-end">
-              <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm font-medium">Done</button>
+              <button onClick={onClose} style={{ ...glassButtonStyle, ...glassButtonPrimaryStyle }}>Done</button>
             </div>
           </div>
         ) : (
@@ -372,7 +374,7 @@ export default function AddProductModal({
               </div>
               <button
                 onClick={addRow}
-                className="mt-2 text-xs text-gray-600 hover:text-gray-900 font-medium"
+                className="mt-2" style={glassButtonStyle}
               >+ Add ingredient</button>
             </div>
 
@@ -383,13 +385,13 @@ export default function AddProductModal({
             )}
 
             <div className="flex justify-end gap-2 pt-2 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
-              <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100">
+              <button onClick={onClose} style={glassButtonStyle}>
                 Cancel
               </button>
               <button
                 onClick={submit}
                 disabled={!canSubmit || submitting}
-                className="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm font-medium disabled:opacity-40"
+                className="disabled:opacity-40" style={{ ...glassButtonStyle, ...glassButtonPrimaryStyle }}
               >
                 {submitting ? 'Creating…' : `Create${category === 'coffee' && variantCount > 1 ? ` ${variantCount} variants` : ''}`}
               </button>
