@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, Pencil, Search, Trash2, X, IceCreamCone, Minus, Plus } from 'lucide-react';
+import { ArrowRight, Check, Pencil, Search, Trash2, X, IceCreamCone, Minus, Plus, Wheat, Milk, Package } from 'lucide-react';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // THE DOCUMENT — running stock tally between G'Day Tiger and Isola Di Capri.
@@ -125,6 +125,26 @@ function VenueCounter({ venue, count, onChange, foot }: {
   );
 }
 
+// Compact − n + used on each Log Stock line.
+function MiniCounter({ count, onChange, who }: { count: number; onChange: (n: number) => void; who: string }) {
+  const on = count > 0;
+  const step: React.CSSProperties = { ...glassButtonStyle, padding: 0, width: '24px', height: '24px', justifyContent: 'center', flexShrink: 0 };
+  return (
+    <div className="flex items-center justify-center gap-0.5 rounded-xl py-1 w-[84px]"
+      style={{ background: on ? 'rgba(251,205,173,0.12)' : 'transparent', border: `1px solid ${on ? 'var(--color-brand-peach)' : 'transparent'}` }}>
+      <button type="button" style={step} onClick={() => onChange(Math.max(0, count - 1))} aria-label={`One less to ${who}`} disabled={!on} className="disabled:opacity-40">
+        <Minus size={12} strokeWidth={2.5} aria-hidden />
+      </button>
+      <input type="number" inputMode="numeric" min={0} value={count || ''} placeholder="0"
+        onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+        className="w-6 text-center text-base font-bold tabular-nums bg-transparent focus:outline-none text-gray-800 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" aria-label={`Qty to ${who}`} />
+      <button type="button" style={step} onClick={() => onChange(count + 1)} aria-label={`One more to ${who}`}>
+        <Plus size={12} strokeWidth={2.5} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
 // ── Editable history row (both logins have full edit) ──
 function EditRow({ row, onSave, onDelete, onCancel, priced }: {
   row: Row; priced: boolean; onSave: (patch: Partial<Row>) => void; onDelete: () => void; onCancel: () => void;
@@ -162,8 +182,10 @@ function EditRow({ row, onSave, onDelete, onCancel, priced }: {
 
 // ── Part 1: THE DOCUMENT ──
 function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>) => Promise<void> }) {
-  // Counters = how many each venue RECEIVED (G'Day gets a gelato from Isola → G'Day's counter).
-  const [got, setGot] = useState<Record<Venue, number>>({ GDT: 0, ISOLA: 0 });
+  // Counters per line = how many each venue RECEIVED (G'Day gets a gelato from Isola → G'Day's counter).
+  type Counts = Record<string, Record<Venue, number>>;
+  const [counts, setCounts] = useState<Counts>({});
+  const [milkPack, setMilkPack] = useState<'bottle' | 'crate'>('bottle');
   const [item, setItem] = useState('');
   const [price, setPrice] = useState('');
   const [unit, setUnit] = useState('');
@@ -172,19 +194,49 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
   const [confirmSettle, setConfirmSettle] = useState(false);
   const [gelatoEdit, setGelatoEdit] = useState(false);
   const [gPrice, setGPrice] = useState(String(data.gelato?.price ?? ''));
-  const [gUnit, setGUnit] = useState(data.gelato?.unit || '5L tub');
+  const [gUnit, setGUnit] = useState(data.gelato?.unit || '6L tub');
   const [showOlder, setShowOlder] = useState(false);
 
-  const reset = () => { setItem(''); setGot({ GDT: 0, ISOLA: 0 }); setPrice(''); setUnit(''); setCategory('Other'); };
-  const pickGelato = () => {
-    if (!data.gelato) { setGelatoEdit(true); return; }
-    setItem('GELATO'); setPrice(String(data.gelato.price)); setUnit(data.gelato.unit); setCategory('Gelato');
-  };
-  const unitP = Number(price) || 0;
-  const canAdd = item.trim() && (got.GDT > 0 || got.ISOLA > 0) && price !== '';
+  // Fixed lines priced from Supplier Prices (gelato falls back to the manual price until it syncs).
+  const find = (re: RegExp) => data.catalogue.find(c => re.test(c.name));
+  const gelatoCat = find(/gelato/i);
+  const gelato = gelatoCat ? { price: gelatoCat.price, unit: gelatoCat.unit } : data.gelato;
+  const bread = find(/sourdough/i);
+  const milk = find(/sungold jersey|full cream/i);
+  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode };
+  const lines: Line[] = [
+    { key: 'gelato', item: 'GELATO', category: 'Gelato', price: gelato?.price ?? null, unit: gelato?.unit || 'tub', icon: <IceCreamCone size={14} strokeWidth={2.25} aria-hidden /> },
+    { key: 'bread', item: 'SOURDOUGH LOAF', category: 'Bread', price: bread?.price ?? null, unit: 'loaf', icon: <Wheat size={14} strokeWidth={2.25} aria-hidden /> },
+    {
+      key: 'milk', category: 'Milk',
+      item: milkPack === 'crate' ? 'MILK CRATE (9 × 2L)' : 'MILK (2L)',
+      price: milk ? Math.round(milk.price * (milkPack === 'crate' ? 9 : 1) * 100) / 100 : null,
+      unit: milkPack === 'crate' ? 'crate' : 'bottle',
+      icon: <Milk size={14} strokeWidth={2.25} aria-hidden />,
+      sub: (
+        <div className="flex gap-1 justify-center flex-wrap">
+          {(['bottle', 'crate'] as const).map(k => (
+            <button key={k} type="button" onClick={() => setMilkPack(k)} style={{ ...chip(milkPack === k), height: '24px', padding: '0 8px', fontSize: '9px' }}>
+              {k === 'bottle' ? '1 BOTTLE' : 'CRATE (9)'}
+            </button>
+          ))}
+        </div>
+      ),
+    },
+  ];
+  if (item.trim()) lines.push({ key: 'custom', item: item.trim(), category, price: price === '' ? null : Number(price) || 0, unit, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
+
+  const countOf = (k: string, v: Venue) => counts[k]?.[v] ?? 0;
+  const setCount = (k: string, v: Venue, n: number) => setCounts(c => ({ ...c, [k]: { ...(c[k] ?? { GDT: 0, ISOLA: 0 }), [v]: n } }));
+  // Milk counts are per pack size — switching bottle/crate keeps the count, the line just re-prices.
+  const pending = lines.flatMap(l => (['GDT', 'ISOLA'] as Venue[])
+    .filter(v => countOf(l.key, v) > 0 && l.price !== null)
+    .map(v => ({ l, v, qty: countOf(l.key, v) })));
+  const pendingTotal = (v: Venue) => pending.filter(p => p.v === v).reduce((a, p) => a + p.qty * (p.l.price || 0), 0);
+  const reset = () => { setCounts({}); setItem(''); setPrice(''); setUnit(''); setCategory('Other'); setMilkPack('bottle'); };
   const addAll = async () => {
-    for (const v of ['GDT', 'ISOLA'] as Venue[]) {
-      if (got[v] > 0) await api('POST', { section: 'Document', from: other(v), item, qty: got[v], unitPrice: unitP, unit, category });
+    for (const { l, v, qty } of pending) {
+      await api('POST', { section: 'Document', from: other(v), item: l.item, qty, unitPrice: l.price, unit: l.unit, category: l.category });
     }
     reset();
   };
@@ -257,34 +309,46 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
       {/* Add */}
       <div className="flex flex-col gap-2 p-3 rounded-2xl" style={glassTileStyle}>
         <div style={label}>Log stock</div>
-        <div className="grid gap-2 items-stretch" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,2fr) minmax(0,1fr)' }}>
-          <VenueCounter venue="GDT" count={got.GDT} onChange={n => setGot(g => ({ ...g, GDT: n }))} foot={tabFoot(tabs.GDT.value, tabs.GDT.items)} />
-          {/* Product */}
-          <div className="flex flex-col gap-2 justify-center min-w-0 [&>*]:flex-none">
-            <button type="button" onClick={pickGelato} className="self-center" style={chip(category === 'Gelato')} title={data.gelato ? `Gelato ${money(data.gelato.price)} / ${data.gelato.unit}` : 'Set the gelato price first'}>
-              <IceCreamCone size={13} strokeWidth={2.25} aria-hidden /> GELATO
-            </button>
-            <ItemSearch catalogue={data.catalogue} value={item}
-              onChange={v => { setItem(v.toUpperCase()); setCategory(/^gelato$/i.test(v.trim()) ? 'Gelato' : guessCategory(v)); }}
-              onPick={c => { setItem(c.name.toUpperCase()); setPrice(String(c.price)); setUnit(c.unit); setCategory(guessCategory(c.name)); }} />
-            <div className="flex gap-2 items-center justify-center">
-              <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className={`${inputClass} w-24 text-center`} style={input} aria-label="Unit price" placeholder="$ each" />
-              {unit && <span className="text-xs text-gray-400 truncate">/ {unit}</span>}
+        {/* Header: who received it, and each venue's tab since the last settle-up */}
+        <div className="grid gap-2 items-end text-center" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px' }}>
+          {(['GDT', 'ISOLA'] as Venue[]).map((v, i) => (
+            <div key={v} style={{ gridColumn: i === 0 ? 1 : 3 }} className="min-w-0">
+              <div style={label} className="leading-tight">{NAME[v]}</div>
+              <div className="text-xs text-gray-400 leading-tight mt-0.5">{tabFoot(tabs[v].value, 0)}</div>
             </div>
+          ))}
+        </div>
+        {lines.map(l => (
+          <div key={l.key} className="grid gap-2 items-center rounded-2xl py-1.5" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px', background: 'rgba(255,255,255,0.55)' }}>
+            <MiniCounter count={countOf(l.key, 'GDT')} onChange={n => setCount(l.key, 'GDT', n)} who={`G'Day: ${l.item}`} />
+            <div className="flex flex-col items-center gap-1 min-w-0 text-center">
+              <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight" style={{ fontFamily: '"stolzl", sans-serif' }}>
+                <span style={{ color: 'var(--color-ink-muted)' }} className="shrink-0">{l.icon}</span>
+                <span className="break-words">{l.key === 'milk' ? 'MILK' : l.item}</span>
+              </div>
+              {l.sub}
+              {l.key === 'custom' ? (
+                <div className="flex gap-1 items-center justify-center">
+                  <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className="text-xs px-2 py-1 rounded-lg w-20 text-center focus:outline-none text-gray-800" style={input} aria-label="Unit price" placeholder="$ each" />
+                  {unit && <span className="text-xs text-gray-400 truncate">/ {unit}</span>}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-400 tabular-nums">
+                  {l.price !== null ? `${money(l.price)} / ${l.unit}` : (l.key === 'gelato'
+                    ? <button type="button" onClick={() => setGelatoEdit(true)} className="underline">Set price</button>
+                    : 'No price in Supplier Prices')}
+                </div>
+              )}
+            </div>
+            <MiniCounter count={countOf(l.key, 'ISOLA')} onChange={n => setCount(l.key, 'ISOLA', n)} who={`Isola: ${l.item}`} />
           </div>
-          <VenueCounter venue="ISOLA" count={got.ISOLA} onChange={n => setGot(g => ({ ...g, ISOLA: n }))} foot={tabFoot(tabs.ISOLA.value, tabs.ISOLA.items)} />
-        </div>
-        <div className="flex gap-2 items-center">
-          <span className="text-xs text-gray-400 tabular-nums">
-            {got.GDT > 0 && `${got.GDT} to G'Day ${money(got.GDT * unitP)}`}{got.GDT > 0 && got.ISOLA > 0 && ' · '}{got.ISOLA > 0 && `${got.ISOLA} to Isola ${money(got.ISOLA * unitP)}`}
-          </span>
-          <button type="button" disabled={!canAdd} className="ml-auto disabled:opacity-40" style={BTN_PRIMARY} onClick={() => run(addAll)}>
-            ADD
-          </button>
-        </div>
-        {/* Gelato fixed price */}
-        {gelatoEdit ? (
-          <div className="flex gap-2 items-center flex-wrap pt-1">
+        ))}
+        <ItemSearch catalogue={data.catalogue} value={item}
+          onChange={v => { setItem(v.toUpperCase()); setCategory(/^gelato$/i.test(v.trim()) ? 'Gelato' : guessCategory(v)); }}
+          onPick={c => { setItem(c.name.toUpperCase()); setPrice(String(c.price)); setUnit(c.unit); setCategory(guessCategory(c.name)); }} />
+        {/* Manual gelato price — only until gelato comes through Supplier Prices */}
+        {!gelatoCat && gelatoEdit && (
+          <div className="flex gap-2 items-center flex-wrap">
             <span style={label}>Gelato</span>
             <input type="number" inputMode="decimal" step="0.01" value={gPrice} onChange={e => setGPrice(e.target.value)} placeholder="$ per tub" className={`${inputClass} w-24 text-center`} style={input} aria-label="Gelato price" />
             <span className="text-gray-400 text-sm">per</span>
@@ -293,11 +357,16 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
               onClick={() => run(async () => { await api('POST', { action: 'setGelato', price: Number(gPrice), unit: gUnit }); setGelatoEdit(false); })}>SAVE</button>
             <button type="button" onClick={() => setGelatoEdit(false)} aria-label="Cancel" className="text-gray-400"><X size={16} strokeWidth={2.25} aria-hidden /></button>
           </div>
-        ) : (
-          <button type="button" onClick={() => setGelatoEdit(true)} className="self-start text-xs text-gray-400 hover:text-gray-600">
-            {data.gelato ? `Gelato: ${money(data.gelato.price)} / ${data.gelato.unit} · edit` : 'Set gelato price per tub'}
-          </button>
         )}
+        <div className="flex gap-2 items-center pt-1">
+          <span className="text-xs text-gray-400 tabular-nums min-w-0">
+            {pending.length === 0 ? 'Tap + under whoever received it' : (['GDT', 'ISOLA'] as Venue[]).filter(v => pending.some(p => p.v === v))
+              .map(v => `${v === 'GDT' ? "G'Day" : 'Isola'} gets ${money(pendingTotal(v))}`).join(' · ')}
+          </span>
+          <button type="button" disabled={pending.length === 0} className="ml-auto disabled:opacity-40" style={BTN_PRIMARY} onClick={() => run(addAll)}>
+            ADD{pending.length > 1 ? ` ${pending.length}` : ''}
+          </button>
+        </div>
       </div>
 
       {/* History */}
