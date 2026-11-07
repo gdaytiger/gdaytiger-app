@@ -21,9 +21,11 @@ const SANS = '"stolzl", "Helvetica Neue", Arial, sans-serif';
 const SERIF = '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif';
 const STORE = 'tigeros.storyMaker.v1';
 const HOURS_DEFAULT = '6.30 - 3ISH';
+const SUNDAY_HOURS_DEFAULT = '6.30 - 2ISH';
 
 type Kind = 'head' | 'sub' | 'title' | 'body' | 'price';
-type Block = { kind: Kind; label: string; text: string; gap?: number; key?: 'hours' };
+// key 'hours' = today's hours (Sunday hours on a Sunday); 'sundayHours' = always Sunday's.
+type Block = { kind: Kind; label: string; text: string; gap?: number; key?: 'hours' | 'sundayHours' };
 type Template = { id: string; name: string; blocks: Block[]; blur?: number; shade?: number; anchor?: 'top' | 'bottom' };
 
 // cap = cap height in px, gap = space from previous baseline to this cap-top,
@@ -37,70 +39,70 @@ const KIND: Record<Kind, { serif: boolean; cap: number; peach: boolean; gap: num
 };
 
 const HEAD: Block = { kind: 'head', label: 'Headline', text: 'OPEN TODAY' };
-const HOURS: Block = { kind: 'sub', label: 'Hours (shared)', text: HOURS_DEFAULT, key: 'hours' };
+const HOURS: Block = { kind: 'sub', label: 'Hours', text: HOURS_DEFAULT, key: 'hours' };
 
+// Ids 'deal' / 'event' kept from the first version so saved edits carry over.
 const TEMPLATES: Template[] = [
   { id: 'open', name: 'Open Today', blocks: [HEAD, HOURS] },
-  { id: 'special', name: 'Special', blocks: [
-    HEAD, HOURS,
-    { kind: 'title', label: 'Special', text: 'PORCHETTA ROLLS!' },
-    { kind: 'body', label: 'Description', text: 'ROAST PORCHETTA,\nLEMON, MAYONNAISE, ONION.\n\nFENNEL, GREEN APPLE + DILL SLAW.' },
-  ] },
-  { id: 'deal', name: 'Deal day', blocks: [
+  { id: 'deal', name: 'Thursdays', blocks: [
     HEAD,
     { kind: 'sub', label: 'Tagline', text: "IT'S PARMA THURSDAY!" },
     { kind: 'title', label: 'Deal', text: 'CHICKEN PARMA SANGA' },
     { kind: 'body', label: 'Includes', text: '+ ANY SMALL COFFEE\nOR CAN OF DRINK.' },
     { kind: 'price', label: 'Price', text: '$20' },
   ] },
-  { id: 'event', name: 'Event', blur: 36, blocks: [
+  { id: 'event', name: 'Saturdays', blur: 36, blocks: [
     HEAD, HOURS,
-    { kind: 'title', label: 'Event', text: 'RUN PHILLIP ISLAND', gap: 89 },
+    { kind: 'title', label: 'Run club', text: 'RUN PHILLIP ISLAND', gap: 89 },
     { kind: 'body', label: 'Details', text: "7AM EVERY SATURDAY.\nKICKING OFF AT THE ESPLANADE.\n15% OFF AT G'DAY TIGER\nAFTERWARDS." },
   ] },
-  { id: 'new', name: 'New on menu', blocks: [
-    { kind: 'head', label: 'Headline', text: 'NEW IN' },
-    { kind: 'sub', label: 'Tagline', text: 'ON THE MENU FROM TODAY.' },
-    { kind: 'title', label: 'Item', text: 'ITEM NAME' },
-    { kind: 'body', label: 'Description', text: "WHAT'S IN IT,\nONE OR TWO LINES." },
-    { kind: 'price', label: 'Price (blank to hide)', text: '' },
+  { id: 'sunday', name: 'Sundays', blocks: [
+    HEAD,
+    { kind: 'sub', label: 'Sunday hours', text: SUNDAY_HOURS_DEFAULT, key: 'sundayHours' },
   ] },
-  { id: 'hours', name: 'Hours change', blur: 28, blocks: [
-    { kind: 'head', label: 'Headline', text: 'HOLIDAY HOURS' },
-    { kind: 'sub', label: 'Hours', text: '7 - 1PM TODAY.' },
-    { kind: 'body', label: 'Details', text: 'BACK TO NORMAL HOURS TOMORROW.', gap: 60 },
+  { id: 'special', name: 'Special', blocks: [
+    HEAD, HOURS,
+    { kind: 'title', label: 'Special', text: 'PORCHETTA ROLLS!' },
+    { kind: 'body', label: 'Description', text: 'ROAST PORCHETTA,\nLEMON, MAYONNAISE, ONION.\n\nFENNEL, GREEN APPLE + DILL SLAW.' },
   ] },
-  { id: 'closed', name: 'Closed', blur: 28, blocks: [
-    { kind: 'head', label: 'Headline', text: 'CLOSED TODAY' },
-    { kind: 'sub', label: 'Message', text: 'BACK TOMORROW FROM 6.30.' },
-  ] },
-  { id: 'photo', name: 'Photo first', anchor: 'bottom', shade: 0.45, blocks: [HEAD, HOURS] },
-  { id: 'review', name: 'Review', blur: 28, blocks: [
-    { kind: 'head', label: 'Headline', text: 'THANK YOU' },
-    { kind: 'sub', label: 'Tagline', text: 'FROM A GOOGLE REVIEW:' },
-    { kind: 'body', label: 'Quote', text: '“PASTE THE BEST LINE\nFROM THE REVIEW HERE.”', gap: 60 },
+  // Gaps measured off the Express "Seasonal Coffees" story.
+  { id: 'coffee', name: 'Seasonal Coffees', blocks: [
+    HEAD, HOURS,
+    { kind: 'title', label: 'Heading', text: 'SEASONAL COFFEES', gap: 209 },
+    { kind: 'title', label: 'Espresso heading', text: 'ESPRESSO', gap: 106 },
+    { kind: 'body', label: 'Espresso — roaster / origin / notes', text: 'SEVEN SEEDS\nKENYA - GICHERORI\nJUICY, APRICOT, MOLASSESS', gap: 33 },
+    { kind: 'title', label: 'Filter heading', text: 'FILTER', gap: 104 },
+    { kind: 'body', label: 'Filter — roaster / origin / notes', text: 'SEVEN SEEDS\nPERU- ALEJANDRO PADILLA CHINGUEL\nSPARKLING, BLOOD ORANGE', gap: 33 },
   ] },
 ];
 
-// Thursday → Parma deal, Saturday → Run Phillip Island, otherwise Open Today.
+const melbDay = () => new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'long' });
+
+// Thursday → Parma, Saturday → Run club, Sunday → Sundays, otherwise Open Today.
 function defaultTemplateId(): string {
-  const day = new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'long' });
+  const day = melbDay();
   if (day === 'Thursday') return 'deal';
   if (day === 'Saturday') return 'event';
+  if (day === 'Sunday') return 'sunday';
   return 'open';
 }
 
-type Store = { hours: string; fields: Record<string, string[]> };
+type Store = { hours: string; sundayHours: string; fields: Record<string, string[]> };
+const EMPTY_STORE: Store = { hours: HOURS_DEFAULT, sundayHours: SUNDAY_HOURS_DEFAULT, fields: {} };
 function loadStore(): Store {
   try {
     const s = JSON.parse(localStorage.getItem(STORE) || 'null');
-    if (s && typeof s === 'object') return { hours: typeof s.hours === 'string' ? s.hours : HOURS_DEFAULT, fields: s.fields && typeof s.fields === 'object' ? s.fields : {} };
+    if (s && typeof s === 'object') return {
+      hours: typeof s.hours === 'string' ? s.hours : HOURS_DEFAULT,
+      sundayHours: typeof s.sundayHours === 'string' ? s.sundayHours : SUNDAY_HOURS_DEFAULT,
+      fields: s.fields && typeof s.fields === 'object' ? s.fields : {},
+    };
   } catch { /* storage blocked */ }
-  return { hours: HOURS_DEFAULT, fields: {} };
+  return EMPTY_STORE;
 }
 
 // ── Canvas helpers ────────────────────────────────────────────────────────────
-const fontFor = (serif: boolean, px: number) => (serif ? `italic 600 ${px.toFixed(1)}px ${SERIF}` : `700 ${px.toFixed(1)}px ${SANS}`);
+const fontFor = (serif: boolean, px: number) => (serif ? `italic 400 ${px.toFixed(1)}px ${SERIF}` : `700 ${px.toFixed(1)}px ${SANS}`);
 
 const capCache = new Map<string, number>();
 function capRatio(ctx: CanvasRenderingContext2D, serif: boolean, v: number): number {
@@ -125,7 +127,7 @@ function layoutText(ctx: CanvasRenderingContext2D, blocks: { kind: Kind; text: s
     const k = KIND[b.kind];
     const ratio = capRatio(ctx, k.serif, fontsV);
     let size = k.cap / ratio;
-    const maxW = W - k.x - 40;
+    const maxW = W - k.x - 16;
     ctx.font = fontFor(k.serif, size);
     let rows: string[] = [];
     if (k.fit) {
@@ -232,8 +234,9 @@ const field: React.CSSProperties = { background: 'rgba(255,255,255,0.9)', border
 type Photo = { img: HTMLImageElement; id: string | null; name: string; hiRes: boolean };
 
 export default function StoryMakerCard({ active }: { active: boolean }) {
-  const [tplId, setTplId] = useState<string>(() => defaultTemplateId());
-  const [store, setStore] = useState<Store>({ hours: HOURS_DEFAULT, fields: {} });
+  const [tplId, setTplId] = useState<string>('open');
+  const [store, setStore] = useState<Store>(EMPTY_STORE);
+  const [isSunday, setIsSunday] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -259,9 +262,15 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
 
   const tpl = TEMPLATES.find(t => t.id === tplId) ?? TEMPLATES[0];
 
-  // Restore saved edits (client only).
+  // Restore saved edits and pick today's template (client only — Melbourne day).
   useEffect(() => {
-    const t = setTimeout(() => { setStore(loadStore()); setLoaded(true); }, 0);
+    const t = setTimeout(() => {
+      setStore(loadStore());
+      setLoaded(true);
+      setIsSunday(melbDay() === 'Sunday');
+      const d = TEMPLATES.find(x => x.id === defaultTemplateId());
+      if (d) { setTplId(d.id); setBlur(d.blur ?? 0); setShade(d.shade ?? 0); setAnchor(d.anchor ?? 'top'); }
+    }, 0);
     return () => clearTimeout(t);
   }, []);
   useEffect(() => {
@@ -289,13 +298,20 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
 
   const textFor = (t: Template, i: number) => {
     const b = t.blocks[i];
-    if (b.key === 'hours') return store.hours;
+    const hk = hoursKey(b);
+    if (hk) return store[hk];
     return store.fields[t.id]?.[i] ?? b.text;
   };
+  // Which shared hours a block reads/writes: Sunday's on a Sunday, else the usual.
+  function hoursKey(b: Block): 'hours' | 'sundayHours' | null {
+    if (b.key === 'sundayHours' || (b.key === 'hours' && isSunday)) return 'sundayHours';
+    return b.key === 'hours' ? 'hours' : null;
+  }
   const setText = (i: number, value: string) => {
     const b = tpl.blocks[i];
+    const hk = hoursKey(b);
     setStore(prev => {
-      if (b.key === 'hours') return { ...prev, hours: value };
+      if (hk) return { ...prev, [hk]: value };
       const arr = tpl.blocks.map((_, j) => prev.fields[tpl.id]?.[j] ?? tpl.blocks[j].text);
       arr[i] = value;
       return { ...prev, fields: { ...prev.fields, [tpl.id]: arr } };
@@ -527,7 +543,9 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
             </div>
             {tpl.blocks.map((b, i) => (
               <label key={`${tpl.id}-${i}`} className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold" style={{ color: 'var(--color-ink-label)' }}>{b.label}</span>
+                <span className="text-[11px] font-semibold" style={{ color: 'var(--color-ink-label)' }}>
+                  {b.label}{hoursKey(b) === 'sundayHours' ? ' · Sunday, shared' : hoursKey(b) ? ' · Mon–Sat, shared' : ''}
+                </span>
                 {b.kind === 'body' ? (
                   <textarea value={textFor(tpl, i)} onChange={e => setText(i, e.target.value)} rows={Math.max(2, textFor(tpl, i).split('\n').length)}
                     className="w-full text-sm rounded-xl px-3 py-2 uppercase focus:outline-none focus:ring-2 focus:ring-orange-300" style={field} />
