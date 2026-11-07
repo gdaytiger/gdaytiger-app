@@ -21,6 +21,7 @@ const BOTTOM = H - 380;    // last baseline when text sits at the bottom (clears
 const SANS = '"stolzl", "Helvetica Neue", Arial, sans-serif';
 const SERIF = '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif';
 const STORE = 'tigeros.storyMaker.v1';
+const RANDOM_TAG_KEY = 'tigeros.storyMaker.randomTag';   // where RANDOM is up to in the tag cycle (per device)
 const HOURS_DEFAULT = '6.30 - 3ISH';
 const SUNDAY_HOURS_DEFAULT = '6.30 - 2ISH';
 
@@ -546,9 +547,34 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
     }
   }
 
-  function randomPhoto() {
-    if (!lib?.photos?.length) return;
-    pickPhoto(lib.photos[Math.floor(Math.random() * lib.photos.length)]);
+  // RANDOM steps through the tags in order (Coffee → Food → Parma → Inside → Outside → Team → …),
+  // picking a random rested photo from the next tag; tags with nothing available are skipped.
+  async function randomPhoto() {
+    if (lib?.fallback) {                       // no tags without the GBP story script — random from the 5 shown
+      if (lib.photos?.length) pickPhoto(lib.photos[Math.floor(Math.random() * lib.photos.length)]);
+      return;
+    }
+    let start = 0;
+    try { start = Number(localStorage.getItem(RANDOM_TAG_KEY)) || 0; } catch { /* storage blocked */ }
+    setLibBusy(true);
+    try {
+      for (let i = 0; i < PHOTO_TAGS.length; i++) {
+        const idx = (start + i) % PHOTO_TAGS.length;
+        const cat = PHOTO_TAGS[idx].key;
+        const d = await postStory<LibData>({ action: 'browse', cat, random: true });
+        if (!d.photos?.length) continue;
+        try { localStorage.setItem(RANDOM_TAG_KEY, String((idx + 1) % PHOTO_TAGS.length)); } catch { /* storage blocked */ }
+        setLibCat(cat);
+        setLib(d);
+        pickPhoto(d.photos[Math.floor(Math.random() * d.photos.length)]);
+        return;
+      }
+      setMsg('No tagged photos available — tag some, or they’re all resting after recent stories.');
+    } catch (e) {
+      setMsg(`Couldn’t pick a photo: ${e instanceof Error ? e.message : 'error'}`);
+    } finally {
+      setLibBusy(false);
+    }
   }
   const shuffle = () => loadLib(libCat);
   const chooseCat = (cat: string) => { setLibCat(cat); loadLib(cat); };
@@ -825,7 +851,7 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div style={label}>Photos from G’Day Tigers album</div>
           <div className="flex gap-2">
-            <button style={ghost} onClick={randomPhoto} disabled={!lib?.photos?.length} title="Use one of these 5 at random"><Dices size={13} strokeWidth={2.25} aria-hidden />Random</button>
+            <button style={ghost} onClick={randomPhoto} disabled={libBusy || !lib || lib.ok === false} title="Next tag in the cycle, random photo from it"><Dices size={13} strokeWidth={2.25} aria-hidden />Random</button>
             <button style={ghost} onClick={shuffle} disabled={libBusy} title="Show 5 different photos"><RefreshCw size={13} strokeWidth={2.25} aria-hidden />{libBusy ? 'Loading…' : 'Shuffle'}</button>
           </div>
         </div>
