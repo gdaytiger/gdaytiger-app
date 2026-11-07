@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, ImagePlus, Plus, RotateCcw, Share2, Shuffle, Trash2 } from 'lucide-react';
+import { Download, FolderOpen, ImagePlus, Plus, RotateCcw, Shuffle, Trash2 } from 'lucide-react';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // Story Maker — TigerOS replacement for Adobe Express on the morning Instagram story.
@@ -245,6 +245,56 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+// ── Saving ───────────────────────────────────────────────────────────────────
+// Phone/tablet: share sheet (Instagram, Save Image, Save to Files).
+// Desktop Chrome: write into a folder picked once (handle kept in IndexedDB) and
+// clear story files there older than KEEP_DAYS. Anything else: plain download.
+const KEEP_DAYS = 7;
+const FILE_PREFIX = 'gdaytiger-story-';
+type SaveMode = 'share' | 'folder' | 'download';
+
+// File System Access bits that aren't in TypeScript's DOM lib yet.
+type PermState = 'granted' | 'denied' | 'prompt';
+type DirHandle = FileSystemDirectoryHandle & {
+  queryPermission(o: { mode: 'readwrite' }): Promise<PermState>;
+  requestPermission(o: { mode: 'readwrite' }): Promise<PermState>;
+  entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+};
+type PickerWindow = Window & { showDirectoryPicker?: (o?: { id?: string; mode?: 'readwrite' }) => Promise<DirHandle> };
+
+function idb<T>(fn: (store: IDBObjectStore) => IDBRequest, mode: IDBTransactionMode = 'readonly'): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open('tigeros-story', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('kv');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const req = fn(open.result.transaction('kv', mode).objectStore('kv'));
+      req.onsuccess = () => resolve(req.result as T);
+      req.onerror = () => reject(req.error);
+    };
+  });
+}
+const getFolder = () => idb<DirHandle>(st => st.get('folder')).catch(() => undefined);
+const putFolder = (h: DirHandle) => idb(st => st.put(h, 'folder'), 'readwrite');
+
+async function pickFolder(): Promise<DirHandle> {
+  const h = await (window as PickerWindow).showDirectoryPicker!({ id: 'daily-story', mode: 'readwrite' });
+  await putFolder(h);
+  return h;
+}
+
+// Delete our own story files older than KEEP_DAYS. Leaves anything else in the folder alone.
+async function clearOld(dir: DirHandle): Promise<number> {
+  const cutoff = Date.now() - KEEP_DAYS * 86400000;
+  let n = 0;
+  for await (const [name, h] of dir.entries()) {
+    if (h.kind !== 'file' || !name.startsWith(FILE_PREFIX)) continue;
+    const f = await (h as FileSystemFileHandle).getFile();
+    if (f.lastModified < cutoff) { await dir.removeEntry(name); n++; }
+  }
+  return n;
+}
+
 // ── Library types ─────────────────────────────────────────────────────────────
 type LibPhoto = { id: string; name: string; set: string; thumb: string | null };
 type LibData = { ok: boolean; sets?: { name: string; count: number }[]; photos?: LibPhoto[]; page?: number; pages?: number; total?: number; fallback?: boolean; error?: string };
@@ -273,7 +323,8 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   const [fontsV, setFontsV] = useState(0);
   const [bg, setBg] = useState<HTMLCanvasElement | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [canShare, setCanShare] = useState(false);
+  const [saveMode, setSaveMode] = useState<SaveMode>('download');
+  const [folderName, setFolderName] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const [lib, setLib] = useState<LibData | null>(null);
@@ -312,13 +363,18 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
     return () => { alive = false; document.fonts.removeEventListener('loadingdone', bump); };
   }, []);
 
+  // How SAVE works on this device (see Saving above).
   useEffect(() => {
+    let mode: SaveMode = 'download';
     try {
       const probe = new File([new Blob(['x'], { type: 'image/jpeg' })], 'x.jpg', { type: 'image/jpeg' });
-      const ok = typeof navigator.canShare === 'function' && navigator.canShare({ files: [probe] });
-      const t = setTimeout(() => setCanShare(ok), 0);
-      return () => clearTimeout(t);
-    } catch { /* no share */ }
+      const touch = navigator.maxTouchPoints > 0 && window.matchMedia('(pointer: coarse)').matches;
+      if (touch && typeof navigator.canShare === 'function' && navigator.canShare({ files: [probe] })) mode = 'share';
+      else if (typeof (window as PickerWindow).showDirectoryPicker === 'function') mode = 'folder';
+    } catch { /* fall back to download */ }
+    const t = setTimeout(() => setSaveMode(mode), 0);
+    if (mode === 'folder') getFolder().then(h => { if (h) setFolderName(h.name); });
+    return () => clearTimeout(t);
   }, []);
 
   const textFor = (t: Template, i: number) => {
@@ -508,18 +564,36 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   const onPointerUp = () => { drag.current = null; };
 
   // ── Export ──
-  async function exportStory(share: boolean) {
+  async function changeFolder() {
+    try { const h = await pickFolder(); setFolderName(h.name); setMsg(`Stories will save to “${h.name}” ✓`); }
+    catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) setMsg('Couldn’t use that folder.'); }
+  }
+
+  async function exportStory() {
     const cv = canvasRef.current;
     if (!cv) return;
-    setBusy(share ? 'share' : 'save');
+    setBusy('save');
     try {
       const blob = await new Promise<Blob | null>(r => cv.toBlob(r, 'image/jpeg', 0.92));
       if (!blob) throw new Error('could not render');
-      const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
-      const name = `gdaytiger-story-${date}.jpg`;
+      const now = new Date();
+      const date = now.toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
+      const time = now.toLocaleTimeString('en-GB', { timeZone: 'Australia/Melbourne', hour: '2-digit', minute: '2-digit' }).replace(':', '');
+      const name = `${FILE_PREFIX}${date}-${time}.jpg`;
       const file = new File([blob], name, { type: 'image/jpeg' });
-      if (share && navigator.canShare?.({ files: [file] })) {
+      if (saveMode === 'share' && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file] });
+      } else if (saveMode === 'folder') {
+        let dir = await getFolder();
+        if (dir && (await dir.queryPermission({ mode: 'readwrite' })) !== 'granted'
+          && (await dir.requestPermission({ mode: 'readwrite' })) !== 'granted') dir = undefined;
+        if (!dir) dir = await pickFolder();
+        setFolderName(dir.name);
+        const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+        await w.write(blob);
+        await w.close();
+        const cleared = await clearOld(dir);
+        setMsg(`Saved to “${dir.name}” ✓${cleared ? ` · cleared ${cleared} older than ${KEEP_DAYS} days` : ''}`);
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -563,14 +637,15 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
             {photo ? `${photo.name}${photo.hiRes ? '' : ' · preview size'}${busy === 'photo' ? ' · loading full size…' : ''} · drag to move` : ''}
           </div>
           <div className="flex gap-2 flex-wrap justify-start self-stretch">
-            {canShare && (
-              <button style={btn} disabled={!!busy && busy !== 'photo'} onClick={() => exportStory(true)}>
-                <Share2 size={13} strokeWidth={2.25} aria-hidden />{busy === 'share' ? 'Sharing…' : 'Share'}
+            <button style={btn} disabled={!!busy && busy !== 'photo'} onClick={exportStory}
+              title={saveMode === 'share' ? 'Opens the share sheet — Instagram, Save Image or Save to Files' : saveMode === 'folder' ? `Saves into ${folderName ? `“${folderName}”` : 'a folder you pick'} and clears stories older than ${KEEP_DAYS} days` : 'Downloads the JPG'}>
+              <Download size={13} strokeWidth={2.25} aria-hidden />{busy === 'save' ? 'Saving…' : 'Save'}
+            </button>
+            {saveMode === 'folder' && folderName && (
+              <button style={ghost} onClick={changeFolder} title={`Saving to “${folderName}” — tap to pick another folder`}>
+                <FolderOpen size={13} strokeWidth={2.25} aria-hidden />Folder
               </button>
             )}
-            <button style={canShare ? ghost : btn} disabled={!!busy && busy !== 'photo'} onClick={() => exportStory(false)}>
-              <Download size={13} strokeWidth={2.25} aria-hidden />{busy === 'save' ? 'Saving…' : 'Save JPG'}
-            </button>
           </div>
         </div>
 
