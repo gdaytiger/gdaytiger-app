@@ -343,12 +343,17 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
   const [lib, setLib] = useState<LibData | null>(null);
   const [libCat, setLibCat] = useState('');
   const [libBusy, setLibBusy] = useState(false);
-  // Hand tagging: one photo at a time, saved in order (saveChain) so no tap is lost.
+  // Hand tagging: one photo at a time. Taps collect in `pending` and go up in batches
+  // (one request in flight); anything unsent goes with a keepalive request if the page closes.
   const [tagging, setTagging] = useState(false);
   const [queue, setQueue] = useState<LibPhoto[]>([]);
   const [queueBusy, setQueueBusy] = useState(false);
   const [tagLeft, setTagLeft] = useState(0);
-  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+  const [unsaved, setUnsaved] = useState(0);
+  const pending = useRef<Record<string, string>>({});
+  const inFlight = useRef<Promise<void> | null>(null);
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushRef = useRef<() => Promise<void>>(() => Promise.resolve());   // retry timer → latest flushTags
   const tagged = useRef<string[]>([]);
   const pickedRef = useRef<string | null>(null);
 
@@ -566,18 +571,67 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
 
   function startTagging() { setTagging(true); setQueue([]); fetchQueue(); }
 
+  const countUnsaved = useCallback((sending = 0) => setUnsaved(Object.keys(pending.current).length + sending), []);
+
+  // keepalive lets the request finish even if the page is closed or the phone locks.
+  const sendTags = (tags: Record<string, string>) =>
+    fetch('/api/story-photos', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'tag', tags }) })
+      .then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok || d.ok === false) throw new Error(d.error || 'failed'); });
+
+  const flushTags = useCallback((): Promise<void> => {
+    if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }
+    if (inFlight.current) return inFlight.current;
+    const batch = pending.current;
+    if (!Object.keys(batch).length) return Promise.resolve();
+    pending.current = {};
+    countUnsaved(Object.keys(batch).length);
+    inFlight.current = sendTags(batch)
+      .catch(() => {
+        // Put them back (unless re-tagged since) and try again shortly.
+        pending.current = { ...batch, ...pending.current };
+        setMsg('Tags didn’t save — retrying…');
+      })
+      .finally(() => {
+        inFlight.current = null;
+        countUnsaved();
+        if (Object.keys(pending.current).length) flushTimer.current = setTimeout(() => { flushRef.current(); }, 1500);
+      });
+    return inFlight.current;
+  }, [countUnsaved]);
+  useEffect(() => { flushRef.current = flushTags; }, [flushTags]);
+
+  // Wait until every tap is on the server (in-flight batch, then whatever queued behind it).
+  const drainTags = useCallback(async () => {
+    for (let i = 0; i < 20 && (inFlight.current || Object.keys(pending.current).length); i++) await flushTags();
+  }, [flushTags]);
+
+  // Page closing / app switched away: send what's left straight away.
+  useEffect(() => {
+    const away = (e: Event) => {
+      if (e.type === 'visibilitychange' && document.visibilityState !== 'hidden') return;
+      const batch = pending.current;
+      if (!Object.keys(batch).length) return;
+      pending.current = {};
+      sendTags(batch).catch(() => { pending.current = { ...batch, ...pending.current }; });
+    };
+    document.addEventListener('visibilitychange', away);
+    window.addEventListener('pagehide', away);
+    return () => { document.removeEventListener('visibilitychange', away); window.removeEventListener('pagehide', away); };
+  }, []);
+
   function finishTagging() {
     setTagging(false);
-    saveChain.current.then(() => loadLib(libCat));
+    drainTags().then(() => loadLib(libCat));
   }
 
   function tagPhoto(cat: string) {
     const p = queue[0];
     if (!p) return;
     tagged.current.push(p.id);
-    saveChain.current = saveChain.current
-      .then(() => postStory({ action: 'tag', tags: { [p.id]: cat } }))
-      .catch(() => setMsg('A tag didn’t save — it’ll come back round next time.'));
+    pending.current[p.id] = cat;
+    countUnsaved(inFlight.current ? 1 : 0);
+    if (Object.keys(pending.current).length >= 6) flushTags();
+    else if (!flushTimer.current) flushTimer.current = setTimeout(() => { flushTimer.current = null; flushTags(); }, 1500);
     const left = tagLeft - 1;
     setTagLeft(left);
     setQueue(q => q.slice(1));
@@ -585,7 +639,7 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
       setMsg('All photos tagged ✓ — new photos from Paul will show up here to tag.');
       finishTagging();
     } else if (queue.length === 1) {
-      saveChain.current.then(fetchQueue);   // batch used up — next 6 once the saves land
+      fetchQueue();   // batch used up — next 6 (the ones just tagged are excluded)
     }
   }
 
@@ -783,7 +837,7 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
                 : <div className="w-full h-full flex items-center justify-center text-sm" style={{ color: 'var(--color-ink-muted)' }}>{queueBusy ? 'Loading…' : queue[0]?.name ?? ''}</div>}
             </div>
             <div className="flex-1 flex flex-col gap-2">
-              <div style={label}>Which category? · {tagLeft} left</div>
+              <div style={label}>Which category? · {tagLeft} left{unsaved ? ` · saving ${unsaved}…` : ''}</div>
               <div className="grid grid-cols-2 gap-2">
                 {PHOTO_CATS.map(([k, v]) => (
                   <button key={k} style={ghost} disabled={!queue[0] || queueBusy} onClick={() => tagPhoto(k)}>{v}</button>

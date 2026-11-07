@@ -8,7 +8,7 @@
 //    storyBrowse   { set?, cat?, page?, pageSize?, random? } → { ok, sets, photos:[{id,name,set,tag,thumb}], page, pages, total, untagged, cats }
 //    storyImage    { id, size? }                → { ok, id, dataUri }   (~1920px JPEG for the 1080×1920 canvas)
 //    storyTagQueue { count?, size?, exclude? }  → { ok, photos:[{id,name,set,thumb}], remaining }  — untagged photos
-//    storyTag      { tags: {id: CATEGORY} }     → { ok, saved, remaining }
+//    storyTag      { tags: {id: CATEGORY} }     → { ok, saved, total }   (kept quick: no pool listing)
 //
 //  Tags are our own (COFFEE, FOOD, PARMA, INSIDE, OUTSIDE, TEAM — each maps to a
 //  Google category, see app/lib/photoTags.ts), stored per photo in the `story_photo_tags`
@@ -150,7 +150,7 @@ function gbpStoryTagQueue_(p) {
 
 function gbpStoryTag_(p) {
   var lock = LockService.getScriptLock();
-  lock.waitLock(20000);                         // tags arrive one tap at a time — don't lose any
+  lock.waitLock(30000);                         // batches can overlap (page-close send) — don't lose any
   try {
     var ts = gbpStoryTagState_();
     var saved = 0;
@@ -160,9 +160,8 @@ function gbpStoryTag_(p) {
       ts.tags[id] = tags[id];
       saved++;
     });
-    var remaining = gbpStoryUntagged_(ts).length;
     gbpWriteOsBlock_('story_photo_tags', { tags: ts.tags, updated: new Date().toISOString() });
-    return { ok: true, saved: saved, remaining: remaining };
+    return { ok: true, saved: saved, total: Object.keys(ts.tags).length };
   } finally {
     lock.releaseLock();
   }

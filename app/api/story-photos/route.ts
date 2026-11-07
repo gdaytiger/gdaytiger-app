@@ -69,7 +69,7 @@ function cleanTags(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== 'object') return out;
   for (const [id, cat] of Object.entries(raw as Record<string, unknown>)) {
     if (ID_RE.test(id) && isPhotoTag(cat)) out[id] = cat;
-    if (Object.keys(out).length >= 20) break;
+    if (Object.keys(out).length >= 100) break;
   }
   return out;
 }
