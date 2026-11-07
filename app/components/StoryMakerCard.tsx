@@ -55,7 +55,7 @@ const TEMPLATES: Template[] = [
     { kind: 'body', label: 'Includes', text: '+ ANY SMALL COFFEE\nOR CAN OF DRINK.' },
     { kind: 'price', label: 'Price', text: '$20' },
   ] },
-  { id: 'event', name: 'Saturdays', blur: 36, blocks: [
+  { id: 'event', name: 'Saturdays', blocks: [
     HEAD, HOURS,
     { kind: 'title', label: 'Run club', text: 'RUN PHILLIP ISLAND' },
     { kind: 'body', label: 'Details', text: "7AM EVERY SATURDAY.\nKICKING OFF AT THE ESPLANADE.\n15% OFF AT G'DAY TIGER\nAFTERWARDS." },
