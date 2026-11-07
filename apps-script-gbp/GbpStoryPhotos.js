@@ -10,7 +10,8 @@
 //    storyTagQueue { count?, size?, exclude? }  → { ok, photos:[{id,name,set,thumb}], remaining, auto }  — untagged photos
 //    storyTag      { tags: {id: CATEGORY} }     → { ok, saved, remaining, auto }
 //
-//  Categories are Google's photo categories, stored per photo in the `story_photo_tags`
+//  Tags are our own (COFFEE, FOOD, PARMA, INSIDE, OUTSIDE, TEAM — each maps to a
+//  Google category, see app/lib/photoTags.ts), stored per photo in the `story_photo_tags`
 //  block on the OS page. Jono tags the backlog by hand in TIGER OS; once nothing is
 //  left untagged `auto` flips on and TIGER OS has Claude tag new arrivals.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -111,7 +112,7 @@ function gbpStoryInPool_(id) {
 }
 
 // ─── Category tags ───────────────────────────────────────────────────────────
-var STORY_CATS = ['FOOD_AND_DRINK', 'INTERIOR', 'EXTERIOR', 'TEAMS', 'AT_WORK', 'ADDITIONAL'];
+var STORY_CATS = ['COFFEE', 'FOOD', 'PARMA', 'INSIDE', 'OUTSIDE', 'TEAM'];   // keep in sync with app/lib/photoTags.ts
 
 function gbpStoryTagState_() {
   var s = gbpReadOsBlock_('story_photo_tags') || {};

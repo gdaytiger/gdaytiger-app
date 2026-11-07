@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dices, Download, FolderOpen, Plus, RefreshCw, RotateCcw, Tags, Trash2 } from 'lucide-react';
+import { PHOTO_TAGS } from '@/app/lib/photoTags';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // Story Maker — TigerOS replacement for Adobe Express on the morning Instagram story.
@@ -302,11 +303,8 @@ type LibPhoto = { id: string; name: string; set: string; thumb: string | null; t
 type LibData = { ok: boolean; photos?: LibPhoto[]; total?: number; fallback?: boolean; error?: string; untagged?: number; auto?: boolean };
 type QueueData = { ok: boolean; photos?: LibPhoto[]; remaining?: number; auto?: boolean; error?: string };
 
-// Google Business Profile photo categories — the same set the Google tab posts with.
-const PHOTO_CATS: [string, string][] = [
-  ['FOOD_AND_DRINK', 'Food & drink'], ['INTERIOR', 'Inside'], ['EXTERIOR', 'Outside'],
-  ['TEAMS', 'Team'], ['AT_WORK', 'At work'], ['ADDITIONAL', 'Other'],
-];
+// Our photo tags (each maps to a Google category — see app/lib/photoTags.ts).
+const PHOTO_CATS: [string, string][] = PHOTO_TAGS.map(t => [t.key, t.label]);
 const postStory = async <T,>(body: object): Promise<T> => {
   const r = await fetch('/api/story-photos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const d = await r.json();

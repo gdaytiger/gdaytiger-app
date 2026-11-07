@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireSession } from '@/app/lib/auth';
 import { callGbp } from '@/app/lib/gbp';
+import { PHOTO_TAGS, PHOTO_TAG_KEYS, isPhotoTag } from '@/app/lib/photoTags';
 
 // Story Maker photo library — same Drive pool as the Google tile (Paul's gallery).
 //   { action: 'browse', set?, cat?, page?, random? } → GBP storyBrowse (random → 5 at random; cat filters by tag)
@@ -14,8 +15,6 @@ import { callGbp } from '@/app/lib/gbp';
 
 export const maxDuration = 60;
 
-// Google Business Profile photo categories — same set the Google tab posts with.
-const CATS = ['FOOD_AND_DRINK', 'INTERIOR', 'EXTERIOR', 'TEAMS', 'AT_WORK', 'ADDITIONAL'] as const;
 const ID_RE = /^[\w-]{10,100}$/;
 
 export async function POST(req: NextRequest) {
@@ -31,7 +30,7 @@ export async function POST(req: NextRequest) {
 
   if (body.action === 'browse') {
     const set = typeof body.set === 'string' ? body.set.slice(0, 200) : '';
-    const cat = typeof body.cat === 'string' && (CATS as readonly string[]).includes(body.cat) ? body.cat : '';
+    const cat = isPhotoTag(body.cat) ? body.cat : '';
     const page = typeof body.page === 'number' && body.page >= 0 ? Math.floor(body.page) : 0;
     const random = body.random === true;
     const r = await callGbp({ action: 'storyBrowse', set, cat, page, pageSize: random ? 5 : 24, random });
@@ -90,7 +89,7 @@ function cleanTags(raw: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   if (!raw || typeof raw !== 'object') return out;
   for (const [id, cat] of Object.entries(raw as Record<string, unknown>)) {
-    if (ID_RE.test(id) && typeof cat === 'string' && (CATS as readonly string[]).includes(cat)) out[id] = cat;
+    if (ID_RE.test(id) && isPhotoTag(cat)) out[id] = cat;
     if (Object.keys(out).length >= 20) break;
   }
   return out;
@@ -109,14 +108,9 @@ async function classify(photos: { id: string; thumb: string }[]): Promise<Record
   }
   content.push({
     type: 'text',
-    text: `These are photos from G'Day Tiger, a café. Put each photo in exactly one Google Business Profile category:
-FOOD_AND_DRINK — food or drinks are the subject (coffee, sandwiches, pastries, cabinet shots).
-INTERIOR — inside the café: the room, counter, seating, shelves, decor, with no food or person as the main subject.
-EXTERIOR — the shopfront, signage or street outside.
-TEAMS — staff posing or smiling for the camera, or customers as the subject.
-AT_WORK — staff working: making coffee, cooking, serving, behind the machine.
-ADDITIONAL — anything that fits none of the above.
-Return one entry per photo id.`,
+    text: `These are photos from G'Day Tiger, a café. Put each photo in exactly one category:
+${PHOTO_TAGS.map(t => `${t.key} — ${t.hint}.`).join('\n')}
+If a photo could fit two, pick the one its main subject belongs to. Return one entry per photo id.`,
   });
 
   const response = await client.beta.messages.create({
@@ -135,7 +129,7 @@ Return one entry per photo id.`,
               type: 'array',
               items: {
                 type: 'object',
-                properties: { id: { type: 'string' }, category: { type: 'string', enum: [...CATS] } },
+                properties: { id: { type: 'string' }, category: { type: 'string', enum: [...PHOTO_TAG_KEYS] } },
                 required: ['id', 'category'],
                 additionalProperties: false,
               },
