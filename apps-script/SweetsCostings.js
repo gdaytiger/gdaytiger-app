@@ -51,6 +51,10 @@ var SWEETS_SEED = [
   ['CANDIED PIE',              'Candied Bakery', 'Candied Pie',             45.45, 'Y', 8,  0, 10.00, 'Pie',     '',       '2026-11-05'],
   ['MUFFIN',                   'Little Bertha',  'Muffins',                 21.63, 'N', 6,  6, 6.50,  'Muffin',  'Raspberry', '2026-11-04'],
   ['GRANOLA BAR',              'Little Bertha',  'Granola Bar',             24.04, 'N', 6,  6, 6.50,  'Granola Bar', '',   '2026-11-04'],
+  // Noisette (added 7 Nov 2026) — prices ex-GST; ~3% for the per-order fuel surcharge.
+  ['PLAIN CROISSANT',          'Noisette',       '\\d{5}\\s+Croissant',   2.55,  'N', 1,  3, 7.50,  'Plain Croissant', '',  '2026-11-07'],
+  ['ALMOND CROISSANT',         'Noisette',       'ALMOND croissant',        3.43,  'N', 1,  3, 8.50,  'Almond Croissant', '', '2026-11-07'],
+  ['PORTUGUESE TART',          'Noisette',       'Portuguese Tart',         3.59,  'N', 1,  3, 7.00,  'Portuguese Tart', '',  '2026-11-07'],
   ['FRIAND (BLACKBERRY)',      'Dench',          'Blackberry Friand',       20.43, 'N', 6,  0, 6.50,  'Friand',  '',       '2026-11-04'],
 ];
 
@@ -60,6 +64,7 @@ var SWEETS_SUPPLIERS = [
   { name: 'Candied Bakery', folderName: 'Candied Bakery', filter: /INV-|Invoice/i },
   { name: 'Little Bertha',  folderName: 'Little Bertha',  filter: /Invoice/i },
   { name: 'Dench',          folderId: '1Kes-5QAHFTHZi_dL__BcasZbVWKvSOcX', filter: /Invoice/i },
+  { name: 'Noisette',       folderName: 'Noisette',       filter: /Invoice/i },
 ];
 
 // ─── SETUP ────────────────────────────────────────────────────────────────────
@@ -90,6 +95,42 @@ function setupSweetsSheet() {
   formatSweetsSheet_(sh);
   SpreadsheetApp.flush();
   Logger.log('SWEETS tab created with ' + SWEETS_SEED.length + ' rows.');
+}
+
+// Appends any SWEETS_SEED row the tab has never had (tracked in SWEETS_KNOWN),
+// so new products go live on the next sync without a manual setup run. A row
+// you delete by hand is not re-added.
+function ensureSweetsRows_(log) {
+  var sh = SpreadsheetApp.openById(SWEETS_SS_ID).getSheetByName(SWEETS_TAB);
+  if (!sh) return 0;
+  var props = PropertiesService.getScriptProperties();
+  var known = {};
+  try { JSON.parse(props.getProperty('SWEETS_KNOWN') || '[]').forEach(function (n) { known[n] = 1; }); } catch (e) {}
+  var last = sh.getLastRow();
+  if (last >= SWEETS_FIRST) {
+    sh.getRange(SWEETS_FIRST, SW.ITEM, last - SWEETS_FIRST + 1, 1).getValues()
+      .forEach(function (v) { var n = String(v[0] || '').trim().toUpperCase(); if (n) known[n] = 1; });
+  }
+  if (!props.getProperty('SWEETS_KNOWN')) {
+    // First run: everything seeded before 7 Nov 2026 counts as known (incl. deleted rows).
+    ['COOKIE (MARSHY)', 'COOKIE (PRETZEL OAT)', 'BROWNIE', 'CAKE (CARROT)', 'CAKE (MAPLE PECAN SLICE)',
+     'CANDIED PIE', 'MUFFIN', 'GRANOLA BAR', 'FRIAND (BLACKBERRY)'].forEach(function (n) { known[n] = 1; });
+  }
+  var added = 0;
+  SWEETS_SEED.forEach(function (s) {
+    var name = String(s[0]).toUpperCase();
+    if (known[name]) return;
+    var r = Math.max(sh.getLastRow() + 1, SWEETS_FIRST);
+    sh.getRange(r, SW.ITEM, 1, 7).setValues([[s[0], s[1], s[2], s[3], s[4], s[5], s[6]]]);
+    sh.getRange(r, SW.SELL).setValue(s[7]);
+    sh.getRange(r, SW.SQ_ITEM, 1, 3).setValues([[s[8], s[9], s[10]]]);
+    writeSweetsFormulas_(sh, r);
+    known[name] = 1; added++;
+    if (log) log.push('[Sweets] added row: ' + s[0]);
+  });
+  props.setProperty('SWEETS_KNOWN', JSON.stringify(Object.keys(known)));
+  if (added) { formatSweetsSheet_(sh); SpreadsheetApp.flush(); }
+  return added;
 }
 
 function writeSweetsFormulas_(sh, r) {
@@ -208,7 +249,7 @@ function scanSweetsInvoices_(log) {
 function sweetsExtractUnitPrice_(flatText, matchSrc) {
   var re;
   try {
-    re = new RegExp('(?:' + matchSrc + ')[^$]{0,60}?\\s(\\d+(?:\\.\\d+)?)\\s(\\d+\\.\\d{2})\\s(?:\\d+(?:\\.\\d+)?%\\s)*(\\d[\\d,]*\\.\\d{2})', 'ig');
+    re = new RegExp('(?:' + matchSrc + ')[^$]{0,60}?\\s(\\d+(?:\\.\\d+)?)\\s\\$?(\\d+\\.\\d{2})\\s(?:(?:\\d+(?:\\.\\d+)?%|NO GST|GST)\\s)*\\$?(\\d[\\d,]*\\.\\d{2})', 'ig');
   } catch (e) { return null; }
   var m, best = null;
   while ((m = re.exec(flatText)) !== null) {
@@ -316,6 +357,7 @@ function syncSweetsToNotion() {
   var key = PropertiesService.getScriptProperties().getProperty('NOTION_API_KEY');
   if (!key) throw new Error('NOTION_API_KEY not set.');
   var log = [];
+  try { ensureSweetsRows_(log); } catch (e) { log.push('[Sweets] add-rows error: ' + e.message); }
   try { syncSweetsSquarePrices_(log); } catch (e) { log.push('[Sweets/Square] error: ' + e.message); }
 
   var data = readSweetsRows_();
