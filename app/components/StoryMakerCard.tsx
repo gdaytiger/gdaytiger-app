@@ -250,6 +250,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 // Desktop Chrome: write into a folder picked once (handle kept in IndexedDB) and
 // clear story files there older than KEEP_DAYS. Anything else: plain download.
 const KEEP_DAYS = 7;
+// Copied to the clipboard on every SAVE, ready to paste into an Instagram link sticker.
+const PICKUP_LINK = 'https://www.meandu.app/gdaytiger/pickup/pick-up';
 const FILE_PREFIX = 'gdaytiger-story-';
 type SaveMode = 'share' | 'folder' | 'download';
 
@@ -573,6 +575,9 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
     const cv = canvasRef.current;
     if (!cv) return;
     setBusy('save');
+    // Start the copy straight away, inside the tap — Safari only allows clipboard writes during a user gesture.
+    const copied = navigator.clipboard?.writeText(PICKUP_LINK).then(() => true, () => false) ?? Promise.resolve(false);
+    const linkNote = async () => ((await copied) ? ' · pick-up link copied' : '');
     try {
       const blob = await new Promise<Blob | null>(r => cv.toBlob(r, 'image/jpeg', 0.92));
       if (!blob) throw new Error('could not render');
@@ -582,6 +587,8 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
       const name = `${FILE_PREFIX}${date}-${time}.jpg`;
       const file = new File([blob], name, { type: 'image/jpeg' });
       if (saveMode === 'share' && navigator.canShare?.({ files: [file] })) {
+        // Don't await anything between the tap and share() — Safari needs share() promptly.
+        copied.then(ok => setMsg(ok ? 'Pick-up link copied — paste it into a link sticker' : 'Pick-up link couldn’t be copied'));
         await navigator.share({ files: [file] });
       } else if (saveMode === 'folder') {
         let dir = await getFolder();
@@ -593,14 +600,14 @@ export default function StoryMakerCard({ active }: { active: boolean }) {
         await w.write(blob);
         await w.close();
         const cleared = await clearOld(dir);
-        setMsg(`Saved to “${dir.name}” ✓${cleared ? ` · cleared ${cleared} older than ${KEEP_DAYS} days` : ''}`);
+        setMsg(`Saved to “${dir.name}” ✓${cleared ? ` · cleared ${cleared} older than ${KEEP_DAYS} days` : ''}${await linkNote()}`);
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = name;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 5000);
-        setMsg(`Saved ${name} ✓`);
+        setMsg(`Saved ${name} ✓${await linkNote()}`);
       }
     } catch (e) {
       if (!(e instanceof DOMException && e.name === 'AbortError')) setMsg(`Export didn’t work: ${e instanceof Error ? e.message : 'error'}`);
