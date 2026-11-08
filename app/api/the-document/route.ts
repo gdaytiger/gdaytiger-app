@@ -9,7 +9,7 @@ import { melbNowDate } from '@/app/lib/melbTime';
 //              Kind=Settlement rows are payments that pull the balance back to zero.
 //   Clean    — item-for-item IOUs, no dollars. From = venue that lent it. Open → Squared.
 // Items in Supplier Prices are always priced from it (POST looks them up, PATCH can't change them).
-// Only items that aren't in Supplier Prices can be given a price, when they're logged.
+// Only items that aren't in Supplier Prices can be given a price, and it stays editable per line.
 // Both logins (owner + Isola) can log and edit here — see proxy.ts / auth.ts.
 const DB_ID = '997ef2daa9974f34a12e1256065f3e7c';
 // Same page the Supplier Prices widget reads its ingredient_prices JSON block from.
@@ -149,6 +149,14 @@ function findPrice(item: string, catalogue: CatItem[]): CatItem | null {
   return priced.find(c => (fixed ? fixed.test(c.name) : c.name.trim().toUpperCase() === name)) ?? null;
 }
 
+// A line's entries since the last settle-up (rows arrive newest first).
+function periodEntries(rows: DocRow[], name: string): DocRow[] {
+  const doc = rows.filter(r => r.section === 'Document');
+  const lastSettle = doc.findIndex(r => r.kind === 'Settlement');
+  const period = lastSettle === -1 ? doc : doc.slice(0, lastSettle);
+  return period.filter(r => r.kind === 'Entry' && r.item === name);
+}
+
 export async function GET(req: NextRequest) {
   const role = requireDocumentAccess(req);
   if (role instanceof NextResponse) return role;
@@ -198,12 +206,25 @@ export async function POST(req: NextRequest) {
       const name = String(body.item || '').trim().toUpperCase();
       if (!name) return NextResponse.json({ error: 'Item required' }, { status: 400 });
       if (FIXED_LINES[name]) return NextResponse.json({ error: `${name} can't be removed` }, { status: 400 });
-      const doc = (await loadRows()).filter(r => r.section === 'Document');
-      const lastSettle = doc.findIndex(r => r.kind === 'Settlement');
-      const period = lastSettle === -1 ? doc : doc.slice(0, lastSettle);
-      for (const r of period.filter(r => r.kind === 'Entry' && r.item === name)) {
+      for (const r of periodEntries(await loadRows(), name)) {
         const res = await notionFetch(`/pages/${r.id}`, 'PATCH', { archived: true });
         if (!res.id) throw new Error(res.message || 'Notion delete failed');
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // Reprice a line that isn't in Supplier Prices: updates all its entries since the last settle-up.
+    if (body.action === 'setLinePrice') {
+      const name = String(body.item || '').trim().toUpperCase();
+      const price = Number(body.price);
+      if (!name) return NextResponse.json({ error: 'Item required' }, { status: 400 });
+      if (!(Number.isFinite(price) && price > 0)) return NextResponse.json({ error: `Enter a price for ${name}` }, { status: 400 });
+      const catalogue = await loadCatalogue();
+      if (!catalogue.length) return NextResponse.json({ error: 'Supplier Prices unavailable, try again' }, { status: 502 });
+      if (FIXED_LINES[name] || findPrice(name, catalogue)) return NextResponse.json({ error: `${name} is priced from Supplier Prices` }, { status: 400 });
+      for (const r of periodEntries(await loadRows(), name)) {
+        const res = await notionFetch(`/pages/${r.id}`, 'PATCH', { properties: toProps({ unitPrice: price }) });
+        if (!res.id) throw new Error(res.message || 'Notion update failed');
       }
       return NextResponse.json({ ok: true });
     }
@@ -229,7 +250,9 @@ export async function POST(req: NextRequest) {
         unitPrice = match.price;
       } else {
         if (FIXED_LINES[name]) return NextResponse.json({ error: `No price in Supplier Prices for ${name}` }, { status: 400 });
-        unitPrice = Number(body.unitPrice);
+        // A line already in this period keeps its current price, so a stale phone can't mix prices.
+        const existing = periodEntries(await loadRows(), name).find(r => r.unitPrice > 0);
+        unitPrice = existing ? existing.unitPrice : Number(body.unitPrice);
         if (!(Number.isFinite(unitPrice) && unitPrice > 0)) return NextResponse.json({ error: `Enter a price for ${name}` }, { status: 400 });
       }
     }

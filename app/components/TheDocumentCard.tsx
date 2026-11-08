@@ -120,6 +120,21 @@ function MiniCounter({ count, onChange, who, by = 1 }: { count: number; onChange
   );
 }
 
+// Price box on a line that isn't in Supplier Prices. Saves when you leave the box or press Enter.
+function LinePriceInput({ value, item, onCommit }: { value: number; item: string; onCommit: (price: number) => void }) {
+  const [draft, setDraft] = useState(value ? String(value) : '');
+  const commit = () => {
+    const n = Math.round(Number(draft) * 100) / 100;
+    if (n > 0 && n !== value) onCommit(n);
+    else setDraft(value ? String(value) : '');
+  };
+  return (
+    <input type="number" inputMode="decimal" step="0.01" min={0} value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      className="text-xs px-2 py-0.5 rounded-lg w-20 text-center focus:outline-none text-gray-800" style={input} aria-label={`Unit price for ${item}`} placeholder="$ EACH" />
+  );
+}
+
 // ── Editable history row. Priced lines: qty and note only; the price is always read-only ──
 function EditRow({ row, onSave, onDelete, onCancel, priced }: {
   row: Row; priced: boolean; onSave: (patch: Partial<Row>) => void; onDelete: () => void; onCancel: () => void;
@@ -185,12 +200,12 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const [showLog, setShowLog] = useState(false);
 
   // Lines are priced from Supplier Prices, matched by the server (the API re-checks on save).
-  // Only an item that isn't in Supplier Prices can be given a price, when it's added.
+  // Only an item that isn't in Supplier Prices can be given a price, and it stays editable.
   const gelato = data.fixedPrices['GELATO'];
   const bread = data.fixedPrices['SOURDOUGH LOAF'];
   const milk = data.fixedPrices['MILK (2L)'];
   const catalogueItem = (name: string) => data.catalogue.find(c => c.price > 0 && c.name.trim().toUpperCase() === name.trim().toUpperCase());
-  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number; removable?: boolean; customPrice?: boolean };
+  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number; removable?: boolean; customPrice?: boolean; editablePrice?: boolean };
   const lines: Line[] = [
     { key: 'gelato', item: 'GELATO', category: 'Gelato', price: gelato?.price ?? null, unit: gelato?.unit || 'tub', icon: <IceCreamCone size={14} strokeWidth={2.25} aria-hidden /> },
     { key: 'bread', item: 'SOURDOUGH LOAF', category: 'Bread', price: bread?.price ?? null, unit: 'loaf', icon: <Wheat size={14} strokeWidth={2.25} aria-hidden /> },
@@ -224,7 +239,7 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
     if (fixedItems.has(r.item)) continue;
     fixedItems.add(r.item);
     const cat = catalogueItem(r.item);
-    lines.push({ key: r.item, item: r.item, category: r.category || 'Other', price: cat?.price ?? (r.unitPrice > 0 ? r.unitPrice : null), unit: cat?.unit || r.unit, removable: true, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
+    lines.push({ key: r.item, item: r.item, category: r.category || 'Other', price: cat?.price ?? (r.unitPrice > 0 ? r.unitPrice : null), unit: cat?.unit || r.unit, removable: true, editablePrice: !cat, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
   }
   const typed = item.trim();
   if (typed && !fixedItems.has(typed)) {
@@ -392,6 +407,8 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
                 <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className="text-xs px-2 py-0.5 rounded-lg w-20 text-center focus:outline-none text-gray-800" style={input} aria-label="Unit price" placeholder="$ EACH" />
               ) : confirmLine === l.item ? (
                 <div className="text-[11px] leading-tight uppercase" style={{ color: 'var(--color-danger)' }}>Tap bin again to remove</div>
+              ) : l.editablePrice ? (
+                <LinePriceInput key={l.price ?? 0} value={l.price ?? 0} item={l.item} onCommit={p => run(() => api('POST', { action: 'setLinePrice', item: l.item, price: p }))} />
               ) : (
                 <div className="text-[11px] leading-tight text-gray-400 tabular-nums uppercase">
                   {l.price !== null
