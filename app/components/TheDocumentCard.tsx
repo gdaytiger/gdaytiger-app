@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, Pencil, Search, Trash2, X, IceCreamCone, Minus, Plus, Wheat, Milk, Package } from 'lucide-react';
+import { ArrowRight, Check, Pencil, Search, Trash2, IceCreamCone, Minus, Plus, Wheat, Milk, Package } from 'lucide-react';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // THE DOCUMENT — running stock tally between G'Day Tiger and Isola Di Capri.
@@ -12,14 +12,14 @@ import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPr
 
 type Venue = 'GDT' | 'ISOLA';
 type Row = {
-  id: string; section: 'Document' | 'Clean' | 'Setting'; kind: 'Entry' | 'Settlement';
+  id: string; section: 'Document' | 'Clean'; kind: 'Entry' | 'Settlement';
   item: string; from: Venue; category: string; qty: number; unitPrice: number; unit: string;
   date: string; status: 'Open' | 'Squared'; loggedBy: Venue | ''; note: string; created: string;
 };
 type CatItem = { name: string; price: number; unit: string };
 type Data = {
   role: 'owner' | 'partner'; venue: Venue; document: Row[]; clean: Row[]; balance: number;
-  gelato: { id: string; price: number; unit: string } | null; catalogue: CatItem[];
+  fixedPrices: Record<string, CatItem | null>; catalogue: CatItem[];
 };
 
 const NAME: Record<Venue, string> = { GDT: "G'DAY TIGER", ISOLA: 'ISOLA DI CAPRI' };
@@ -120,29 +120,54 @@ function MiniCounter({ count, onChange, who, by = 1 }: { count: number; onChange
   );
 }
 
-// ── Editable history row (both logins have full edit) ──
+// Price box on a line that isn't in Supplier Prices. Saves when you leave the box or press Enter.
+function LinePriceInput({ value, item, onCommit }: { value: number; item: string; onCommit: (price: number) => void }) {
+  const [draft, setDraft] = useState(value ? String(value) : '');
+  const commit = () => {
+    const n = Math.round(Number(draft) * 100) / 100;
+    if (n > 0 && n !== value) onCommit(n);
+    else setDraft(value ? String(value) : '');
+  };
+  return (
+    <input type="number" inputMode="decimal" step="0.01" min={0} value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      className="text-xs px-2 py-0.5 rounded-lg w-20 text-center focus:outline-none text-gray-800" style={input} aria-label={`Unit price for ${item}`} placeholder="$ EACH" />
+  );
+}
+
+// ── Editable history row. Priced lines: qty and note only; the price is always read-only ──
 function EditRow({ row, onSave, onDelete, onCancel, priced }: {
   row: Row; priced: boolean; onSave: (patch: Partial<Row>) => void; onDelete: () => void; onCancel: () => void;
 }) {
   const [item, setItem] = useState(row.item);
   const [qty, setQty] = useState(String(row.qty));
-  const [price, setPrice] = useState(String(row.unitPrice));
   const [from, setFrom] = useState<Venue>(row.from);
   const [date, setDate] = useState(row.date);
   const [note, setNote] = useState(row.note);
   const [confirmDel, setConfirmDel] = useState(false);
   return (
     <div className="flex flex-col gap-2 p-3 rounded-2xl" style={{ ...glassTileStyle, border: '1.5px solid var(--color-brand-peach)' }}>
-      <input value={item} onChange={e => setItem(e.target.value.toUpperCase())} className={`${inputClass} uppercase`} style={input} aria-label="Item" />
-      {row.kind !== 'Settlement' && <FromToggle from={from} onChange={setFrom} verb={priced ? 'supplied' : 'lent'} />}
-      <div className="flex gap-2 flex-wrap">
-        <input type="number" inputMode="decimal" value={qty} onChange={e => setQty(e.target.value)} className={`${inputClass} w-20 text-center`} style={input} aria-label="Qty" />
-        {priced && <input type="number" inputMode="decimal" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className={`${inputClass} w-24 text-center`} style={input} aria-label="Unit price" />}
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass} style={input} aria-label="Date" />
-      </div>
+      {priced ? (
+        <div className="text-sm font-semibold text-gray-800 uppercase truncate">
+          {row.item} <span className="text-xs font-normal text-gray-400 tabular-nums">{money(row.unitPrice)}{row.unit ? ` / ${row.unit}` : ''}</span>
+        </div>
+      ) : (
+        <>
+          <input value={item} onChange={e => setItem(e.target.value.toUpperCase())} className={`${inputClass} uppercase`} style={input} aria-label="Item" />
+          <FromToggle from={from} onChange={setFrom} verb="lent" />
+        </>
+      )}
+      {(row.kind !== 'Settlement' || !priced) && (
+        <div className="flex gap-2 flex-wrap">
+          <input type="number" inputMode="decimal" value={qty} onChange={e => setQty(e.target.value)} className={`${inputClass} w-20 text-center`} style={input} aria-label="Qty" />
+          {!priced && <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass} style={input} aria-label="Date" />}
+        </div>
+      )}
       <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note" className={inputClass} style={input} aria-label="Note" />
       <div className="flex gap-2 items-center">
-        <button type="button" style={BTN_PRIMARY} onClick={() => onSave({ item, qty: Number(qty) || 0, unitPrice: Number(price) || 0, from, date, note })}>
+        <button type="button" style={BTN_PRIMARY} onClick={() => onSave(priced
+          ? (row.kind === 'Settlement' ? { note } : { qty: Number(qty) || 0, note })
+          : { item, qty: Number(qty) || 0, from, date, note })}>
           <Check size={13} strokeWidth={2.5} aria-hidden /> SAVE
         </button>
         <button type="button" style={glassButtonStyle} onClick={onCancel}>CANCEL</button>
@@ -166,24 +191,21 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const [saveError, setSaveError] = useState<string | null>(null);
   const [milkPack, setMilkPack] = useState<'bottle' | 'crate'>('crate');
   const [item, setItem] = useState('');
-  const [price, setPrice] = useState('');
-  const [unit, setUnit] = useState('');
+  const [price, setPrice] = useState(''); // only for items that aren't in Supplier Prices
   const [category, setCategory] = useState('Other');
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmSettle, setConfirmSettle] = useState(false);
-  const [gelatoEdit, setGelatoEdit] = useState(false);
-  const [gPrice, setGPrice] = useState(String(data.gelato?.price ?? ''));
-  const [gUnit, setGUnit] = useState(data.gelato?.unit || '6L tub');
+  const [confirmLine, setConfirmLine] = useState<string | null>(null);
   const [showOlder, setShowOlder] = useState(false);
   const [showLog, setShowLog] = useState(false);
 
-  // Fixed lines priced from Supplier Prices (gelato falls back to the manual price until it syncs).
-  const find = (re: RegExp) => data.catalogue.find(c => re.test(c.name));
-  const gelatoCat = find(/gelato/i);
-  const gelato = gelatoCat ? { price: gelatoCat.price, unit: gelatoCat.unit } : data.gelato;
-  const bread = find(/sourdough/i);
-  const milk = find(/sungold jersey|full cream/i);
-  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number };
+  // Lines are priced from Supplier Prices, matched by the server (the API re-checks on save).
+  // Only an item that isn't in Supplier Prices can be given a price, and it stays editable.
+  const gelato = data.fixedPrices['GELATO'];
+  const bread = data.fixedPrices['SOURDOUGH LOAF'];
+  const milk = data.fixedPrices['MILK (2L)'];
+  const catalogueItem = (name: string) => data.catalogue.find(c => c.price > 0 && c.name.trim().toUpperCase() === name.trim().toUpperCase());
+  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number; removable?: boolean; customPrice?: boolean; editablePrice?: boolean };
   const lines: Line[] = [
     { key: 'gelato', item: 'GELATO', category: 'Gelato', price: gelato?.price ?? null, unit: gelato?.unit || 'tub', icon: <IceCreamCone size={14} strokeWidth={2.25} aria-hidden /> },
     { key: 'bread', item: 'SOURDOUGH LOAF', category: 'Bread', price: bread?.price ?? null, unit: 'loaf', icon: <Wheat size={14} strokeWidth={2.25} aria-hidden /> },
@@ -210,15 +232,20 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const older = lastSettleIdx === -1 ? [] : data.document.slice(lastSettleIdx);
   const entries = current.filter(r => r.kind === 'Entry');
 
-  // Any other item counted this period keeps its own line (priced as first logged).
+  // Any other item counted this period keeps its own removable line, at today's Supplier
+  // Prices price, or the price it was first logged at if it isn't in Supplier Prices.
   const fixedItems = new Set(lines.map(l => l.item));
   for (const r of [...entries].reverse()) {
     if (fixedItems.has(r.item)) continue;
     fixedItems.add(r.item);
-    lines.push({ key: r.item, item: r.item, category: r.category || 'Other', price: r.unitPrice, unit: r.unit, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
+    const cat = catalogueItem(r.item);
+    lines.push({ key: r.item, item: r.item, category: r.category || 'Other', price: cat?.price ?? (r.unitPrice > 0 ? r.unitPrice : null), unit: cat?.unit || r.unit, removable: true, editablePrice: !cat, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
   }
   const typed = item.trim();
-  if (typed && !fixedItems.has(typed)) lines.push({ key: 'custom', item: typed, category, price: price === '' ? null : Number(price) || 0, unit, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
+  if (typed && !fixedItems.has(typed)) {
+    const cat = catalogueItem(typed);
+    lines.push({ key: 'custom', item: typed, category, price: cat ? cat.price : (Number(price) > 0 ? Number(price) : null), unit: cat?.unit || '', customPrice: !cat, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
+  }
 
   const keyOf = (l: Line, v: Venue) => `${l.item}|${v}`;
   const savedQty = (l: Line, v: Venue) => entries.filter(r => r.item === l.item && r.from === other(v)).reduce((a, r) => a + r.qty, 0);
@@ -267,7 +294,7 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
     return () => { window.removeEventListener('pagehide', sendNow); sendNow(); };
   }, []);
   const setCount = (l: Line, v: Venue, n: number) => {
-    if (l.price === null) return; // can't value it yet — set a price first
+    if (l.price === null) return; // no price yet, so it can't be valued
     const d = n - countOf(l, v);
     if (!d) return;
     const key = keyOf(l, v);
@@ -277,6 +304,11 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
     timersRef.current[key] = setTimeout(() => flush(key), 700);
   };
   const pendingCount = Object.values(unsaved).filter(Boolean).length + saving;
+  const deleteLine = (l: Line) => run(async () => {
+    await api('POST', { action: 'deleteLine', item: l.item });
+    setConfirmLine(null);
+    if (l.item === typed) { setItem(''); setPrice(''); }
+  });
 
   // Each venue's tab since the last settle-up (what it has received), incl. taps still saving.
   const unsavedValue = (v: Venue) => lines.reduce((a, l) => a + (unsaved[keyOf(l, v)] ?? 0) * (l.price || 0), 0);
@@ -361,18 +393,27 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
               <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight max-w-full" style={{ fontFamily: '"stolzl", sans-serif' }}>
                 <span style={{ color: 'var(--color-ink-muted)' }} className="shrink-0">{l.icon}</span>
                 <span className="truncate">{l.key === 'milk' ? 'MILK' : l.item}</span>
+                {/* Hidden while taps are saving, so an autosave can't bring a removed line back */}
+                {l.removable && pendingCount === 0 && (
+                  <button type="button" onClick={() => (confirmLine === l.item ? deleteLine(l) : setConfirmLine(l.item))} onBlur={() => setConfirmLine(null)}
+                    aria-label={confirmLine === l.item ? `Confirm removing ${l.item}` : `Remove ${l.item}`} className="shrink-0 p-1 -m-1"
+                    style={{ color: confirmLine === l.item ? 'var(--color-danger)' : 'var(--color-ink-muted)' }}>
+                    <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+                  </button>
+                )}
               </div>
               {l.sub}
-              {l.key === 'custom' ? (
-                <div className="flex gap-1 items-center justify-center">
-                  <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className="text-xs px-2 py-0.5 rounded-lg w-20 text-center focus:outline-none text-gray-800" style={input} aria-label="Unit price" placeholder="$ EACH" />
-                  {unit && <span className="text-[11px] text-gray-400 truncate uppercase">/ {unit}</span>}
-                </div>
+              {l.customPrice ? (
+                <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className="text-xs px-2 py-0.5 rounded-lg w-20 text-center focus:outline-none text-gray-800" style={input} aria-label="Unit price" placeholder="$ EACH" />
+              ) : confirmLine === l.item ? (
+                <div className="text-[11px] leading-tight uppercase" style={{ color: 'var(--color-danger)' }}>Tap bin again to remove</div>
+              ) : l.editablePrice ? (
+                <LinePriceInput key={l.price ?? 0} value={l.price ?? 0} item={l.item} onCommit={p => run(() => api('POST', { action: 'setLinePrice', item: l.item, price: p }))} />
               ) : (
                 <div className="text-[11px] leading-tight text-gray-400 tabular-nums uppercase">
-                  {l.price !== null ? (l.per && l.per > 1 ? `${money(l.price * l.per)} / crate (${l.per} bottles)` : `${money(l.price)} / ${l.unit}`) : (l.key === 'gelato'
-                    ? <button type="button" onClick={() => setGelatoEdit(true)} className="underline">Set price</button>
-                    : 'No price in Supplier Prices')}
+                  {l.price !== null
+                    ? (l.per && l.per > 1 ? `${money(l.price * l.per)} / crate (${l.per} bottles)` : `${money(l.price)}${l.unit ? ` / ${l.unit}` : ''}`)
+                    : 'No price in Supplier Prices'}
                 </div>
               )}
             </div>
@@ -380,20 +421,8 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
           </div>
         ))}
         <ItemSearch catalogue={data.catalogue} value={item}
-          onChange={v => { setItem(v.toUpperCase()); setCategory(/^gelato$/i.test(v.trim()) ? 'Gelato' : guessCategory(v)); }}
-          onPick={c => { setItem(c.name.toUpperCase()); setPrice(String(c.price)); setUnit(c.unit); setCategory(guessCategory(c.name)); }} />
-        {/* Manual gelato price — only until gelato comes through Supplier Prices */}
-        {!gelatoCat && gelatoEdit && (
-          <div className="flex gap-2 items-center flex-wrap">
-            <span style={label}>Gelato</span>
-            <input type="number" inputMode="decimal" step="0.01" value={gPrice} onChange={e => setGPrice(e.target.value)} placeholder="$ per tub" className={`${inputClass} w-24 text-center`} style={input} aria-label="Gelato price" />
-            <span className="text-gray-400 text-sm">per</span>
-            <input value={gUnit} onChange={e => setGUnit(e.target.value)} className={`${inputClass} w-28`} style={input} aria-label="Gelato unit" />
-            <button type="button" style={BTN_PRIMARY} disabled={!(Number(gPrice) > 0)} className="disabled:opacity-40"
-              onClick={() => run(async () => { await api('POST', { action: 'setGelato', price: Number(gPrice), unit: gUnit }); setGelatoEdit(false); })}>SAVE</button>
-            <button type="button" onClick={() => setGelatoEdit(false)} aria-label="Cancel" className="text-gray-400"><X size={16} strokeWidth={2.25} aria-hidden /></button>
-          </div>
-        )}
+          onChange={v => { setItem(v.toUpperCase()); setPrice(''); setCategory(/^gelato$/i.test(v.trim()) ? 'Gelato' : guessCategory(v)); }}
+          onPick={c => { setItem(c.name.toUpperCase()); setPrice(''); setCategory(guessCategory(c.name)); }} />
         {/* Silent when saving works — only a failed save shows a line */}
         {saveError && <div className="text-xs pt-1 uppercase" style={{ color: 'var(--color-danger)' }}>{saveError}</div>}
       </div>
