@@ -126,19 +126,20 @@ function VenueCounter({ venue, count, onChange, foot }: {
 }
 
 // Compact − n + used on each Log Stock line.
-function MiniCounter({ count, onChange, who }: { count: number; onChange: (n: number) => void; who: string }) {
+// `by` = how much each +/− tap moves the count (milk in crate mode = 9 bottles a tap).
+function MiniCounter({ count, onChange, who, by = 1 }: { count: number; onChange: (n: number) => void; who: string; by?: number }) {
   const on = count > 0;
   const step: React.CSSProperties = { ...glassButtonStyle, padding: 0, width: '24px', height: '24px', justifyContent: 'center', flexShrink: 0 };
   return (
     <div className="flex items-center justify-center gap-0.5 rounded-xl py-1 w-[84px]"
       style={{ background: on ? 'rgba(251,205,173,0.12)' : 'transparent', border: `1px solid ${on ? 'var(--color-brand-peach)' : 'transparent'}` }}>
-      <button type="button" style={step} onClick={() => onChange(Math.max(0, count - 1))} aria-label={`One less to ${who}`} disabled={!on} className="disabled:opacity-40">
+      <button type="button" style={step} onClick={() => onChange(Math.max(0, count - by))} aria-label={`${by === 1 ? 'One' : by} less to ${who}`} disabled={!on} className="disabled:opacity-40">
         <Minus size={12} strokeWidth={2.5} aria-hidden />
       </button>
       <input type="number" inputMode="numeric" min={0} value={count || ''} placeholder="0"
         onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-        className="w-6 text-center text-base font-bold tabular-nums bg-transparent focus:outline-none text-gray-800 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" aria-label={`Qty to ${who}`} />
-      <button type="button" style={step} onClick={() => onChange(count + 1)} aria-label={`One more to ${who}`}>
+        className="w-7 text-center text-base font-bold tabular-nums bg-transparent focus:outline-none text-gray-800 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" aria-label={`Qty to ${who}`} />
+      <button type="button" style={step} onClick={() => onChange(count + by)} aria-label={`${by === 1 ? 'One' : by} more to ${who}`}>
         <Plus size={12} strokeWidth={2.5} aria-hidden />
       </button>
     </div>
@@ -209,7 +210,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
     { key: 'bread', item: 'SOURDOUGH LOAF', category: 'Bread', price: bread?.price ?? null, unit: 'loaf', icon: <Wheat size={14} strokeWidth={2.25} aria-hidden /> },
     {
       key: 'milk', category: 'Milk',
-      // A crate logs as 9 bottles, so the tally counts bottles either way.
+      // The counter always counts BOTTLES; in crate mode each tap adds 9.
       item: 'MILK (2L)', price: milk?.price ?? null, unit: 'bottle', per: milkPack === 'crate' ? 9 : 1,
       icon: <Milk size={14} strokeWidth={2.25} aria-hidden />,
       sub: (
@@ -227,10 +228,10 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
 
   const countOf = (k: string, v: Venue) => counts[k]?.[v] ?? 0;
   const setCount = (k: string, v: Venue, n: number) => setCounts(c => ({ ...c, [k]: { ...(c[k] ?? { GDT: 0, ISOLA: 0 }), [v]: n } }));
-  // Milk counts are per pack size — switching bottle/crate keeps the count, the line just re-prices.
+  // Counts are in the line's unit (milk = bottles), so qty = count. `per` only sets the tap step.
   const pending = lines.flatMap(l => (['GDT', 'ISOLA'] as Venue[])
     .filter(v => countOf(l.key, v) > 0 && l.price !== null)
-    .map(v => ({ l, v, qty: countOf(l.key, v) * (l.per ?? 1) })));
+    .map(v => ({ l, v, qty: countOf(l.key, v) })));
   const pendingTotal = (v: Venue) => pending.filter(p => p.v === v).reduce((a, p) => a + p.qty * (p.l.price || 0), 0);
   const reset = () => { setCounts({}); setItem(''); setPrice(''); setUnit(''); setCategory('Other'); setMilkPack('bottle'); };
   const addAll = async () => {
@@ -323,7 +324,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
         </div>
         {lines.map(l => (
           <div key={l.key} className="grid gap-2 items-center rounded-2xl py-1.5" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px', background: 'rgba(255,255,255,0.55)' }}>
-            <MiniCounter count={countOf(l.key, 'GDT')} onChange={n => setCount(l.key, 'GDT', n)} who={`G'Day: ${l.item}`} />
+            <MiniCounter count={countOf(l.key, 'GDT')} onChange={n => setCount(l.key, 'GDT', n)} who={`G'Day: ${l.item}`} by={l.per ?? 1} />
             <div className="flex flex-col items-center gap-1 min-w-0 text-center">
               <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight" style={{ fontFamily: '"stolzl", sans-serif' }}>
                 <span style={{ color: 'var(--color-ink-muted)' }} className="shrink-0">{l.icon}</span>
@@ -343,7 +344,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
                 </div>
               )}
             </div>
-            <MiniCounter count={countOf(l.key, 'ISOLA')} onChange={n => setCount(l.key, 'ISOLA', n)} who={`Isola: ${l.item}`} />
+            <MiniCounter count={countOf(l.key, 'ISOLA')} onChange={n => setCount(l.key, 'ISOLA', n)} who={`Isola: ${l.item}`} by={l.per ?? 1} />
           </div>
         ))}
         <ItemSearch catalogue={data.catalogue} value={item}
