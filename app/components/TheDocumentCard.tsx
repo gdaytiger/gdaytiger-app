@@ -420,9 +420,8 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
             <button type="button" onClick={() => setGelatoEdit(false)} aria-label="Cancel" className="text-gray-400"><X size={16} strokeWidth={2.25} aria-hidden /></button>
           </div>
         )}
-        <div className="text-xs tabular-nums pt-1 uppercase" style={{ color: saveError ? 'var(--color-danger)' : 'var(--color-ink-muted)' }}>
-          {saveError ?? (pendingCount > 0 ? 'Saving…' : 'Saved · tap + under whoever received it')}
-        </div>
+        {/* Silent when saving works — only a failed save shows a line */}
+        {saveError && <div className="text-xs pt-1 uppercase" style={{ color: 'var(--color-danger)' }}>{saveError}</div>}
       </div>
 
       {/* History */}
