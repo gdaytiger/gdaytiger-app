@@ -251,6 +251,10 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
 
   const bal = data.balance;
   const debtor: Venue | null = Math.abs(bal) < 0.005 ? null : bal > 0 ? 'ISOLA' : 'GDT';
+  // What's counted but not yet added moves the balance live (+ = Isola owes G'Day).
+  const pendingDelta = pendingTotal('ISOLA') - pendingTotal('GDT');
+  const shown = Math.round((bal + pendingDelta) * 100) / 100;
+  const getter: Venue | null = Math.abs(shown) < 0.005 ? null : shown > 0 ? 'GDT' : 'ISOLA';
 
   const renderRow = (r: Row) => {
     if (editing === r.id) {
@@ -287,16 +291,16 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
       {/* Balance */}
       <div style={box} className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0">
-          <div style={label}>Running balance</div>
-          {debtor ? (
-            <div className="text-lg font-bold text-gray-800 leading-tight mt-0.5">
-              {NAME[debtor]} owes {NAME[other(debtor)]} <span className="tabular-nums">{money(Math.abs(bal))}</span>
+          <div style={label}>Running balance{pending.length > 0 && <span style={{ color: 'var(--color-ink-muted)' }}> · after ADD</span>}</div>
+          {getter ? (
+            <div className="text-lg font-bold text-gray-800 leading-tight mt-0.5 uppercase">
+              {NAME[getter]} gets <span className="tabular-nums">{money(Math.abs(shown))}</span>
             </div>
           ) : (
             <div className="text-lg font-bold leading-tight mt-0.5" style={{ color: 'var(--color-success)' }}>ALL SQUARE</div>
           )}
         </div>
-        {debtor && (
+        {debtor && pending.length === 0 && (
           <button type="button" style={confirmSettle ? BTN_PRIMARY : glassButtonStyle}
             onClick={() => (confirmSettle ? run(async () => { await api('POST', { action: 'settle' }); setConfirmSettle(false); }) : setConfirmSettle(true))}
             onBlur={() => setConfirmSettle(false)}>
