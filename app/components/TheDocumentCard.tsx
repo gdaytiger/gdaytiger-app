@@ -52,7 +52,7 @@ async function api(method: string, body?: object) {
   return data;
 }
 
-// ── Item picker: search the Supplier Prices catalogue ──
+// ── Item picker: search the Supplier Prices catalogue, or type a custom item ──
 function ItemSearch({ catalogue, value, onChange, onPick }: {
   catalogue: CatItem[]; value: string; onChange: (v: string) => void; onPick: (c: CatItem) => void;
 }) {
@@ -176,18 +176,21 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const [saveError, setSaveError] = useState<string | null>(null);
   const [milkPack, setMilkPack] = useState<'bottle' | 'crate'>('crate');
   const [item, setItem] = useState('');
+  const [price, setPrice] = useState(''); // only for items that aren't in Supplier Prices
   const [category, setCategory] = useState('Other');
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmSettle, setConfirmSettle] = useState(false);
+  const [confirmLine, setConfirmLine] = useState<string | null>(null);
   const [showOlder, setShowOlder] = useState(false);
   const [showLog, setShowLog] = useState(false);
 
-  // Every line is priced from Supplier Prices, matched by the server (the API re-checks on save).
+  // Lines are priced from Supplier Prices, matched by the server (the API re-checks on save).
+  // Only an item that isn't in Supplier Prices can be given a price, when it's added.
   const gelato = data.fixedPrices['GELATO'];
   const bread = data.fixedPrices['SOURDOUGH LOAF'];
   const milk = data.fixedPrices['MILK (2L)'];
   const catalogueItem = (name: string) => data.catalogue.find(c => c.price > 0 && c.name.trim().toUpperCase() === name.trim().toUpperCase());
-  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number };
+  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number; removable?: boolean; customPrice?: boolean };
   const lines: Line[] = [
     { key: 'gelato', item: 'GELATO', category: 'Gelato', price: gelato?.price ?? null, unit: gelato?.unit || 'tub', icon: <IceCreamCone size={14} strokeWidth={2.25} aria-hidden /> },
     { key: 'bread', item: 'SOURDOUGH LOAF', category: 'Bread', price: bread?.price ?? null, unit: 'loaf', icon: <Wheat size={14} strokeWidth={2.25} aria-hidden /> },
@@ -214,18 +217,19 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const older = lastSettleIdx === -1 ? [] : data.document.slice(lastSettleIdx);
   const entries = current.filter(r => r.kind === 'Entry');
 
-  // Any other item counted this period keeps its own line, at today's Supplier Prices price.
+  // Any other item counted this period keeps its own removable line, at today's Supplier
+  // Prices price, or the price it was first logged at if it isn't in Supplier Prices.
   const fixedItems = new Set(lines.map(l => l.item));
   for (const r of [...entries].reverse()) {
     if (fixedItems.has(r.item)) continue;
     fixedItems.add(r.item);
     const cat = catalogueItem(r.item);
-    lines.push({ key: r.item, item: r.item, category: r.category || 'Other', price: cat?.price ?? null, unit: cat?.unit || r.unit, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
+    lines.push({ key: r.item, item: r.item, category: r.category || 'Other', price: cat?.price ?? (r.unitPrice > 0 ? r.unitPrice : null), unit: cat?.unit || r.unit, removable: true, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
   }
   const typed = item.trim();
   if (typed && !fixedItems.has(typed)) {
     const cat = catalogueItem(typed);
-    lines.push({ key: 'custom', item: typed, category, price: cat?.price ?? null, unit: cat?.unit || '', icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
+    lines.push({ key: 'custom', item: typed, category, price: cat ? cat.price : (Number(price) > 0 ? Number(price) : null), unit: cat?.unit || '', customPrice: !cat, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
   }
 
   const keyOf = (l: Line, v: Venue) => `${l.item}|${v}`;
@@ -240,7 +244,7 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const inFlightRef = useRef<Record<string, boolean>>({});
   const body = (key: string, qty: number) => {
     const { l, v } = metaRef.current[key];
-    return { section: 'Document', from: other(v), item: l.item, qty, unit: l.unit, category: l.category, note: qty < 0 ? 'counter adjusted down' : '' };
+    return { section: 'Document', from: other(v), item: l.item, qty, unitPrice: l.price, unit: l.unit, category: l.category, note: qty < 0 ? 'counter adjusted down' : '' };
   };
   // Plain function (not useCallback) so the retry timer can call it; only touches refs + stable setters.
   async function flush(key: string): Promise<void> {
@@ -275,7 +279,7 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
     return () => { window.removeEventListener('pagehide', sendNow); sendNow(); };
   }, []);
   const setCount = (l: Line, v: Venue, n: number) => {
-    if (l.price === null) return; // not in Supplier Prices, so it can't be logged
+    if (l.price === null) return; // no price yet, so it can't be valued
     const d = n - countOf(l, v);
     if (!d) return;
     const key = keyOf(l, v);
@@ -285,6 +289,11 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
     timersRef.current[key] = setTimeout(() => flush(key), 700);
   };
   const pendingCount = Object.values(unsaved).filter(Boolean).length + saving;
+  const deleteLine = (l: Line) => run(async () => {
+    await api('POST', { action: 'deleteLine', item: l.item });
+    setConfirmLine(null);
+    if (l.item === typed) { setItem(''); setPrice(''); }
+  });
 
   // Each venue's tab since the last settle-up (what it has received), incl. taps still saving.
   const unsavedValue = (v: Venue) => lines.reduce((a, l) => a + (unsaved[keyOf(l, v)] ?? 0) * (l.price || 0), 0);
@@ -369,20 +378,34 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
               <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight max-w-full" style={{ fontFamily: '"stolzl", sans-serif' }}>
                 <span style={{ color: 'var(--color-ink-muted)' }} className="shrink-0">{l.icon}</span>
                 <span className="truncate">{l.key === 'milk' ? 'MILK' : l.item}</span>
+                {/* Hidden while taps are saving, so an autosave can't bring a removed line back */}
+                {l.removable && pendingCount === 0 && (
+                  <button type="button" onClick={() => (confirmLine === l.item ? deleteLine(l) : setConfirmLine(l.item))} onBlur={() => setConfirmLine(null)}
+                    aria-label={confirmLine === l.item ? `Confirm removing ${l.item}` : `Remove ${l.item}`} className="shrink-0 p-1 -m-1"
+                    style={{ color: confirmLine === l.item ? 'var(--color-danger)' : 'var(--color-ink-muted)' }}>
+                    <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+                  </button>
+                )}
               </div>
               {l.sub}
-              <div className="text-[11px] leading-tight text-gray-400 tabular-nums uppercase">
-                {l.price !== null
-                  ? (l.per && l.per > 1 ? `${money(l.price * l.per)} / crate (${l.per} bottles)` : `${money(l.price)}${l.unit ? ` / ${l.unit}` : ''}`)
-                  : 'No price in Supplier Prices'}
-              </div>
+              {l.customPrice ? (
+                <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className="text-xs px-2 py-0.5 rounded-lg w-20 text-center focus:outline-none text-gray-800" style={input} aria-label="Unit price" placeholder="$ EACH" />
+              ) : confirmLine === l.item ? (
+                <div className="text-[11px] leading-tight uppercase" style={{ color: 'var(--color-danger)' }}>Tap bin again to remove</div>
+              ) : (
+                <div className="text-[11px] leading-tight text-gray-400 tabular-nums uppercase">
+                  {l.price !== null
+                    ? (l.per && l.per > 1 ? `${money(l.price * l.per)} / crate (${l.per} bottles)` : `${money(l.price)}${l.unit ? ` / ${l.unit}` : ''}`)
+                    : 'No price in Supplier Prices'}
+                </div>
+              )}
             </div>
             <MiniCounter count={countOf(l, 'ISOLA')} onChange={n => setCount(l, 'ISOLA', n)} who={`Isola: ${l.item}`} by={l.per ?? 1} />
           </div>
         ))}
         <ItemSearch catalogue={data.catalogue} value={item}
-          onChange={v => { setItem(v.toUpperCase()); setCategory(/^gelato$/i.test(v.trim()) ? 'Gelato' : guessCategory(v)); }}
-          onPick={c => { setItem(c.name.toUpperCase()); setCategory(guessCategory(c.name)); }} />
+          onChange={v => { setItem(v.toUpperCase()); setPrice(''); setCategory(/^gelato$/i.test(v.trim()) ? 'Gelato' : guessCategory(v)); }}
+          onPick={c => { setItem(c.name.toUpperCase()); setPrice(''); setCategory(guessCategory(c.name)); }} />
         {/* Silent when saving works — only a failed save shows a line */}
         {saveError && <div className="text-xs pt-1 uppercase" style={{ color: 'var(--color-danger)' }}>{saveError}</div>}
       </div>

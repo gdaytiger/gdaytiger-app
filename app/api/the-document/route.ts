@@ -8,7 +8,8 @@ import { melbNowDate } from '@/app/lib/melbTime';
 //   Document — priced lines (gelato / bread / milk / other). From = venue that supplied.
 //              Kind=Settlement rows are payments that pull the balance back to zero.
 //   Clean    — item-for-item IOUs, no dollars. From = venue that lent it. Open → Squared.
-// Unit prices come only from Supplier Prices: POST looks them up here and PATCH can't change them.
+// Items in Supplier Prices are always priced from it (POST looks them up, PATCH can't change them).
+// Only items that aren't in Supplier Prices can be given a price, when they're logged.
 // Both logins (owner + Isola) can log and edit here — see proxy.ts / auth.ts.
 const DB_ID = '997ef2daa9974f34a12e1256065f3e7c';
 // Same page the Supplier Prices widget reads its ingredient_prices JSON block from.
@@ -191,6 +192,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, settled: Math.abs(bal) });
     }
 
+    // Remove an added line: archives its entries since the last settle-up (both venues).
+    // Gelato, sourdough and milk always stay.
+    if (body.action === 'deleteLine') {
+      const name = String(body.item || '').trim().toUpperCase();
+      if (!name) return NextResponse.json({ error: 'Item required' }, { status: 400 });
+      if (FIXED_LINES[name]) return NextResponse.json({ error: `${name} can't be removed` }, { status: 400 });
+      const doc = (await loadRows()).filter(r => r.section === 'Document');
+      const lastSettle = doc.findIndex(r => r.kind === 'Settlement');
+      const period = lastSettle === -1 ? doc : doc.slice(0, lastSettle);
+      for (const r of period.filter(r => r.kind === 'Entry' && r.item === name)) {
+        const res = await notionFetch(`/pages/${r.id}`, 'PATCH', { archived: true });
+        if (!res.id) throw new Error(res.message || 'Notion delete failed');
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const section: Section = body.section === 'Clean' ? 'Clean' : 'Document';
     const from: Venue = body.from === 'ISOLA' ? 'ISOLA' : 'GDT';
     if (!String(body.item || '').trim()) return NextResponse.json({ error: 'Item required' }, { status: 400 });
@@ -200,12 +217,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Qty must not be 0' }, { status: 400 });
     }
 
-    // Priced lines take their price from Supplier Prices; any price the client sends is ignored.
+    // Items in Supplier Prices take its price and ignore any the client sends. Only items
+    // that aren't in it can carry a typed price; the standing lines never can.
     let unitPrice = 0;
     if (section === 'Document') {
-      const match = findPrice(String(body.item), await loadCatalogue());
-      if (!match) return NextResponse.json({ error: `No price in Supplier Prices for ${String(body.item).trim().toUpperCase()}` }, { status: 400 });
-      unitPrice = match.price;
+      const name = String(body.item).trim().toUpperCase();
+      const catalogue = await loadCatalogue();
+      if (!catalogue.length) return NextResponse.json({ error: 'Supplier Prices unavailable, try again' }, { status: 502 });
+      const match = findPrice(name, catalogue);
+      if (match) {
+        unitPrice = match.price;
+      } else {
+        if (FIXED_LINES[name]) return NextResponse.json({ error: `No price in Supplier Prices for ${name}` }, { status: 400 });
+        unitPrice = Number(body.unitPrice);
+        if (!(Number.isFinite(unitPrice) && unitPrice > 0)) return NextResponse.json({ error: `Enter a price for ${name}` }, { status: 400 });
+      }
     }
 
     const page = await notionFetch('/pages', 'POST', {
