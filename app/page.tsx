@@ -2371,6 +2371,10 @@ export default function Home() {
   const [socialTab, setSocialTab] = useState<'story' | 'google'>('story');
   // THE DOCUMENT launcher badge — net $ owed either way (Isola tally).
   const [docBalance, setDocBalance] = useState<number | null>(null);
+  // Partner (Isola / Claudio) login — sees only Supplier Prices, Costings, Weekly Flash and
+  // The Document, read-only. Set from /api/whoami before the first data load.
+  const [isPartner, setIsPartner] = useState(false);
+  const partnerRef = useRef(false);
   const shoppingWidgetRef = useRef<HTMLDivElement>(null);
   // Single-open: tapping a tile opens that widget in the bottom sheet and closes
   // any other. Tapping the same tile (or the sheet's close/▲) closes it. The
@@ -2669,8 +2673,23 @@ export default function Home() {
     return state;
   };
 
+  // Partner view: header + only the read-only feeds its four widgets need.
+  const refreshPartner = async () => {
+    const h = await fetch('/api/header').then(r => r.json()).catch(() => ({}));
+    setData({ dateStr: h.dateStr || '', weather: h.weather || '', todayStr: melbourneToday(), dailyTasks: [], projects: [], personalTodos: [] });
+    fetch('/api/costings').then(r => r.json()).then(d => setCostings(d.products || [])).catch(() => {});
+    fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {});
+    fetch('/api/price-drift').then(r => r.json()).then(d => setPriceDrift(d)).catch(() => {});
+    fetch('/api/margin-review').then(r => r.json()).then(d => setMarginReview(d)).catch(() => {});
+    fetch('/api/payment-fees').then(r => r.json()).then(d => setPaymentFees(d)).catch(() => {});
+    fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
+    fetch('/api/weekly-flash').then(r => r.json()).then(d => setWeeklyFlash(d)).catch(() => {});
+    fetch('/api/flash-extras').then(r => r.json()).then(d => setFlashExtras(d)).catch(() => {});
+  };
+
   // Pull every data source. Reused on first load and on tab refocus.
   const refreshData = async () => {
+    if (partnerRef.current) return refreshPartner();
     const state = await fetchServerState();
     await fetchDashboard(state).catch(() => {});
     fetch('/api/roster').then(r => r.json()).then(d => setShifts(d.shifts || [])).catch(() => {});
@@ -2693,6 +2712,8 @@ export default function Home() {
     const safety = setTimeout(() => setLoading(false), 12000);
     const init = async () => {
       try {
+        const who = await fetch('/api/whoami').then(r => (r.ok ? r.json() : null)).catch(() => null);
+        if (who?.role === 'partner') { partnerRef.current = true; setIsPartner(true); }
         await refreshData();
       } finally {
         clearTimeout(safety);
@@ -2727,7 +2748,7 @@ export default function Home() {
   }, [loading, data?.todayStr]);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || isPartner) return;
     const interval = setInterval(async () => {
       const state = await fetchServerState();
       setData(prev => prev ? { ...prev, dailyTasks: applyServerChecked(prev.dailyTasks, prev.todayStr, state) } : prev);
@@ -2739,7 +2760,7 @@ export default function Home() {
     }, 30000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  }, [loading, isPartner]);
 
 
   const syncCheckedState = (blockId: string, date: string, checked: boolean) => {
@@ -3074,7 +3095,7 @@ export default function Home() {
 
       <div className="max-w-5xl mx-auto px-5 pt-8 pb-4 flex items-center justify-between relative">
         {/* Tap the header (title / date / weather) to open the Morning snapshot */}
-        <div role="button" className="cursor-pointer" onClick={() => toggleWidget('morning')}>
+        <div role="button" className={isPartner ? '' : 'cursor-pointer'} onClick={() => { if (!isPartner) toggleWidget('morning'); }}>
           <h1 className="text-4xl font-bold tracking-tight text-gray-900" style={{ fontFamily: '"bodoni-pt-variable", "Bodoni 72", "Bodoni MT", Georgia, serif', fontWeight: 700, fontStyle: 'italic', fontVariationSettings: "'opsz' 18, 'wght' 700" }}>
             TIGER <span style={{ color: 'var(--color-brand-peach)' }}>OS</span>
           </h1>
@@ -3092,6 +3113,8 @@ export default function Home() {
         <DndContext sensors={dndSensors} collisionDetection={dndCollision} onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
+        {/* Partner login: no To Do / Week Ahead — launcher only */}
+        {!isPartner && (<>
         {/* DAILY TO DO */}
         <Card icon={<WidgetIcon name="daily" chip={28} glyph={17} />} title={displayDayLabel ? `Tasks — ${displayDayLabel}` : 'Daily To Do'}
           headerRight={
@@ -3266,16 +3289,24 @@ export default function Home() {
           </div>
         </Card>
 
+        </>)}
+
         {/* LAUNCHER — uniform square tiles; tap opens the full widget below */}
         <LauncherGrid>
-          <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />
+          {!isPartner && <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />}
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
           <LauncherTile icon={<WidgetIcon name="costings" chip={48} glyph={26} />} title="Costings" badgeText={(coffeeCount + foodCount + sweetsCount) || undefined} alert={coffeeAlert || foodAlert || sweetsAlert} active={openWidgets.has('costings')} onClick={() => toggleWidget('costings')} />
-          <LauncherTile icon={<WidgetIcon name="socials" chip={48} glyph={26} />} title="Socials" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('socials')} onClick={() => toggleWidget('socials')} />
+          {!isPartner && <LauncherTile icon={<WidgetIcon name="socials" chip={48} glyph={26} />} title="Socials" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('socials')} onClick={() => toggleWidget('socials')} />}
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
-          <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="TigerOS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />
+          {!isPartner && <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="TigerOS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />}
           <LauncherTile icon={<WidgetIcon name="document" chip={48} glyph={26} />} title="The Document" badgeText={docBalance != null && Math.abs(docBalance) >= 1 ? `${docBalance > 0 ? '+' : '−'}$${Math.round(Math.abs(docBalance))}` : undefined} active={openWidgets.has('document')} onClick={() => toggleWidget('document')} />
         </LauncherGrid>
+        {isPartner && (
+          <button type="button" className="md:col-span-2 justify-self-center" style={BTN}
+            onClick={async () => { await fetch('/api/logout', { method: 'POST' }).catch(() => {}); window.location.href = '/login'; }}>
+            LOG OUT
+          </button>
+        )}
 
         </div>{/* end stable grid */}
         </DndContext>
@@ -3367,6 +3398,7 @@ export default function Home() {
           </Card>
         </div>
 
+        {!isPartner && (<>
         {/* SOCIALS — Daily Story (Instagram story maker) + Google (reviews, photos, menu check),
             switched by a tile-height selector like Costings. Both stay mounted so the
             Google badge keeps counting and story edits survive a tab switch. */}
@@ -3398,6 +3430,8 @@ export default function Home() {
             </div>
           </Card>
         </div>
+
+        </>)}
 
         {/* THE DOCUMENT — G'Day Tiger × Isola Di Capri stock tally (also the Isola login's only page, /document).
             Badge: + = Isola owes us, − = we owe Isola. Mounted always so the badge loads on open of the dashboard. */}

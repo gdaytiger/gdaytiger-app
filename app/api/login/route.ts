@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     password === PARTNER_PASSWORD
   ) {
     token = PARTNER_SESSION_TOKEN;
-    redirect = '/document';
+    redirect = '/';
   }
 
   if (!token) {
