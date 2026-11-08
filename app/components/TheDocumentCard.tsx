@@ -427,15 +427,19 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
 
       {/* History */}
       <div className="flex flex-col gap-2">
-        {/* Every counter tap is its own +/− line, so the log stays tucked away by default */}
-        {current.length > 0 && (showLog ? current.map(renderRow) : (
-          <button type="button" onClick={() => setShowLog(true)} className="self-center" style={glassButtonStyle}>SHOW LOG ({current.filter(r => r.kind === 'Entry').length})</button>
-        ))}
-        {showLog && older.length > 0 && (
-          showOlder ? older.map(renderRow) : (
-            <button type="button" onClick={() => setShowOlder(true)} className="self-center" style={glassButtonStyle}>SHOW SETTLED HISTORY ({older.filter(r => r.kind !== 'Settlement').length})</button>
-          )
+        {/* Every counter tap is its own +/− line, so the log stays tucked away — toggle open/closed */}
+        {(current.length > 0 || older.length > 0) && (
+          <button type="button" onClick={() => { setShowLog(v => !v); setShowOlder(false); }} className="self-center" style={showLog ? { ...glassButtonStyle, ...glassButtonActiveStyle } : glassButtonStyle}>
+            {showLog ? 'HIDE LOG' : `SHOW LOG (${current.filter(r => r.kind === 'Entry').length})`}
+          </button>
         )}
+        {showLog && current.map(renderRow)}
+        {showLog && older.length > 0 && (
+          <button type="button" onClick={() => setShowOlder(v => !v)} className="self-center" style={glassButtonStyle}>
+            {showOlder ? 'HIDE SETTLED HISTORY' : `SHOW SETTLED HISTORY (${older.filter(r => r.kind !== 'Settlement').length})`}
+          </button>
+        )}
+        {showLog && showOlder && older.map(renderRow)}
       </div>
     </div>
   );
@@ -519,10 +523,11 @@ function CleanPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>
       <div className="flex flex-col gap-2">
         {open.map(renderRow)}
         {squared.length > 0 && (
-          showSquared ? squared.map(renderRow) : (
-            <button type="button" onClick={() => setShowSquared(true)} className="self-center" style={glassButtonStyle}>SHOW SQUARED ({squared.length})</button>
-          )
+          <button type="button" onClick={() => setShowSquared(v => !v)} className="self-center" style={showSquared ? { ...glassButtonStyle, ...glassButtonActiveStyle } : glassButtonStyle}>
+            {showSquared ? 'HIDE SQUARED' : `SHOW SQUARED (${squared.length})`}
+          </button>
         )}
+        {showSquared && squared.map(renderRow)}
       </div>
     </div>
   );
