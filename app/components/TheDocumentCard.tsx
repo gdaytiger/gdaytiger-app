@@ -182,7 +182,7 @@ function EditRow({ row, onSave, onDelete, onCancel, priced }: {
 
 // ── Part 1: THE DOCUMENT ──
 function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>) => Promise<void> }) {
-  // Counters per line = how many each venue RECEIVED (G'Day gets a gelato from Isola → G'Day's counter).
+  // Counters per line = how many each venue RECEIVED (1 gelato under G'Day → G'Day owes, Isola gets $20).
   type Counts = Record<string, Record<Venue, number>>;
   const [counts, setCounts] = useState<Counts>({});
   const [milkPack, setMilkPack] = useState<'bottle' | 'crate'>('bottle');
@@ -360,7 +360,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
         <div className="flex gap-2 items-center pt-1">
           <span className="text-xs text-gray-400 tabular-nums min-w-0">
             {pending.length === 0 ? 'Tap + under whoever received it' : (['GDT', 'ISOLA'] as Venue[]).filter(v => pending.some(p => p.v === v))
-              .map(v => `${v === 'GDT' ? "G'Day" : 'Isola'} gets ${money(pendingTotal(v))}`).join(' · ')}
+              .map(v => `${v === 'GDT' ? 'Isola' : "G'Day"} gets ${money(pendingTotal(v))}`).join(' · ')}
           </span>
           <button type="button" disabled={pending.length === 0} className="ml-auto disabled:opacity-40" style={BTN_PRIMARY} onClick={() => run(addAll)}>
             ADD{pending.length > 1 ? ` ${pending.length}` : ''}
