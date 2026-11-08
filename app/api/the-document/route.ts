@@ -192,9 +192,9 @@ export async function POST(req: NextRequest) {
     const from: Venue = body.from === 'ISOLA' ? 'ISOLA' : 'GDT';
     if (!String(body.item || '').trim()) return NextResponse.json({ error: 'Item required' }, { status: 400 });
     const qty = Number(body.qty);
-    // Document counters autosave as +/− deltas (a counter tapped down logs a negative line).
-    if (section === 'Clean' ? !(qty > 0) : !(Number.isFinite(qty) && qty !== 0)) {
-      return NextResponse.json({ error: section === 'Clean' ? 'Qty must be above 0' : 'Qty must not be 0' }, { status: 400 });
+    // Both sections' counters autosave as +/− deltas (a counter tapped down logs a negative line).
+    if (!(Number.isFinite(qty) && qty !== 0)) {
+      return NextResponse.json({ error: 'Qty must not be 0' }, { status: 400 });
     }
 
     const page = await notionFetch('/pages', 'POST', {
@@ -212,6 +212,16 @@ export async function POST(req: NextRequest) {
       }),
     });
     if (!page.id) throw new Error(page.message || 'Notion create failed');
+
+    // Clean Transactions: once an item's open count for that lender is back to 0,
+    // mark all its open lines Squared so it drops off the counters.
+    if (section === 'Clean' && qty < 0) {
+      const name = String(body.item).trim().toUpperCase();
+      const openRows = (await loadRows()).filter(r => r.section === 'Clean' && r.status !== 'Squared' && r.item === name && r.from === from);
+      if (openRows.reduce((a, r) => a + r.qty, 0) <= 0) {
+        await Promise.all(openRows.map(r => notionFetch(`/pages/${r.id}`, 'PATCH', { properties: toProps({ status: 'Squared' }) })));
+      }
+    }
     return NextResponse.json({ ok: true, row: toRow(page) });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 502 });

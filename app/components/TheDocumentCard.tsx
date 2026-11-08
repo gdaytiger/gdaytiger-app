@@ -99,32 +99,6 @@ const tabFoot = (value: number, items: number) => (
     {items > 0 && <div>{items} item{items === 1 ? '' : 's'}</div>}</>
 );
 
-// Venue column in Log Stock: name, − n + counter (how many that venue RECEIVED), and its current tab.
-function VenueCounter({ venue, count, onChange, foot }: {
-  venue: Venue; count: number; onChange: (n: number) => void; foot: React.ReactNode;
-}) {
-  const on = count > 0;
-  const step: React.CSSProperties = { ...glassButtonStyle, padding: 0, width: '31px', justifyContent: 'center', flexShrink: 0 };
-  return (
-    <div className="flex flex-col items-center gap-2 p-2 rounded-2xl text-center min-w-0"
-      style={{ background: on ? 'rgba(251,205,173,0.12)' : 'rgba(255,255,255,0.55)', border: `1px solid ${on ? 'var(--color-brand-peach)' : 'transparent'}` }}>
-      <div style={{ ...label, color: 'var(--color-ink-label)' }} className="leading-tight">{NAME[venue]}</div>
-      <input type="number" inputMode="numeric" min={0} value={count || ''} placeholder="0"
-        onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-        className="w-full text-center text-2xl font-bold tabular-nums bg-transparent focus:outline-none text-gray-800 leading-none" aria-label={`Qty to ${NAME[venue]}`} />
-      <div className="flex items-center justify-center gap-1.5">
-        <button type="button" style={step} onClick={() => onChange(Math.max(0, count - 1))} aria-label={`One less to ${NAME[venue]}`} disabled={!on} className="disabled:opacity-40">
-          <Minus size={13} strokeWidth={2.5} aria-hidden />
-        </button>
-        <button type="button" style={step} onClick={() => onChange(count + 1)} aria-label={`One more to ${NAME[venue]}`}>
-          <Plus size={13} strokeWidth={2.5} aria-hidden />
-        </button>
-      </div>
-      <div className="text-xs text-gray-400 leading-tight">{foot}</div>
-    </div>
-  );
-}
-
 // Compact − n + used on each Log Stock line.
 // `by` = how much each +/− tap moves the count (milk in crate mode = 9 bottles a tap).
 function MiniCounter({ count, onChange, who, by = 1 }: { count: number; onChange: (n: number) => void; who: string; by?: number }) {
@@ -445,25 +419,79 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
 }
 
 // ── Part 2: CLEAN TRANSACTIONS ──
-function CleanPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>) => Promise<void> }) {
-  // Counters = how many each venue BORROWED (G'Day borrows milk from Isola → G'Day's counter).
-  const [got, setGot] = useState<Record<Venue, number>>({ GDT: 0, ISOLA: 0 });
+// Same shape as Log Stock: one 62px tile per item, a counter each side = how many that venue
+// has BORROWED and still owes back. AUTOSAVES as +/− lines (~0.7s after the last tap); tapping
+// down to 0 = reordered/returned, and the server marks that item's lines Squared.
+function CleanPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<unknown>) => Promise<void>; reload: () => Promise<unknown> }) {
   const [item, setItem] = useState('');
-  const [note, setNote] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
-  const [showSquared, setShowSquared] = useState(false);
+  const [showLog, setShowLog] = useState(false);
+  const [unsaved, setUnsaved] = useState<Record<string, number>>({}); // `${item}|${venue}` → delta not yet in Notion
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const open = data.clean.filter(r => r.status !== 'Squared');
-  const squared = data.clean.filter(r => r.status === 'Squared');
-  const canAdd = item.trim() && (got.GDT > 0 || got.ISOLA > 0);
-  const owes = (v: Venue) => open.filter(r => r.from === other(v)).length;
-  const addAll = async () => {
-    for (const v of ['GDT', 'ISOLA'] as Venue[]) {
-      if (got[v] > 0) await api('POST', { section: 'Clean', from: other(v), item, qty: got[v], note });
-    }
-    setItem(''); setGot({ GDT: 0, ISOLA: 0 }); setNote('');
+  const keyOf = (name: string, v: Venue) => `${name}|${v}`;
+  const savedQty = (name: string, v: Venue) => open.filter(r => r.item === name && r.from === other(v)).reduce((a, r) => a + r.qty, 0);
+  const countOf = (name: string, v: Venue) => Math.max(0, savedQty(name, v) + (unsaved[keyOf(name, v)] ?? 0));
+
+  // Tiles: every item still owed either way (oldest first), plus anything with unsaved taps, plus the search.
+  const names: string[] = [];
+  for (const r of [...open].reverse()) if (!names.includes(r.item)) names.push(r.item);
+  for (const key of Object.keys(unsaved)) { const n = key.split('|')[0]; if (!names.includes(n)) names.push(n); }
+  const typed = item.trim();
+  if (typed && !names.includes(typed)) names.push(typed);
+  const shownNames = names.filter(n => n === typed || countOf(n, 'GDT') > 0 || countOf(n, 'ISOLA') > 0 || unsaved[keyOf(n, 'GDT')] || unsaved[keyOf(n, 'ISOLA')]);
+
+  // ── Autosave plumbing (mirrors Log Stock) ──
+  const unsavedRef = useRef(unsaved);
+  useEffect(() => { unsavedRef.current = unsaved; }, [unsaved]);
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const inFlightRef = useRef<Record<string, boolean>>({});
+  const body = (key: string, qty: number) => {
+    const [name, v] = key.split('|') as [string, Venue];
+    return { section: 'Clean', from: other(v), item: name, qty, note: qty < 0 ? 'reordered / returned' : '' };
   };
-  const oweFoot = (v: Venue) => { const n = owes(v); return n ? <>OWES <span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{n}</span> open</> : 'ALL SQUARE'; };
+  // Plain function (not useCallback) so the retry timer can call it; only touches refs + stable setters.
+  async function flush(key: string): Promise<void> {
+    if (inFlightRef.current[key]) { timersRef.current[key] = setTimeout(() => flush(key), 400); return; }
+    const delta = unsavedRef.current[key] ?? 0;
+    if (!delta) return;
+    inFlightRef.current[key] = true;
+    try {
+      await api('POST', body(key, delta));
+      await reload();
+      setUnsaved(u => { const n = { ...u }; n[key] = (n[key] ?? 0) - delta; if (!n[key]) delete n[key]; return n; });
+      setSaveError(null);
+    } catch (e) {
+      setSaveError(`Not saved — ${(e as Error).message}. Tap again to retry.`);
+    } finally {
+      inFlightRef.current[key] = false;
+    }
+  }
+  useEffect(() => {
+    const sendNow = () => {
+      for (const [key, delta] of Object.entries(unsavedRef.current)) {
+        if (!delta || inFlightRef.current[key]) continue;
+        clearTimeout(timersRef.current[key]);
+        fetch('/api/the-document', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body(key, delta)) }).catch(() => {});
+        unsavedRef.current = { ...unsavedRef.current, [key]: 0 };
+      }
+    };
+    window.addEventListener('pagehide', sendNow);
+    return () => { window.removeEventListener('pagehide', sendNow); sendNow(); };
+  }, []);
+  const setCount = (name: string, v: Venue, n: number) => {
+    const d = n - countOf(name, v);
+    if (!d || !name) return;
+    const key = keyOf(name, v);
+    setUnsaved(u => ({ ...u, [key]: (u[key] ?? 0) + d }));
+    clearTimeout(timersRef.current[key]);
+    timersRef.current[key] = setTimeout(() => flush(key), 700);
+  };
+
+  const owes = (v: Venue) => shownNames.filter(n => countOf(n, v) > 0).length;
+  const totalOpen = owes('GDT') + owes('ISOLA');
+  const oweFoot = (v: Venue) => { const n = owes(v); return n ? <>OWES <span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{n}</span></> : 'ALL SQUARE'; };
 
   const renderRow = (r: Row) => {
     if (editing === r.id) {
@@ -472,20 +500,18 @@ function CleanPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>
         onDelete={() => run(async () => { await api('DELETE', { id: r.id }); setEditing(null); })} />;
     }
     const done = r.status === 'Squared';
+    const back = r.qty < 0;
     return (
-      <div key={r.id} className="flex items-center gap-3 px-3 rounded-2xl" style={{ ...glassTileStyle, minHeight: `${TILE_H}px`, opacity: done ? 0.6 : 1 }}>
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setEditing(r.id)} role="button">
-          <div className={`text-sm font-semibold uppercase truncate ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-            {NAME[other(r.from)]} owes {NAME[r.from]} {r.qty} × {r.item}
+      <div key={r.id} onClick={() => setEditing(r.id)} role="button" className="group flex items-center gap-3 px-3 rounded-2xl cursor-pointer" style={{ ...glassTileStyle, minHeight: `${TILE_H}px`, opacity: done ? 0.6 : 1 }}>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold uppercase truncate text-gray-800">
+            {back ? `${NAME[other(r.from)]} reordered ${Math.abs(r.qty)} × ${r.item}` : `${NAME[other(r.from)]} borrowed ${r.qty} × ${r.item}`}
           </div>
           <div className="text-xs text-gray-400 truncate">
-            Borrowed {shortDate(r.date)}{r.loggedBy ? ` · by ${r.loggedBy === 'GDT' ? "G'DT" : 'Isola'}` : ''}{r.note ? ` · ${r.note}` : ''}
+            {shortDate(r.date)}{r.loggedBy ? ` · by ${r.loggedBy === 'GDT' ? "G'DT" : 'Isola'}` : ''}{done ? ' · squared' : ''}
           </div>
         </div>
-        <button type="button" style={done ? glassButtonStyle : BTN_PRIMARY}
-          onClick={() => run(() => api('PATCH', { id: r.id, status: done ? 'Open' : 'Squared' }))}>
-          {done ? 'REOPEN' : <><Check size={13} strokeWidth={2.5} aria-hidden /> SQUARED</>}
-        </button>
+        <Pencil size={13} strokeWidth={2.25} aria-hidden className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--color-ink-muted)' }} />
       </div>
     );
   };
@@ -495,38 +521,41 @@ function CleanPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>
       <div style={box}>
         <div style={label}>Open</div>
         <div className="text-lg font-bold text-gray-800 leading-tight mt-0.5">
-          {open.length === 0 ? <span style={{ color: 'var(--color-success)' }}>ALL SQUARE</span> : `${open.length} item${open.length === 1 ? '' : 's'} to reorder`}
+          {totalOpen === 0 ? <span style={{ color: 'var(--color-success)' }}>ALL SQUARE</span> : `${totalOpen} ITEM${totalOpen === 1 ? '' : 'S'} TO REORDER`}
         </div>
       </div>
 
       <div className="flex flex-col gap-2 p-3 rounded-2xl" style={glassTileStyle}>
         <div style={label}>Borrowed</div>
-        <div className="grid gap-2 items-stretch" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,2fr) minmax(0,1fr)' }}>
-          <VenueCounter venue="GDT" count={got.GDT} onChange={n => setGot(g => ({ ...g, GDT: n }))} foot={oweFoot('GDT')} />
-          <div className="flex flex-col gap-2 justify-center min-w-0 [&>*]:flex-none">
-            <ItemSearch catalogue={data.catalogue} value={item} onChange={v => setItem(v.toUpperCase())} onPick={c => setItem(c.name.toUpperCase())} />
-            <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)" className={`${inputClass} w-full min-w-0`} style={input} aria-label="Note" />
+        <div className="grid gap-2 items-end text-center" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px' }}>
+          {(['GDT', 'ISOLA'] as Venue[]).map((v, i) => (
+            <div key={v} style={{ gridColumn: i === 0 ? 1 : 3 }} className="min-w-0">
+              <div style={label} className="leading-tight">{NAME[v]}</div>
+              <div className="text-xs text-gray-400 leading-tight mt-0.5">{oweFoot(v)}</div>
+            </div>
+          ))}
+        </div>
+        {shownNames.map(n => (
+          <div key={n} className="grid gap-2 items-center rounded-2xl overflow-hidden" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px', background: 'rgba(255,255,255,0.55)', height: `${TILE_H}px` }}>
+            <MiniCounter count={countOf(n, 'GDT')} onChange={c => setCount(n, 'GDT', c)} who={`G'Day borrowed: ${n}`} />
+            <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight text-center" style={{ fontFamily: '"stolzl", sans-serif' }}>
+              <Package size={14} strokeWidth={2.25} aria-hidden className="shrink-0" style={{ color: 'var(--color-ink-muted)' }} />
+              <span className="line-clamp-2 break-words">{n}</span>
+            </div>
+            <MiniCounter count={countOf(n, 'ISOLA')} onChange={c => setCount(n, 'ISOLA', c)} who={`Isola borrowed: ${n}`} />
           </div>
-          <VenueCounter venue="ISOLA" count={got.ISOLA} onChange={n => setGot(g => ({ ...g, ISOLA: n }))} foot={oweFoot('ISOLA')} />
-        </div>
-        <div className="flex gap-2 items-center">
-          <span className="text-xs text-gray-400 tabular-nums">
-            {got.GDT > 0 && `G'Day borrows ${got.GDT}`}{got.GDT > 0 && got.ISOLA > 0 && ' · '}{got.ISOLA > 0 && `Isola borrows ${got.ISOLA}`}
-          </span>
-          <button type="button" disabled={!canAdd} className="ml-auto disabled:opacity-40" style={BTN_PRIMARY} onClick={() => run(addAll)}>
-            ADD
-          </button>
-        </div>
+        ))}
+        <ItemSearch catalogue={data.catalogue} value={item} onChange={v => setItem(v.toUpperCase())} onPick={c => setItem(c.name.toUpperCase())} />
+        {saveError && <div className="text-xs pt-1 uppercase" style={{ color: 'var(--color-danger)' }}>{saveError}</div>}
       </div>
 
       <div className="flex flex-col gap-2">
-        {open.map(renderRow)}
-        {squared.length > 0 && (
-          <button type="button" onClick={() => setShowSquared(v => !v)} className="self-center" style={showSquared ? { ...glassButtonStyle, ...glassButtonActiveStyle } : glassButtonStyle}>
-            {showSquared ? 'HIDE SQUARED' : `SHOW SQUARED (${squared.length})`}
+        {data.clean.length > 0 && (
+          <button type="button" onClick={() => setShowLog(v => !v)} className="self-center" style={showLog ? { ...glassButtonStyle, ...glassButtonActiveStyle } : glassButtonStyle}>
+            {showLog ? 'HIDE LOG' : `SHOW LOG (${data.clean.length})`}
           </button>
         )}
-        {showSquared && squared.map(renderRow)}
+        {showLog && data.clean.map(renderRow)}
       </div>
     </div>
   );
@@ -595,7 +624,7 @@ export default function TheDocumentCard({ active = true, onBalance }: { active?:
 
       {error && <p className="text-xs px-1" style={{ color: 'var(--color-danger)' }}>{error}</p>}
       {!data && !error && <p className="text-sm text-gray-400 px-1">Loading…</p>}
-      {data && (tab === 'document' ? <DocumentPart data={data} run={run} reload={load} /> : <CleanPart data={data} run={run} />)}
+      {data && (tab === 'document' ? <DocumentPart data={data} run={run} reload={load} /> : <CleanPart data={data} run={run} reload={load} />)}
     </div>
   );
 }
