@@ -192,7 +192,10 @@ export async function POST(req: NextRequest) {
     const from: Venue = body.from === 'ISOLA' ? 'ISOLA' : 'GDT';
     if (!String(body.item || '').trim()) return NextResponse.json({ error: 'Item required' }, { status: 400 });
     const qty = Number(body.qty);
-    if (!(qty > 0)) return NextResponse.json({ error: 'Qty must be above 0' }, { status: 400 });
+    // Document counters autosave as +/− deltas (a counter tapped down logs a negative line).
+    if (section === 'Clean' ? !(qty > 0) : !(Number.isFinite(qty) && qty !== 0)) {
+      return NextResponse.json({ error: section === 'Clean' ? 'Qty must be above 0' : 'Qty must not be 0' }, { status: 400 });
+    }
 
     const page = await notionFetch('/pages', 'POST', {
       parent: { database_id: DB_ID },

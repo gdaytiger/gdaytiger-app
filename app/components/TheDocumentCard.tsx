@@ -182,10 +182,14 @@ function EditRow({ row, onSave, onDelete, onCancel, priced }: {
 }
 
 // ── Part 1: THE DOCUMENT ──
-function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unknown>) => Promise<void> }) {
-  // Counters per line = how many each venue RECEIVED (1 gelato under G'Day → G'Day owes, Isola gets $20).
-  type Counts = Record<string, Record<Venue, number>>;
-  const [counts, setCounts] = useState<Counts>({});
+function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<unknown>) => Promise<void>; reload: () => Promise<unknown> }) {
+  // Counters = how many each venue has RECEIVED since the last Settle up (1 gelato under
+  // G'Day → Isola gets $20). They AUTOSAVE: every change is written to Notion as a +/−
+  // entry ~0.7s after the last tap, so the counter is always the live tally. Deltas (not
+  // overwrites) keep both venues' phones from clobbering each other.
+  const [unsaved, setUnsaved] = useState<Record<string, number>>({}); // `${item}|${venue}` → delta not yet in Notion
+  const [saving, setSaving] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [milkPack, setMilkPack] = useState<'bottle' | 'crate'>('bottle');
   const [item, setItem] = useState('');
   const [price, setPrice] = useState('');
@@ -197,6 +201,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
   const [gPrice, setGPrice] = useState(String(data.gelato?.price ?? ''));
   const [gUnit, setGUnit] = useState(data.gelato?.unit || '6L tub');
   const [showOlder, setShowOlder] = useState(false);
+  const [showLog, setShowLog] = useState(false);
 
   // Fixed lines priced from Supplier Prices (gelato falls back to the manual price until it syncs).
   const find = (re: RegExp) => data.catalogue.find(c => re.test(c.name));
@@ -224,37 +229,90 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
       ),
     },
   ];
-  if (item.trim()) lines.push({ key: 'custom', item: item.trim(), category, price: price === '' ? null : Number(price) || 0, unit, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
 
-  const countOf = (k: string, v: Venue) => counts[k]?.[v] ?? 0;
-  const setCount = (k: string, v: Venue, n: number) => setCounts(c => ({ ...c, [k]: { ...(c[k] ?? { GDT: 0, ISOLA: 0 }), [v]: n } }));
-  // Counts are in the line's unit (milk = bottles), so qty = count. `per` only sets the tap step.
-  const pending = lines.flatMap(l => (['GDT', 'ISOLA'] as Venue[])
-    .filter(v => countOf(l.key, v) > 0 && l.price !== null)
-    .map(v => ({ l, v, qty: countOf(l.key, v) })));
-  const pendingTotal = (v: Venue) => pending.filter(p => p.v === v).reduce((a, p) => a + p.qty * (p.l.price || 0), 0);
-  const reset = () => { setCounts({}); setItem(''); setPrice(''); setUnit(''); setCategory('Other'); setMilkPack('bottle'); };
-  const addAll = async () => {
-    for (const { l, v, qty } of pending) {
-      await api('POST', { section: 'Document', from: other(v), item: l.item, qty, unitPrice: l.price, unit: l.unit, category: l.category });
-    }
-    reset();
-  };
-
-  // History since the last settlement up top; anything older tucked away.
+  // This period = everything since the last settlement (counters reset to 0 on Settle up).
   const lastSettleIdx = data.document.findIndex(r => r.kind === 'Settlement');
   const current = lastSettleIdx === -1 ? data.document : data.document.slice(0, lastSettleIdx);
   const older = lastSettleIdx === -1 ? [] : data.document.slice(lastSettleIdx);
-  // Each venue's tab since the last settle-up: what it has received.
-  const tabOf = (v: Venue) => current.filter(r => r.kind === 'Entry' && r.from === other(v))
-    .reduce((a, r) => ({ value: a.value + r.qty * r.unitPrice, items: a.items + r.qty }), { value: 0, items: 0 });
+  const entries = current.filter(r => r.kind === 'Entry');
+
+  // Any other item counted this period keeps its own line (priced as first logged).
+  const fixedItems = new Set(lines.map(l => l.item));
+  for (const r of [...entries].reverse()) {
+    if (fixedItems.has(r.item)) continue;
+    fixedItems.add(r.item);
+    lines.push({ key: r.item, item: r.item, category: r.category || 'Other', price: r.unitPrice, unit: r.unit, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
+  }
+  const typed = item.trim();
+  if (typed && !fixedItems.has(typed)) lines.push({ key: 'custom', item: typed, category, price: price === '' ? null : Number(price) || 0, unit, icon: <Package size={14} strokeWidth={2.25} aria-hidden /> });
+
+  const keyOf = (l: Line, v: Venue) => `${l.item}|${v}`;
+  const savedQty = (l: Line, v: Venue) => entries.filter(r => r.item === l.item && r.from === other(v)).reduce((a, r) => a + r.qty, 0);
+  const countOf = (l: Line, v: Venue) => Math.max(0, savedQty(l, v) + (unsaved[keyOf(l, v)] ?? 0));
+
+  // ── Autosave plumbing ──
+  const unsavedRef = useRef(unsaved);
+  useEffect(() => { unsavedRef.current = unsaved; }, [unsaved]);
+  const metaRef = useRef<Record<string, { l: Line; v: Venue }>>({});
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const inFlightRef = useRef<Record<string, boolean>>({});
+  const body = (key: string, qty: number) => {
+    const { l, v } = metaRef.current[key];
+    return { section: 'Document', from: other(v), item: l.item, qty, unitPrice: l.price, unit: l.unit, category: l.category, note: qty < 0 ? 'counter adjusted down' : '' };
+  };
+  // Plain function (not useCallback) so the retry timer can call it; only touches refs + stable setters.
+  async function flush(key: string): Promise<void> {
+    if (inFlightRef.current[key]) { timersRef.current[key] = setTimeout(() => flush(key), 400); return; }
+    const delta = unsavedRef.current[key] ?? 0;
+    if (!delta) return;
+    inFlightRef.current[key] = true;
+    setSaving(n => n + 1);
+    try {
+      await api('POST', body(key, delta));
+      await reload();
+      setUnsaved(u => { const n = { ...u }; n[key] = (n[key] ?? 0) - delta; if (!n[key]) delete n[key]; return n; });
+      setSaveError(null);
+    } catch (e) {
+      setSaveError(`Not saved — ${(e as Error).message}. Tap again to retry.`);
+    } finally {
+      inFlightRef.current[key] = false;
+      setSaving(n => n - 1);
+    }
+  }
+  // Leaving the page / unmounting mid-debounce: fire what's left with keepalive so nothing is lost.
+  useEffect(() => {
+    const sendNow = () => {
+      for (const [key, delta] of Object.entries(unsavedRef.current)) {
+        if (!delta || inFlightRef.current[key] || !metaRef.current[key]) continue;
+        clearTimeout(timersRef.current[key]);
+        fetch('/api/the-document', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body(key, delta)) }).catch(() => {});
+        unsavedRef.current = { ...unsavedRef.current, [key]: 0 };
+      }
+    };
+    window.addEventListener('pagehide', sendNow);
+    return () => { window.removeEventListener('pagehide', sendNow); sendNow(); };
+  }, []);
+  const setCount = (l: Line, v: Venue, n: number) => {
+    if (l.price === null) return; // can't value it yet — set a price first
+    const d = n - countOf(l, v);
+    if (!d) return;
+    const key = keyOf(l, v);
+    metaRef.current[key] = { l, v };
+    setUnsaved(u => ({ ...u, [key]: (u[key] ?? 0) + d }));
+    clearTimeout(timersRef.current[key]);
+    timersRef.current[key] = setTimeout(() => flush(key), 700);
+  };
+  const pendingCount = Object.values(unsaved).filter(Boolean).length + saving;
+
+  // Each venue's tab since the last settle-up (what it has received), incl. taps still saving.
+  const unsavedValue = (v: Venue) => lines.reduce((a, l) => a + (unsaved[keyOf(l, v)] ?? 0) * (l.price || 0), 0);
+  const tabOf = (v: Venue) => ({ value: entries.filter(r => r.from === other(v)).reduce((a, r) => a + r.qty * r.unitPrice, 0) + unsavedValue(v), items: 0 });
   const tabs = { GDT: tabOf('GDT'), ISOLA: tabOf('ISOLA') };
 
   const bal = data.balance;
   const debtor: Venue | null = Math.abs(bal) < 0.005 ? null : bal > 0 ? 'ISOLA' : 'GDT';
-  // What's counted but not yet added moves the balance live (+ = Isola owes G'Day).
-  const pendingDelta = pendingTotal('ISOLA') - pendingTotal('GDT');
-  const shown = Math.round((bal + pendingDelta) * 100) / 100;
+  // Taps still saving move the balance straight away (+ = Isola owes G'Day).
+  const shown = Math.round((bal + unsavedValue('ISOLA') - unsavedValue('GDT')) * 100) / 100;
   const getter: Venue | null = Math.abs(shown) < 0.005 ? null : shown > 0 ? 'GDT' : 'ISOLA';
 
   const renderRow = (r: Row) => {
@@ -292,7 +350,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
       {/* Balance */}
       <div style={box} className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0">
-          <div style={label}>Running balance{pending.length > 0 && <span style={{ color: 'var(--color-ink-muted)' }}> · after ADD</span>}</div>
+          <div style={label}>Running balance</div>
           {getter ? (
             <div className="text-lg font-bold text-gray-800 leading-tight mt-0.5 uppercase">
               {NAME[getter]} gets <span className="tabular-nums">{money(Math.abs(shown))}</span>
@@ -301,7 +359,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
             <div className="text-lg font-bold leading-tight mt-0.5" style={{ color: 'var(--color-success)' }}>ALL SQUARE</div>
           )}
         </div>
-        {debtor && pending.length === 0 && (
+        {debtor && pendingCount === 0 && (
           <button type="button" style={confirmSettle ? BTN_PRIMARY : glassButtonStyle}
             onClick={() => (confirmSettle ? run(async () => { await api('POST', { action: 'settle' }); setConfirmSettle(false); }) : setConfirmSettle(true))}
             onBlur={() => setConfirmSettle(false)}>
@@ -324,7 +382,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
         </div>
         {lines.map(l => (
           <div key={l.key} className="grid gap-2 items-center rounded-2xl overflow-hidden" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px', background: 'rgba(255,255,255,0.55)', height: `${TILE_H}px` }}>
-            <MiniCounter count={countOf(l.key, 'GDT')} onChange={n => setCount(l.key, 'GDT', n)} who={`G'Day: ${l.item}`} by={l.per ?? 1} />
+            <MiniCounter count={countOf(l, 'GDT')} onChange={n => setCount(l, 'GDT', n)} who={`G'Day: ${l.item}`} by={l.per ?? 1} />
             <div className="flex flex-col items-center gap-0.5 min-w-0 text-center">
               <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight max-w-full" style={{ fontFamily: '"stolzl", sans-serif' }}>
                 <span style={{ color: 'var(--color-ink-muted)' }} className="shrink-0">{l.icon}</span>
@@ -344,7 +402,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
                 </div>
               )}
             </div>
-            <MiniCounter count={countOf(l.key, 'ISOLA')} onChange={n => setCount(l.key, 'ISOLA', n)} who={`Isola: ${l.item}`} by={l.per ?? 1} />
+            <MiniCounter count={countOf(l, 'ISOLA')} onChange={n => setCount(l, 'ISOLA', n)} who={`Isola: ${l.item}`} by={l.per ?? 1} />
           </div>
         ))}
         <ItemSearch catalogue={data.catalogue} value={item}
@@ -362,22 +420,18 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
             <button type="button" onClick={() => setGelatoEdit(false)} aria-label="Cancel" className="text-gray-400"><X size={16} strokeWidth={2.25} aria-hidden /></button>
           </div>
         )}
-        <div className="flex gap-2 items-center pt-1">
-          <span className="text-xs text-gray-400 tabular-nums min-w-0">
-            {pending.length === 0 ? 'Tap + under whoever received it' : (['GDT', 'ISOLA'] as Venue[]).filter(v => pending.some(p => p.v === v))
-              .map(v => `${v === 'GDT' ? 'Isola' : "G'Day"} gets ${money(pendingTotal(v))}`).join(' · ')}
-          </span>
-          <button type="button" disabled={pending.length === 0} className="ml-auto disabled:opacity-40" style={BTN_PRIMARY} onClick={() => run(addAll)}>
-            ADD{pending.length > 1 ? ` ${pending.length}` : ''}
-          </button>
+        <div className="text-xs tabular-nums pt-1 uppercase" style={{ color: saveError ? 'var(--color-danger)' : 'var(--color-ink-muted)' }}>
+          {saveError ?? (pendingCount > 0 ? 'Saving…' : 'Saved · tap + under whoever received it')}
         </div>
       </div>
 
       {/* History */}
       <div className="flex flex-col gap-2">
-        {current.length === 0 && older.length === 0 && <p className="text-sm text-gray-400 px-1">Nothing logged yet.</p>}
-        {current.map(renderRow)}
-        {older.length > 0 && (
+        {/* Every counter tap is its own +/− line, so the log stays tucked away by default */}
+        {current.length > 0 && (showLog ? current.map(renderRow) : (
+          <button type="button" onClick={() => setShowLog(true)} className="self-center" style={glassButtonStyle}>SHOW LOG ({current.filter(r => r.kind === 'Entry').length})</button>
+        ))}
+        {showLog && older.length > 0 && (
           showOlder ? older.map(renderRow) : (
             <button type="button" onClick={() => setShowOlder(true)} className="self-center" style={glassButtonStyle}>SHOW SETTLED HISTORY ({older.filter(r => r.kind !== 'Settlement').length})</button>
           )
@@ -537,7 +591,7 @@ export default function TheDocumentCard({ active = true, onBalance }: { active?:
 
       {error && <p className="text-xs px-1" style={{ color: 'var(--color-danger)' }}>{error}</p>}
       {!data && !error && <p className="text-sm text-gray-400 px-1">Loading…</p>}
-      {data && (tab === 'document' ? <DocumentPart data={data} run={run} /> : <CleanPart data={data} run={run} />)}
+      {data && (tab === 'document' ? <DocumentPart data={data} run={run} reload={load} /> : <CleanPart data={data} run={run} />)}
     </div>
   );
 }
