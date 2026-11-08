@@ -215,9 +215,9 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
       icon: <Milk size={14} strokeWidth={2.25} aria-hidden />,
       sub: (
         <div className="flex gap-1 justify-center flex-wrap">
-          {(['bottle', 'crate'] as const).map(k => (
-            <button key={k} type="button" onClick={() => setMilkPack(k)} style={{ ...chip(milkPack === k), height: '24px', padding: '0 8px', fontSize: '9px' }}>
-              {k === 'bottle' ? '1 BOTTLE' : 'CRATE (9)'}
+          {(['crate', 'bottle'] as const).map(k => (
+            <button key={k} type="button" onClick={() => setMilkPack(k)} style={{ ...chip(milkPack === k), height: '20px', padding: '0 8px', fontSize: '9px' }}>
+              {k === 'crate' ? 'CRATE (9)' : 'BOTTLE (1)'}
             </button>
           ))}
         </div>
@@ -323,21 +323,21 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
           ))}
         </div>
         {lines.map(l => (
-          <div key={l.key} className="grid gap-2 items-center rounded-2xl py-1.5" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px', background: 'rgba(255,255,255,0.55)' }}>
+          <div key={l.key} className="grid gap-2 items-center rounded-2xl overflow-hidden" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px', background: 'rgba(255,255,255,0.55)', height: `${TILE_H}px` }}>
             <MiniCounter count={countOf(l.key, 'GDT')} onChange={n => setCount(l.key, 'GDT', n)} who={`G'Day: ${l.item}`} by={l.per ?? 1} />
-            <div className="flex flex-col items-center gap-1 min-w-0 text-center">
-              <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight" style={{ fontFamily: '"stolzl", sans-serif' }}>
+            <div className="flex flex-col items-center gap-0.5 min-w-0 text-center">
+              <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight max-w-full" style={{ fontFamily: '"stolzl", sans-serif' }}>
                 <span style={{ color: 'var(--color-ink-muted)' }} className="shrink-0">{l.icon}</span>
-                <span className="break-words">{l.key === 'milk' ? 'MILK' : l.item}</span>
+                <span className="truncate">{l.key === 'milk' ? 'MILK' : l.item}</span>
               </div>
               {l.sub}
               {l.key === 'custom' ? (
                 <div className="flex gap-1 items-center justify-center">
-                  <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className="text-xs px-2 py-1 rounded-lg w-20 text-center focus:outline-none text-gray-800" style={input} aria-label="Unit price" placeholder="$ each" />
-                  {unit && <span className="text-xs text-gray-400 truncate">/ {unit}</span>}
+                  <input type="number" inputMode="decimal" step="0.01" min={0} value={price} onChange={e => setPrice(e.target.value)} className="text-xs px-2 py-0.5 rounded-lg w-20 text-center focus:outline-none text-gray-800" style={input} aria-label="Unit price" placeholder="$ EACH" />
+                  {unit && <span className="text-[11px] text-gray-400 truncate uppercase">/ {unit}</span>}
                 </div>
               ) : (
-                <div className="text-xs text-gray-400 tabular-nums">
+                <div className="text-[11px] leading-tight text-gray-400 tabular-nums uppercase">
                   {l.price !== null ? (l.per && l.per > 1 ? `${money(l.price * l.per)} / crate (${l.per} bottles)` : `${money(l.price)} / ${l.unit}`) : (l.key === 'gelato'
                     ? <button type="button" onClick={() => setGelatoEdit(true)} className="underline">Set price</button>
                     : 'No price in Supplier Prices')}
