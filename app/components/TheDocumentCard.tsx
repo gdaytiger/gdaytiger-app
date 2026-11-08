@@ -203,15 +203,14 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
   const gelato = gelatoCat ? { price: gelatoCat.price, unit: gelatoCat.unit } : data.gelato;
   const bread = find(/sourdough/i);
   const milk = find(/sungold jersey|full cream/i);
-  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode };
+  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number };
   const lines: Line[] = [
     { key: 'gelato', item: 'GELATO', category: 'Gelato', price: gelato?.price ?? null, unit: gelato?.unit || 'tub', icon: <IceCreamCone size={14} strokeWidth={2.25} aria-hidden /> },
     { key: 'bread', item: 'SOURDOUGH LOAF', category: 'Bread', price: bread?.price ?? null, unit: 'loaf', icon: <Wheat size={14} strokeWidth={2.25} aria-hidden /> },
     {
       key: 'milk', category: 'Milk',
-      item: milkPack === 'crate' ? 'MILK CRATE (9 × 2L)' : 'MILK (2L)',
-      price: milk ? Math.round(milk.price * (milkPack === 'crate' ? 9 : 1) * 100) / 100 : null,
-      unit: milkPack === 'crate' ? 'crate' : 'bottle',
+      // A crate logs as 9 bottles, so the tally counts bottles either way.
+      item: 'MILK (2L)', price: milk?.price ?? null, unit: 'bottle', per: milkPack === 'crate' ? 9 : 1,
       icon: <Milk size={14} strokeWidth={2.25} aria-hidden />,
       sub: (
         <div className="flex gap-1 justify-center flex-wrap">
@@ -231,7 +230,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
   // Milk counts are per pack size — switching bottle/crate keeps the count, the line just re-prices.
   const pending = lines.flatMap(l => (['GDT', 'ISOLA'] as Venue[])
     .filter(v => countOf(l.key, v) > 0 && l.price !== null)
-    .map(v => ({ l, v, qty: countOf(l.key, v) })));
+    .map(v => ({ l, v, qty: countOf(l.key, v) * (l.per ?? 1) })));
   const pendingTotal = (v: Venue) => pending.filter(p => p.v === v).reduce((a, p) => a + p.qty * (p.l.price || 0), 0);
   const reset = () => { setCounts({}); setItem(''); setPrice(''); setUnit(''); setCategory('Other'); setMilkPack('bottle'); };
   const addAll = async () => {
@@ -334,7 +333,7 @@ function DocumentPart({ data, run }: { data: Data; run: (fn: () => Promise<unkno
                 </div>
               ) : (
                 <div className="text-xs text-gray-400 tabular-nums">
-                  {l.price !== null ? `${money(l.price)} / ${l.unit}` : (l.key === 'gelato'
+                  {l.price !== null ? (l.per && l.per > 1 ? `${money(l.price * l.per)} / crate (${l.per} bottles)` : `${money(l.price)} / ${l.unit}`) : (l.key === 'gelato'
                     ? <button type="button" onClick={() => setGelatoEdit(true)} className="underline">Set price</button>
                     : 'No price in Supplier Prices')}
                 </div>
