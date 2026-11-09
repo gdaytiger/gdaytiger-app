@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { GROSS_MARGIN } from '../../lib/businessMetrics';
 import { melbNowDate } from '@/app/lib/melbTime';
+import { getRole } from '@/app/lib/auth';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WEEKLY FLASH — the Monday-morning operational scorecard.
@@ -21,6 +23,7 @@ import { melbNowDate } from '@/app/lib/melbTime';
 // CD (cash difference, Nov 2026): from the `cash_ledger` block (see
 // app/lib/banking.ts). Counted cash − Square cash, counted days only. Week =
 // the featured week; YTD = every counted day in the current calendar year.
+// Owner only — left out of the response for the partner login.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
@@ -96,7 +99,7 @@ async function readBlock(key: string): Promise<any | null> {
   try { return JSON.parse(textOf(block)); } catch { return null; }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const [salesBlock, labourBlock, cashBlock] = await Promise.all([readBlock('sales_daily'), readBlock('labour_weekly'), readBlock('cash_ledger')]);
     const days: SalesDay[] = salesBlock?.days || [];
@@ -165,7 +168,7 @@ export async function GET() {
         salesTrend: { value: salesWoW, verdict: salesWoW == null ? null : (salesWoW >= 0 ? 'up' : 'down') },
       },
       labourTotal: { value: feat?.totalLabourPct ?? null },
-      cashDiff,
+      ...(getRole(req) === 'owner' ? { cashDiff } : {}),
       meta: {
         labourBasis: 'payroll wages + 12% super ÷ net sales ex-GST',
         pending: feat && feat.labourPct == null ? 'Payroll for this week not in the wage sheet yet.' : '',
