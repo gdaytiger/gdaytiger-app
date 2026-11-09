@@ -239,7 +239,6 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
       {/* FOOTNOTE */}
       <div className="text-[10px] leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
         Labour = {meta.labourBasis} (payroll wage sheet). Line staff excludes the owner wage. Gross margin: {grossMargin.source}{gmMonth}.
-        {data.cashDiff && <> Tips = counted cash − Square cash (+ over, − short), counted days only; {data.cashDiff.year} total{data.cashDiff.firstWeek && data.cashDiff.firstWeek > `${data.cashDiff.year}-01-07` ? ` since w/c ${data.cashDiff.firstWeek}` : ''}.</>}
       </div>
     </div>
   );
