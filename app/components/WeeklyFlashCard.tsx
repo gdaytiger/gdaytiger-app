@@ -214,7 +214,7 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
         </div>
       )}
 
-      {/* CD — cash difference: last week + calendar-year running total */}
+      {/* Tips — cash difference (surplus is tips): last week + calendar-year running total */}
       {data.cashDiff && (() => {
         const cd = data.cashDiff;
         const wkCol = cd.week == null ? 'var(--color-ink-muted)'
@@ -224,7 +224,7 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
             style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
             <div className="flex items-center gap-2">
               <Circle size={10} strokeWidth={2.5} aria-hidden fill={dot(wkCol) || 'none'} style={{ display: 'block', flexShrink: 0, color: dot(wkCol) || 'var(--color-ink-muted)' }} />
-              <span className="text-xs font-semibold" style={{ color: 'var(--color-ink-label)' }}>CD</span>
+              <span className="text-xs font-semibold" style={{ color: 'var(--color-ink-label)' }}>Tips</span>
             </div>
             <div className="flex items-baseline gap-3">
               <span className="text-[10px]" style={{ color: 'var(--color-ink-muted)' }}>wk</span>
@@ -239,7 +239,7 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
       {/* FOOTNOTE */}
       <div className="text-[10px] leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
         Labour = {meta.labourBasis} (payroll wage sheet). Line staff excludes the owner wage. Gross margin: {grossMargin.source}{gmMonth}.
-        {data.cashDiff && <> CD = counted cash − Square cash (+ over, − short), counted days only; {data.cashDiff.year} total{data.cashDiff.firstWeek && data.cashDiff.firstWeek > `${data.cashDiff.year}-01-07` ? ` since w/c ${data.cashDiff.firstWeek}` : ''}.</>}
+        {data.cashDiff && <> Tips = counted cash − Square cash (+ over, − short), counted days only; {data.cashDiff.year} total{data.cashDiff.firstWeek && data.cashDiff.firstWeek > `${data.cashDiff.year}-01-07` ? ` since w/c ${data.cashDiff.firstWeek}` : ''}.</>}
       </div>
     </div>
   );
