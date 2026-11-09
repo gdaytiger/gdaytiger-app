@@ -4,7 +4,7 @@ import { readOsBlock, writeOsBlock } from '@/app/lib/osBlocks';
 import { sendPush, type PushSubscriptionJSON } from '@/app/lib/webpush';
 import { buildMorning, pushText, saveSnapshot } from '@/app/lib/morning';
 import { melbNowDate } from '@/app/lib/melbTime';
-import { writeBankingTally } from '@/app/lib/banking';
+import { recordCashWeek } from '@/app/lib/banking';
 
 // 5am morning push.
 //  GET  — Vercel cron (Authorization: Bearer CRON_SECRET). Two UTC schedules
@@ -16,7 +16,7 @@ export const maxDuration = 60;
 async function run(origin: string) {
   const snap = await buildMorning(origin, true);
   await saveSnapshot(snap);
-  const banking = snap.cash?.week?.complete ? await writeBankingTally(snap.cash.week).catch(e => `error: ${e}`) : 'not monday';
+  const banking = snap.cash?.week?.complete ? await recordCashWeek(snap.cash.week).catch(e => `error: ${e}`) : 'not monday';
   const { title, body } = pushText(snap);
   const cur = await readOsBlock<{ subs: PushSubscriptionJSON[] }>('push_subs');
   const subs = cur?.subs || [];

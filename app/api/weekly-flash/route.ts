@@ -17,6 +17,10 @@ import { melbNowDate } from '@/app/lib/melbTime';
 //
 // Gross margin comes from businessMetrics (monthly Xero). Mix + day-part are
 // rendered from /api/flash-extras (fetched client-side).
+//
+// CD (cash difference, Nov 2026): from the `cash_ledger` block (see
+// app/lib/banking.ts). Counted cash − Square cash, counted days only. Week =
+// the featured week; YTD = every counted day in the current calendar year.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
@@ -94,7 +98,7 @@ async function readBlock(key: string): Promise<any | null> {
 
 export async function GET() {
   try {
-    const [salesBlock, labourBlock] = await Promise.all([readBlock('sales_daily'), readBlock('labour_weekly')]);
+    const [salesBlock, labourBlock, cashBlock] = await Promise.all([readBlock('sales_daily'), readBlock('labour_weekly'), readBlock('cash_ledger')]);
     const days: SalesDay[] = salesBlock?.days || [];
     const labourWeeks: LabourWeek[] = labourBlock?.weeks || [];
     const labourByStart = new Map(labourWeeks.map((w) => [w.start, w]));
@@ -134,6 +138,20 @@ export async function GET() {
 
     const feat = weekMetrics(featStart);
     const prev = weekMetrics(prevStart);
+    // CD — cash difference: featured week + calendar-year running total.
+    const cashWeeks: Record<string, { variance: number; n: number; days: [string, number][] }> = cashBlock?.weeks || {};
+    const year = today.slice(0, 4);
+    const cdWeek = cashWeeks[featStart] ?? null;
+    let ytd = 0, ytdDays = 0;
+    for (const w of Object.values(cashWeeks)) for (const [d, v] of w.days || []) if (d.startsWith(year) && d <= today) { ytd += v; ytdDays++; }
+    const cashDiff = {
+      week: cdWeek ? round2(cdWeek.variance) : null,
+      weekDays: cdWeek?.n ?? 0,
+      ytd: ytdDays ? round2(ytd) : null,
+      ytdDays, year,
+      firstWeek: Object.keys(cashWeeks).sort().find((k) => k.slice(0, 4) >= year || addDays(k, 6).startsWith(year)) ?? null,
+    };
+
     const salesWoW = feat && prev && prev.net > 0 ? round2(((feat.net - prev.net) / prev.net) * 100) : null;
 
     return NextResponse.json({
@@ -147,6 +165,7 @@ export async function GET() {
         salesTrend: { value: salesWoW, verdict: salesWoW == null ? null : (salesWoW >= 0 ? 'up' : 'down') },
       },
       labourTotal: { value: feat?.totalLabourPct ?? null },
+      cashDiff,
       meta: {
         labourBasis: 'payroll wages + 12% super ÷ net sales ex-GST',
         pending: feat && feat.labourPct == null ? 'Payroll for this week not in the wage sheet yet.' : '',

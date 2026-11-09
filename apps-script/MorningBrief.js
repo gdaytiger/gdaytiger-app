@@ -30,12 +30,19 @@ function installMorningBrief() {
 }
 
 function runMorningBrief() {
-  mbWriteBlock_(MB_BLOCK_TYPE, mbBuild_());
+  var brief = mbBuild_();
+  mbWriteBlock_(MB_BLOCK_TYPE, brief);
+  // Mondays: last week is complete → record its cash difference for the
+  // Weekly Flash CD row. Non-fatal — never blocks the brief or the push.
+  if (brief.cashWeek && brief.cashWeek.complete) {
+    try { mbLedgerSave_(mbLedgerPut_(mbReadBlock_(MB_LEDGER_TYPE), brief.cashWeek.weekStart, brief.cashWeek.days)); }
+    catch (e) { Logger.log('MB ledger failed: ' + e); }
+  }
   mbTriggerPush_();
 }
 
-// Fire the TIGER OS morning push (snapshot + phone notification + Monday banking
-// tally) right after the brief is written. Replaces the Vercel cron, which never
+// Fire the TIGER OS morning push (snapshot + phone notification + Monday CD
+// ledger record) right after the brief is written. Replaces the Vercel cron, which never
 // fired. Needs Script Property CRON_SECRET (same value as in Vercel).
 var MB_PUSH_URL = 'https://gdaytiger-app.vercel.app/api/push/morning?force=1';
 function mbTriggerPush_() {
@@ -109,6 +116,98 @@ function mbCountedCash_(ss, tabName) {
   });
   if (!inTill || cashSales === null || isNaN(cashSales)) return null;
   return Math.round(cashSales * 100) / 100;
+}
+
+// ── CD ledger (cash difference, Nov 2026) ────────────────────────────────────
+// `cash_ledger` block: { type, updated, weeks: { 'YYYY-MM-DD' (Monday):
+//   { square, counted, variance, n, days: [[date, variance], ...] } } }
+// Counted days only. Read by the app's Weekly Flash (CD row: week + calendar
+// YTD). The app (app/lib/banking.ts) also upserts it on Mondays — same shape.
+var MB_LEDGER_TYPE = 'cash_ledger';
+var MB_LEDGER_KEEP = 70;
+
+function mbLedgerPut_(ledger, weekStartKey, days) {
+  ledger = ledger || { weeks: {} };
+  ledger.weeks = ledger.weeks || {};
+  var r2 = function (n) { return Math.round(n * 100) / 100; };
+  var counted = days.filter(function (d) { return d.counted != null; });
+  if (!counted.length) return ledger;
+  var sq = 0, ct = 0, dv = [];
+  counted.forEach(function (d) { sq += d.square; ct += d.counted; dv.push([d.date, r2(d.counted - d.square)]); });
+  ledger.weeks[weekStartKey] = { square: r2(sq), counted: r2(ct), variance: r2(ct - sq), n: counted.length, days: dv };
+  return ledger;
+}
+
+function mbLedgerSave_(ledger) {
+  var keys = Object.keys(ledger.weeks).sort().slice(-MB_LEDGER_KEEP), weeks = {};
+  keys.forEach(function (k) { weeks[k] = ledger.weeks[k]; });
+  mbWriteBlock_(MB_LEDGER_TYPE, { type: MB_LEDGER_TYPE, updated: new Date().toISOString(), weeks: weeks });
+}
+
+// ONE-OFF: fill the ledger for every completed week of the current calendar
+// year from the Drive cash-up sheets + Square. Resumable — skips weeks already
+// in the ledger and stops at ~5 min; just run it again until it logs DONE.
+function backfillCashLedger() {
+  var t0 = Date.now();
+  var ledger = mbReadBlock_(MB_LEDGER_TYPE) || { weeks: {} };
+  ledger.weeks = ledger.weeks || {};
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var jan1 = new Date(today.getFullYear(), 0, 1);
+  var monday = sdAddDays_(jan1, -((jan1.getDay() + 6) % 7));
+  var thisMonday = sdAddDays_(today, -((today.getDay() + 6) % 7));
+  var added = 0, noSheet = [], timedOut = false;
+  for (var m = monday; m < thisMonday; m = sdAddDays_(m, 7)) {
+    var key = sdDateKey_(m);
+    if (ledger.weeks[key]) continue;
+    if (Date.now() - t0 > 5 * 60 * 1000) { timedOut = true; break; }
+    var ss = mbFindCashupSheet_(m);
+    if (!ss) { noSheet.push(key); continue; }
+    var days = [];
+    for (var i = 0; i < 7; i++) {
+      var d = sdAddDays_(m, i);
+      var counted = mbCountedCash_(ss, MB_DAY_TABS[d.getDay()]);
+      days.push({ date: sdDateKey_(d), square: counted == null ? 0 : mbDayTotals_(d, sdAddDays_(d, 1)).cash, counted: counted });
+    }
+    mbLedgerPut_(ledger, key, days);
+    if (ledger.weeks[key]) added++;
+  }
+  mbLedgerSave_(ledger);
+  if (noSheet.length) Logger.log('No cash-up sheet found for w/c: ' + noSheet.join(', '));
+  Logger.log(timedOut ? ('Added ' + added + ' weeks — out of time, RUN AGAIN to continue.') : ('DONE — added ' + added + ' weeks.'));
+}
+
+function printCashLedger() {
+  var l = mbReadBlock_(MB_LEDGER_TYPE);
+  if (!l) { Logger.log('No cash_ledger block yet.'); return; }
+  var year = String(new Date().getFullYear()), ytd = 0;
+  Object.keys(l.weeks).sort().forEach(function (k) {
+    Logger.log(k + '  ' + l.weeks[k].variance + '  (' + l.weeks[k].n + ' days)');
+    l.weeks[k].days.forEach(function (d) { if (d[0].indexOf(year) === 0) ytd += d[1]; });
+  });
+  Logger.log(year + ' YTD: ' + (Math.round(ytd * 100) / 100));
+}
+
+// Read a JSON code block on the OS page by its "type" string. Null ONLY if the
+// block is absent — a failed read throws, so callers can't mistake a Notion blip
+// for an empty ledger and write over the year.
+function mbReadBlock_(type) {
+  var key = PropertiesService.getScriptProperties().getProperty('NOTION_API_KEY');
+  var headers = { 'Authorization': 'Bearer ' + key, 'Notion-Version': '2022-06-28' };
+  var all = [], cursor = null;
+  do {
+    var url = 'https://api.notion.com/v1/blocks/' + SD_NOTION_PAGE_ID + '/children?page_size=100' + (cursor ? '&start_cursor=' + cursor : '');
+    var data = JSON.parse(UrlFetchApp.fetch(url, { headers: headers, muteHttpExceptions: true }).getContentText());
+    if (!data.results) throw new Error('Notion read failed: ' + (data.message || data.code || 'no results'));
+    all = all.concat(data.results);
+    cursor = data.has_more ? data.next_cursor : null;
+  } while (cursor);
+  var needle = '"' + type + '"';
+  for (var i = 0; i < all.length; i++) {
+    if (all[i].type !== 'code') continue;
+    var txt = (all[i].code.rich_text || []).map(function (r) { return r.plain_text; }).join('');
+    if (txt.indexOf(needle) !== -1) return JSON.parse(txt);
+  }
+  return null;
 }
 
 // One Melbourne day of COMPLETED orders → { gross (incl GST, excl tips), orders, cash } in dollars.

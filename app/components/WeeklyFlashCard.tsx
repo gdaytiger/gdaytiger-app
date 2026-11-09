@@ -30,6 +30,8 @@ export type WeeklyFlashData = {
     salesTrend: { value: number | null; verdict: string | null };
   };
   labourTotal?: { value: number | null };
+  // CD = cash difference (counted cash − Square cash). + over, − short.
+  cashDiff?: { week: number | null; weekDays: number; ytd: number | null; ytdDays: number; year: string; firstWeek: string | null };
   meta: { labourBasis: string; pending: string; labourUpdated?: string | null };
 } | null;
 
@@ -46,6 +48,8 @@ const RED = '#b91c1c';
 
 const money = (n: number | null | undefined) => n == null ? '—' : '$' + Math.round(n).toLocaleString();
 const money2 = (n: number | null | undefined) => n == null ? '—' : '$' + n.toFixed(2);
+const signedMoney = (n: number | null | undefined) => n == null ? '—' : `${n >= 0 ? '+' : '−'}$${Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const CD_TOLERANCE = 20; // $ either way for the week before it's flagged
 const hourLabel = (h: number) => {
   const ap = h < 12 ? 'a' : 'p';
   const hr = h % 12 === 0 ? 12 : h % 12;
@@ -210,9 +214,32 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
         </div>
       )}
 
+      {/* CD — cash difference: last week + calendar-year running total */}
+      {data.cashDiff && (() => {
+        const cd = data.cashDiff;
+        const wkCol = cd.week == null ? 'var(--color-ink-muted)'
+          : Math.abs(cd.week) < CD_TOLERANCE ? GREEN : cd.week < 0 ? RED : AMBER;
+        return (
+          <div className="flex items-center justify-between rounded-xl px-3 py-2"
+            style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+            <div className="flex items-center gap-2">
+              <Circle size={10} strokeWidth={2.5} aria-hidden fill={dot(wkCol) || 'none'} style={{ display: 'block', flexShrink: 0, color: dot(wkCol) || 'var(--color-ink-muted)' }} />
+              <span className="text-xs font-semibold" style={{ color: 'var(--color-ink-label)' }}>CD</span>
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span className="text-[10px]" style={{ color: 'var(--color-ink-muted)' }}>wk</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: wkCol }}>{signedMoney(cd.week)}</span>
+              <span className="text-[10px]" style={{ color: 'var(--color-ink-muted)' }}>{cd.year}</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--color-ink-label)' }}>{signedMoney(cd.ytd)}</span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* FOOTNOTE */}
       <div className="text-[10px] leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
         Labour = {meta.labourBasis} (payroll wage sheet). Line staff excludes the owner wage. Gross margin: {grossMargin.source}{gmMonth}.
+        {data.cashDiff && <> CD = counted cash − Square cash (+ over, − short), counted days only; {data.cashDiff.year} total{data.cashDiff.firstWeek && data.cashDiff.firstWeek > `${data.cashDiff.year}-01-07` ? ` since w/c ${data.cashDiff.firstWeek}` : ''}.</>}
       </div>
     </div>
   );
