@@ -224,7 +224,7 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
             style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
             <div className="flex items-center gap-2">
               <Circle size={10} strokeWidth={2.5} aria-hidden fill={dot(wkCol) || 'none'} style={{ display: 'block', flexShrink: 0, color: dot(wkCol) || 'var(--color-ink-muted)' }} />
-              <span className="text-xs font-semibold" style={{ color: 'var(--color-ink-label)' }}>Tips</span>
+              <span className="text-xs font-semibold" style={{ color: 'var(--color-ink-label)' }}>***</span>
             </div>
             <div className="flex items-baseline gap-3">
               <span className="text-[10px]" style={{ color: 'var(--color-ink-muted)' }}>wk</span>
