@@ -17,6 +17,8 @@ export type PendingReview = {
   offMenu: string[];
 };
 
+export type RemovedReview = { reviewer: string; stars: number; date: string; comment: string; removedAt: string };
+
 export type GoogleReviewsPayload = {
   type: 'google_reviews';
   updated: string | null;
@@ -26,6 +28,7 @@ export type GoogleReviewsPayload = {
   counts?: Record<string, number> | null;
   nextShown?: number | null;
   toNext?: number | null;
+  removed?: RemovedReview[];
   pending: PendingReview[];
   replied: { name: string; reviewer: string; stars: number | null; reply: string; at: string }[];
   error: string | null;

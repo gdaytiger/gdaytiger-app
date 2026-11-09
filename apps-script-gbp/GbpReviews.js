@@ -71,7 +71,10 @@ function syncGoogleReviews() {
     state.average = data.averageRating || state.average;
     state.total = data.totalReviewCount || state.total;
     var exact = gbpExactRating_(loc);
-    if (exact) { state.exact = exact.exact; state.counts = exact.counts; state.nextShown = exact.nextShown; state.toNext = exact.toNext; }
+    if (exact) {
+      state.exact = exact.exact; state.counts = exact.counts; state.nextShown = exact.nextShown; state.toNext = exact.toNext;
+      try { state.removed = gbpDetectRemoved_(exact.seen, exact.n, state.removed); } catch (e) { Logger.log('removed-check: ' + e); }
+    }
     state.updated = new Date().toISOString();
     state.error = null;
     gbpWriteOsBlock_('google_reviews', state);
@@ -96,6 +99,7 @@ function gbpReviewState_() {
     counts: s.counts || null,
     nextShown: s.nextShown || null,
     toNext: s.toNext == null ? null : s.toNext,
+    removed: s.removed || [],
     pending: s.pending || [],
     skipped: (s.skipped || []).slice(-300),
     replied: (s.replied || []).slice(-20),
@@ -199,22 +203,28 @@ function gbpRedraft_(reviewName, note) {
 // to one decimal). Also works out how many 5-star reviews it takes for Google's
 // displayed rating (one decimal, rounded) to tick up to the next 0.1.
 function gbpExactRating_(loc) {
-  var counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, tok = '', n = 0, sum = 0;
+  var counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, tok = '', n = 0, sum = 0, seen = {};
   do {
     var r = gbpFetch_(GBP_V4 + loc + '/reviews?pageSize=50' + (tok ? '&pageToken=' + encodeURIComponent(tok) : ''));
     (r.reviews || []).forEach(function (v) {
       var st = GBP_STARS[v.starRating];
       if (!st) return;
       counts[st]++; n++; sum += st;
+      seen[v.name] = {
+        r: (v.reviewer && v.reviewer.displayName) || 'Google user',
+        s: st,
+        d: String(v.createTime || '').slice(0, 10),
+        c: String(v.comment || '').replace(/\s+/g, ' ').slice(0, 160)
+      };
     });
     tok = r.nextPageToken;
   } while (tok);
   if (!n) return null;
   var exact = sum / n;
   var shownTenths = Math.round(exact * 10);          // what Google shows, e.g. 46 = 4.6
-  if (shownTenths >= 50) return { exact: exact, counts: counts, nextShown: null, toNext: 0 };
+  if (shownTenths >= 50) return { exact: exact, counts: counts, nextShown: null, toNext: 0, seen: seen, n: n };
   var threshold = shownTenths * 10 + 5;               // hundredths, e.g. 465 = 4.65
   // need 100*(sum + 5k) >= threshold*(n + k)  →  k >= (threshold*n - 100*sum) / (500 - threshold)
   var k = Math.max(0, Math.ceil((threshold * n - 100 * sum) / (500 - threshold)));
-  return { exact: exact, counts: counts, nextShown: (shownTenths + 1) / 10, toNext: k };
+  return { exact: exact, counts: counts, nextShown: (shownTenths + 1) / 10, toNext: k, seen: seen, n: n };
 }

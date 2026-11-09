@@ -27,6 +27,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // GBP Apps Script push (removed reviews) — no cookie; the route checks GBP_SECRET itself.
+  if (pathname === '/api/push/google' && request.method === 'POST') {
+    return NextResponse.next();
+  }
   // 5am push cron — no cookie; the route checks Bearer CRON_SECRET itself.
   if (pathname === '/api/push/morning' && request.method === 'GET') {
     return NextResponse.next();

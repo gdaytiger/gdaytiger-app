@@ -30,6 +30,7 @@ const ago = (iso: string | null) => {
   if (mins < 48 * 60) return `${Math.round(mins / 60)}h ago`;
   return `${Math.round(mins / 1440)}d ago`;
 };
+const withinDays = (iso: string, days: number) => Date.now() - new Date(iso).getTime() < days * 86400000;
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 
 
@@ -181,6 +182,27 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
           {awaitingApproval ? 'Waiting on Google to approve API access — reviews will appear here once it does.' : `Last check failed: ${reviews.error}`}
         </div>
       )}
+
+      {/* Reviews that have disappeared from Google (last 30 days) */}
+      {(() => {
+        const recent = (reviews?.removed ?? []).filter(x => withinDays(x.removedAt, 30));
+        if (!recent.length) return null;
+        return (
+          <div className="flex flex-col gap-2">
+            <div style={label}>Removed from Google ({recent.length})</div>
+            {recent.map(x => (
+              <div key={`${x.reviewer}-${x.date}-${x.removedAt}`} style={{ ...box, border: '1.5px solid var(--color-danger)' }} className="flex flex-col gap-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-sm">{x.reviewer}</span>
+                  <span className="text-xs tabular-nums" style={{ color: x.stars <= 3 ? 'var(--color-danger)' : 'var(--color-warning)' }}>{stars(x.stars)} · posted {x.date}</span>
+                </div>
+                <div className="text-sm" style={{ color: x.comment ? undefined : 'var(--color-ink-muted)' }}>{x.comment || 'Stars only, no text'}</div>
+                <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>Gone from Google · noticed {ago(x.removedAt)}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Pending reviews */}
       <div className="flex flex-col gap-3">
