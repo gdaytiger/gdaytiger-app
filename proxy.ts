@@ -31,6 +31,10 @@ export function proxy(request: NextRequest) {
   if (pathname === '/api/push/google' && request.method === 'POST') {
     return NextResponse.next();
   }
+  // Email → To Do sweeper (Apps Script) — no cookie; the route checks Bearer CRON_SECRET itself.
+  if (pathname === '/api/email-scan' && request.method === 'POST') {
+    return NextResponse.next();
+  }
   // 5am push cron — no cookie; the route checks Bearer CRON_SECRET itself.
   if (pathname === '/api/push/morning' && request.method === 'GET') {
     return NextResponse.next();
