@@ -2407,6 +2407,16 @@ export default function Home() {
   // short window and override the fetched state with it so the poll can't clobber.
   const pendingWrites = useRef<Map<string, { checked: boolean; ts: number }>>(new Map());
   const PENDING_TTL = 15000;
+  // All checked-state POSTs from this device go through one queue, so a quick
+  // run of ticks can't race each other into a lost update on the single Notion
+  // state block (the server also verifies + retries for cross-device overlaps).
+  const checkedStateQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const postCheckedState = (body: { blockId: string; date: string; checked: boolean }) => {
+    const run = () => fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
+    const p = checkedStateQueue.current.then(run, run);
+    checkedStateQueue.current = p;
+    return p;
+  };
 
   // Apply still-fresh local toggles on top of a freshly-fetched server state so a
   // stale poll read can't undo a recent check (or re-add a recent uncheck).
@@ -2771,7 +2781,13 @@ export default function Home() {
       else { next[date] = (next[date] || []).filter(id => id !== blockId); if (!next[date].length) delete next[date]; }
       return next;
     });
-    fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, date, checked }) }).catch(() => {});
+    // Restart the pending window when the write actually lands — a queued write
+    // can take a few seconds, and the guard must cover Notion's read lag after it.
+    const key = `${date}|${blockId}`;
+    postCheckedState({ blockId, date, checked }).then(() => {
+      const e = pendingWrites.current.get(key);
+      if (e && e.checked === checked) e.ts = Date.now();
+    });
   };
 
   const handleSelectDay = (date: string) => setSelectedDate(prev => prev === date ? null : date);
@@ -2838,7 +2854,7 @@ export default function Home() {
     // sticky scan (still unchecked, not yet in "_sticky_done").
     if (isSticky) {
       setMovedRecurringIds(prev => new Set(prev).add(blockId));
-      fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, date: `${sourceDate}:moved`, checked: true }) }).catch(() => {});
+      postCheckedState({ blockId, date: `${sourceDate}:moved`, checked: true });
       return;
     }
 
@@ -2872,7 +2888,7 @@ export default function Home() {
     if (isRecurring) {
       // Suppress recurring task for the rest of this session and persist so it survives a reload.
       setMovedRecurringIds(prev => new Set(prev).add(blockId));
-      fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, date: `${todayStr}:moved`, checked: true }) }).catch(() => {});
+      postCheckedState({ blockId, date: `${todayStr}:moved`, checked: true });
     }
     const ops: Promise<Response>[] = [
       fetch('/api/add-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: tomorrowStr, text }) }),
@@ -2892,7 +2908,7 @@ export default function Home() {
   const handleDismissMissed = (blockId: string) => {
     setMovedRecurringIds(prev => new Set(prev).add(blockId));
     setData(prev => prev ? { ...prev, dailyTasks: prev.dailyTasks.filter(t => t.id !== blockId) } : prev);
-    fetch('/api/checked-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, date: `${todayStr}:carry-handled`, checked: true }) }).catch(() => {});
+    postCheckedState({ blockId, date: `${todayStr}:carry-handled`, checked: true });
   };
 
   // Hand the action item off to full Claude. Desktop opens a Cowork session

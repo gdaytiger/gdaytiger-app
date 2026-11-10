@@ -90,6 +90,25 @@ export async function GET() {
   return NextResponse.json({ state: cleanOldDates(state) });
 }
 
+// Apply one toggle to a state object (mutates + returns it).
+function applyToggle(state: Record<string, string[]>, date: string, ids: string[], checked: boolean) {
+  if (checked) {
+    state[date] = [...new Set([...(state[date] || []), ...ids])];
+  } else {
+    state[date] = (state[date] || []).filter((id: string) => !ids.includes(id));
+    if (!state[date].length) delete state[date];
+  }
+  return state;
+}
+
+function isApplied(state: Record<string, string[]>, date: string, ids: string[], checked: boolean) {
+  const have = new Set(state[date] || []);
+  return ids.every(id => have.has(id) === checked);
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const MAX_ATTEMPTS = 3;
+
 export async function POST(req: NextRequest) {
   const denied = requireSession(req);
   if (denied) return denied;
@@ -97,17 +116,28 @@ export async function POST(req: NextRequest) {
   // Accept a batch (blockIds) so multi-task actions like "Add all" are one
   // read-modify-write instead of N racing writes to the same code block.
   const ids: string[] = Array.isArray(blockIds) ? blockIds : [blockId];
-  const { id: stateBlockId, state } = await getStateBlock();
-  if (!stateBlockId) return NextResponse.json({ success: false, error: 'No state block found' });
 
-  if (checked) {
-    state[date] = [...new Set([...(state[date] || []), ...ids])];
-  } else {
-    state[date] = (state[date] || []).filter((id: string) => !ids.includes(id));
-    if (!state[date].length) delete state[date];
+  // The whole checked-state lives in ONE Notion code block, so every write is a
+  // read-modify-write with no locking. Two overlapping POSTs (two quick ticks,
+  // or two phones) both read the same base and the later write erases the
+  // earlier one — the "unticks itself ~15s later" bug once the client's
+  // pending guard expires. Notion has no compare-and-swap, so we write, wait,
+  // re-read and verify our toggle survived; if another writer clobbered it,
+  // re-apply on the fresh state and write again (jittered, up to 3 attempts).
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { id: stateBlockId, state } = await getStateBlock();
+    if (!stateBlockId) return NextResponse.json({ success: false, error: 'No state block found' });
+    if (attempt > 1 && isApplied(state, date, ids, checked)) {
+      return NextResponse.json({ success: true, attempts: attempt - 1 });
+    }
+
+    const ok = await updateStateBlock(stateBlockId, cleanOldDates(applyToggle(state, date, ids, checked)));
+    if (!ok) return NextResponse.json({ success: false, error: 'Notion write failed' }, { status: 502 });
+
+    await sleep(500 + Math.floor(Math.random() * 400));
+    const { state: after } = await getStateBlock();
+    if (isApplied(after, date, ids, checked)) return NextResponse.json({ success: true, attempts: attempt });
+    console.warn(`checked-state: write for ${date} clobbered by a concurrent write — retry ${attempt}/${MAX_ATTEMPTS}`);
   }
-
-  const ok = await updateStateBlock(stateBlockId, cleanOldDates(state));
-  if (!ok) return NextResponse.json({ success: false, error: 'Notion write failed' }, { status: 502 });
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, verified: false, attempts: MAX_ATTEMPTS });
 }
