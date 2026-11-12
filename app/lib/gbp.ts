@@ -17,6 +17,8 @@ export type PendingReview = {
   offMenu: string[];
 };
 
+export type ReplyRule = { id: string; text: string; note?: string; at: string };
+
 export type RemovedReview = { reviewer: string; stars: number; date: string; comment: string; removedAt: string };
 
 export type GoogleReviewsPayload = {

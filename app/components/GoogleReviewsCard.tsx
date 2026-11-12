@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import type { GoogleReviewsPayload, MenuSyncPayload, PendingReview, PoolSuggestion } from '@/app/lib/gbp';
+import type { GoogleReviewsPayload, MenuSyncPayload, PendingReview, PoolSuggestion, ReplyRule } from '@/app/lib/gbp';
 import { googleCategoryFor, PHOTO_TAGS } from '@/app/lib/photoTags';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
@@ -10,7 +10,7 @@ import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPr
 // check. Self-contained — fetches /api/google-reviews and /api/google-pool.
 // Nothing posts to Google without a tap here.
 
-type Data = { reviews: GoogleReviewsPayload | null; menu: MenuSyncPayload | null } | null;
+type Data = { reviews: GoogleReviewsPayload | null; menu: MenuSyncPayload | null; rules?: ReplyRule[] } | null;
 
 const label: React.CSSProperties = { fontFamily: '"stolzl", sans-serif', fontWeight: 700, fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-ink-label)' };
 const box: React.CSSProperties = { background: 'rgba(255,255,255,0.55)', borderRadius: '16px', padding: '12px 14px' };
@@ -137,7 +137,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
       const r = await fetch('/api/google-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
-      setMsg(done);
+      setMsg(body.action === 'redraft' && typeof d.learned === 'string' && d.learned ? `${done} · Remembered for future replies: “${d.learned}”` : done);
       if (body.action === 'redraft' && typeof d.draft === 'string') {
         setDrafts(prev => ({ ...prev, [body.reviewName as string]: d.draft }));
         setNotes(prev => ({ ...prev, [body.reviewName as string]: '' }));
@@ -236,7 +236,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
               <input
                 value={notes[r.name] ?? ''}
                 onChange={e => setNotes(prev => ({ ...prev, [r.name]: e.target.value }))}
-                placeholder="Note for a redraft (optional), e.g. mention the new special"
+                placeholder="Note for a redraft — general preferences are remembered for future replies"
                 className="w-full text-xs rounded-xl px-3 py-2 focus:outline-none"
                 style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(0,0,0,0.06)' }}
               />
@@ -314,6 +314,19 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
           </>
         )}
       </div>
+
+      {/* Standing reply rules learned from redraft notes */}
+      {(data?.rules?.length ?? 0) > 0 && (
+        <div style={box} className="flex flex-col gap-2">
+          <div style={label}>Reply rules learned from your redrafts ({data!.rules!.length})</div>
+          {data!.rules!.map(r => (
+            <div key={r.id} className="flex items-start justify-between gap-2 text-sm">
+              <span>{r.text}</span>
+              <button onClick={() => act({ action: 'ruleDelete', ruleId: r.id }, `rule:${r.id}`, 'Rule removed')} disabled={!!busy} className="text-[11px] font-bold rounded-full w-5 h-5 leading-5 text-center shrink-0" style={{ background: 'rgba(0,0,0,0.05)', color: 'var(--color-ink-label)' }} aria-label={`Remove rule: ${r.text}`}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Menu price sync */}
       <div style={box} className="flex flex-col gap-2">
