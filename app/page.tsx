@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, GalleryVerticalEnd, Megaphone, ScrollText, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, GalleryVerticalEnd, Megaphone, ScrollText, ChartCandlestick, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -15,6 +15,7 @@ import MorningCard from './components/MorningCard';
 import GoogleReviewsCard from './components/GoogleReviewsCard';
 import StoryMakerCard from './components/StoryMakerCard';
 import TheDocumentCard from './components/TheDocumentCard';
+import TradingCard, { tradingBadge, type TradingFeed } from './components/TradingCard';
 import Greeting from './components/Greeting';
 import WeatherLine from './components/WeatherLine';
 import WeeklyFlashCard, { type WeeklyFlashData, type FlashExtrasData } from './components/WeeklyFlashCard';
@@ -125,10 +126,10 @@ const btnChip = (on: boolean): React.CSSProperties => (on ? { ...glassButtonStyl
 // ── Widget icons (Lucide) ────────────────────────────────────────────────────
 // One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
 // falls back to ~56% of the chip. Colour: neutral grey (--color-ink-label).
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings' | 'story' | 'socials' | 'document';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings' | 'story' | 'socials' | 'document' | 'trading';
 
 const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
-  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt, story: GalleryVerticalEnd, socials: Megaphone, document: ScrollText,
+  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt, story: GalleryVerticalEnd, socials: Megaphone, document: ScrollText, trading: ChartCandlestick,
 };
 
 function WidgetIcon({ name, chip = 28, glyph }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -2385,6 +2386,8 @@ export default function Home() {
   const closeWidgets = () => setOpenWidgets(new Set());
   // Google reviews awaiting a reply — set by GoogleReviewsCard (always mounted) for the tile badge.
   const [googlePending, setGooglePending] = useState(0);
+  // Day Trader Scan feed — set by TradingCard (always mounted for the owner) for the tile badge.
+  const [tradingFeed, setTradingFeed] = useState<TradingFeed | null>(null);
   // Tapping the 5am push opens /?open=morning — jump straight to the Morning card.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get('open');
@@ -3315,6 +3318,7 @@ export default function Home() {
           {!isPartner && <LauncherTile icon={<WidgetIcon name="socials" chip={48} glyph={26} />} title="Socials" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('socials')} onClick={() => toggleWidget('socials')} />}
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
           {!isPartner && <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="TigerOS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />}
+          {!isPartner && <LauncherTile icon={<WidgetIcon name="trading" chip={48} glyph={26} />} title="Trading" badgeText={tradingBadge(tradingFeed)} alert={!!tradingFeed?.ok && !!(tradingFeed.scan?.filtered?.length || tradingFeed.scan?.best) && !tradingFeed.days?.[0]?.graded} active={openWidgets.has('trading')} onClick={() => toggleWidget('trading')} />}
           <LauncherTile icon={<WidgetIcon name="document" chip={48} glyph={26} />} title="The Document" badgeText={docBalance != null && Math.abs(docBalance) >= 1 ? `${docBalance > 0 ? '+' : '−'}$${Math.round(Math.abs(docBalance))}` : undefined} active={openWidgets.has('document')} onClick={() => toggleWidget('document')} />
         </LauncherGrid>
         {isPartner && (
@@ -3444,6 +3448,15 @@ export default function Home() {
             <div style={{ display: socialTab === 'google' ? 'block' : 'none' }}>
               <GoogleReviewsCard active={openWidgets.has('socials') && socialTab === 'google'} onCount={setGooglePending} />
             </div>
+          </Card>
+        </div>
+
+        {/* TRADING — Day Trader Scan (owner only, paper / analysis only). 09:46 NY opening-range
+            scan + Time Machine from the Day Trader Scan Apps Script, graded after the close.
+            Mounted always so the tile badge (latest day's P&L following the rules) loads. */}
+        <div style={{ display: openWidgets.has('trading') ? 'block' : 'none' }}>
+          <Card bare icon={<WidgetIcon name="trading" chip={28} glyph={17} />} title="Trading" onCollapse={() => toggleWidget('trading')}>
+            <TradingCard active={openWidgets.has('trading')} onFeed={setTradingFeed} />
           </Card>
         </div>
 
