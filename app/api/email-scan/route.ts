@@ -36,6 +36,10 @@ async function extractTasks(emails: Email[], today: string): Promise<Task[]> {
 
 For each email below, decide whether it needs Jonathan to DO something. Only create a task when there is a concrete action: reply/confirm, pay a bill or overdue invoice, chase a supplier issue (short delivery, credit, price rise, out of stock), book/arrange something, sign or submit a form, fix a staff/roster problem, a council/compliance/ATO deadline, a customer complaint or catering/wholesale enquiry that needs a response.
 
+Supplier quotes and seller messages (e.g. Alibaba seller replies, quote requests, samples, proofs, MOQ/pricing questions) relating to something G'Day Tiger is sourcing DO get a task — e.g. "Reply to Leah (Chengwang) re packaging quote" — with the product, seller company and what they asked for in context.
+
+Claudio Fumagalli (claudiofuma@hotmail.com, Isola Di Capri next door) sometimes forwards emails about HIS OWN business. Only create a task from his emails when it clearly concerns G'Day Tiger or something the two venues share (stock owed, shared building, NBN). Forwarded seller replies to Claudio's own Alibaba enquiries are Isola Di Capri's business — no task.
+
 Do NOT create tasks for: newsletters, marketing, promos, receipts, routine supplier invoices or order confirmations with no problem (an automated scanner already handles invoice prices), shipping notifications, social media alerts, automated system notices, Google review notifications, calendar auto-emails, anything already resolved in the thread, or emails Jonathan sent himself.
 
 Rules for each task:

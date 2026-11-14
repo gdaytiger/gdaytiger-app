@@ -34,6 +34,8 @@ var ET_SKIP_FROM = [
 ];
 
 var ET_QUERY = 'in:inbox newer_than:2d -category:promotions -category:social -category:updates -category:forums -from:me';
+// Seller/quote replies that Gmail files under Updates — pulled in separately.
+var ET_SELLER_QUERY = 'in:inbox newer_than:2d from:feedback@service.alibaba.com';
 
 function sweepEmailTasks() {
   var h = Number(Utilities.formatDate(new Date(), 'Australia/Melbourne', 'H'));
@@ -84,6 +86,11 @@ function etRun_(dryRun) {
 function etCollect_() {
   var me = Session.getActiveUser().getEmail().toLowerCase();
   var threads = GmailApp.search(ET_QUERY, 0, 40);
+  var seen = {};
+  threads.forEach(function (t) { seen[t.getId()] = true; });
+  GmailApp.search(ET_SELLER_QUERY, 0, 15).forEach(function (t) {
+    if (!seen[t.getId()]) { seen[t.getId()] = true; threads.push(t); }
+  });
   var out = [];
   for (var i = 0; i < threads.length && out.length < ET_MAX; i++) {
     var msgs = threads[i].getMessages();
