@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
     if (section === 'Clean' && qty < 0) {
       const name = String(body.item).trim().toUpperCase();
       const openRows = (await loadRows()).filter(r => r.section === 'Clean' && r.status !== 'Squared' && r.item === name && r.from === from);
-      if (openRows.reduce((a, r) => a + r.qty, 0) <= 0) {
+      if (openRows.reduce((a, r) => a + r.qty, 0) <= 0.001) { // decimals allowed — tolerate float dust
         await Promise.all(openRows.map(r => notionFetch(`/pages/${r.id}`, 'PATCH', { properties: toProps({ status: 'Squared' }) })));
       }
     }

@@ -101,19 +101,42 @@ const tabFoot = (value: number, items: number) => (
 
 // Compact − n + used on each Log Stock line.
 // `by` = how much each +/− tap moves the count (milk in crate mode = 9 bottles a tap).
+// Typed qty box: holds the raw text while you type (so "1." and "2.2" don't snap back),
+// then saves on Enter / tapping away. Up to 2 decimal places.
+function QtyInput({ count, onChange, who, className }: { count: number; onChange: (n: number) => void; who: string; className: string }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const n = Number(draft.replace(',', '.'));
+    if (draft.trim() !== '' && Number.isFinite(n)) onChange(Math.max(0, q2(n)));
+    else if (draft.trim() === '') onChange(0);
+    setDraft(null);
+  };
+  const shown = draft ?? (count ? String(q2(count)) : '');
+  return (
+    <input type="text" inputMode="decimal" value={shown} placeholder="0"
+      onFocus={e => { setDraft(count ? String(q2(count)) : ''); e.currentTarget.select(); }}
+      onChange={e => { if (/^\d*[.,]?\d{0,2}$/.test(e.target.value)) setDraft(e.target.value); }}
+      onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      className={`${className} ${shown.length > 3 ? 'text-xs' : shown.length > 2 ? 'text-sm' : 'text-base'}`} aria-label={`Qty to ${who}`} />
+  );
+}
+
+// Quantities can be decimals (1.5, 2.25) — keep everything to 2dp so float drift never shows.
+const q2 = (n: number) => Math.round(n * 100) / 100;
+
 function MiniCounter({ count, onChange, who, by = 1 }: { count: number; onChange: (n: number) => void; who: string; by?: number }) {
   const on = count > 0;
   const step: React.CSSProperties = { ...glassButtonStyle, padding: 0, width: '24px', height: '24px', justifyContent: 'center', flexShrink: 0 };
   return (
     <div className="flex items-center justify-center gap-0.5 rounded-xl py-1 w-[84px]"
       style={{ background: on ? 'rgba(251,205,173,0.12)' : 'transparent', border: `1px solid ${on ? 'var(--color-brand-peach)' : 'transparent'}` }}>
-      <button type="button" style={step} onClick={() => onChange(Math.max(0, count - by))} aria-label={`${by === 1 ? 'One' : by} less to ${who}`} disabled={!on} className="disabled:opacity-40">
+      <button type="button" style={step} onClick={() => onChange(Math.max(0, q2(count - by)))} aria-label={`${by === 1 ? 'One' : by} less to ${who}`} disabled={!on} className="disabled:opacity-40">
         <Minus size={12} strokeWidth={2.5} aria-hidden />
       </button>
-      <input type="number" inputMode="numeric" min={0} value={count || ''} placeholder="0"
-        onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-        className="w-7 text-center text-base font-bold tabular-nums bg-transparent focus:outline-none text-gray-800 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" aria-label={`Qty to ${who}`} />
-      <button type="button" style={step} onClick={() => onChange(count + by)} aria-label={`${by === 1 ? 'One' : by} more to ${who}`}>
+      <QtyInput count={count} onChange={onChange} who={who}
+        className="w-[34px] text-center font-bold tabular-nums bg-transparent focus:outline-none text-gray-800 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+      <button type="button" style={step} onClick={() => onChange(q2(count + by))} aria-label={`${by === 1 ? 'One' : by} more to ${who}`}>
         <Plus size={12} strokeWidth={2.5} aria-hidden />
       </button>
     </div>
@@ -249,7 +272,7 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
 
   const keyOf = (l: Line, v: Venue) => `${l.item}|${v}`;
   const savedQty = (l: Line, v: Venue) => entries.filter(r => r.item === l.item && r.from === other(v)).reduce((a, r) => a + r.qty, 0);
-  const countOf = (l: Line, v: Venue) => Math.max(0, savedQty(l, v) + (unsaved[keyOf(l, v)] ?? 0));
+  const countOf = (l: Line, v: Venue) => Math.max(0, q2(savedQty(l, v) + (unsaved[keyOf(l, v)] ?? 0)));
 
   // ── Autosave plumbing ──
   const unsavedRef = useRef(unsaved);
@@ -271,7 +294,7 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
     try {
       await api('POST', body(key, delta));
       await reload();
-      setUnsaved(u => { const n = { ...u }; n[key] = (n[key] ?? 0) - delta; if (!n[key]) delete n[key]; return n; });
+      setUnsaved(u => { const n = { ...u }; n[key] = q2((n[key] ?? 0) - delta); if (!n[key]) delete n[key]; return n; });
       setSaveError(null);
     } catch (e) {
       setSaveError(`Not saved — ${(e as Error).message}. Tap again to retry.`);
@@ -295,11 +318,11 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   }, []);
   const setCount = (l: Line, v: Venue, n: number) => {
     if (l.price === null) return; // no price yet, so it can't be valued
-    const d = n - countOf(l, v);
+    const d = q2(n - countOf(l, v));
     if (!d) return;
     const key = keyOf(l, v);
     metaRef.current[key] = { l, v };
-    setUnsaved(u => ({ ...u, [key]: (u[key] ?? 0) + d }));
+    setUnsaved(u => ({ ...u, [key]: q2((u[key] ?? 0) + d) }));
     clearTimeout(timersRef.current[key]);
     timersRef.current[key] = setTimeout(() => flush(key), 700);
   };
@@ -461,7 +484,7 @@ function CleanPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<
   const open = data.clean.filter(r => r.status !== 'Squared');
   const keyOf = (name: string, v: Venue) => `${name}|${v}`;
   const savedQty = (name: string, v: Venue) => open.filter(r => r.item === name && r.from === other(v)).reduce((a, r) => a + r.qty, 0);
-  const countOf = (name: string, v: Venue) => Math.max(0, savedQty(name, v) + (unsaved[keyOf(name, v)] ?? 0));
+  const countOf = (name: string, v: Venue) => Math.max(0, q2(savedQty(name, v) + (unsaved[keyOf(name, v)] ?? 0)));
 
   // Tiles: every item still owed either way (oldest first), plus anything with unsaved taps, plus the search.
   const names: string[] = [];
@@ -489,7 +512,7 @@ function CleanPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<
     try {
       await api('POST', body(key, delta));
       await reload();
-      setUnsaved(u => { const n = { ...u }; n[key] = (n[key] ?? 0) - delta; if (!n[key]) delete n[key]; return n; });
+      setUnsaved(u => { const n = { ...u }; n[key] = q2((n[key] ?? 0) - delta); if (!n[key]) delete n[key]; return n; });
       setSaveError(null);
     } catch (e) {
       setSaveError(`Not saved — ${(e as Error).message}. Tap again to retry.`);
@@ -510,10 +533,10 @@ function CleanPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<
     return () => { window.removeEventListener('pagehide', sendNow); sendNow(); };
   }, []);
   const setCount = (name: string, v: Venue, n: number) => {
-    const d = n - countOf(name, v);
+    const d = q2(n - countOf(name, v));
     if (!d || !name) return;
     const key = keyOf(name, v);
-    setUnsaved(u => ({ ...u, [key]: (u[key] ?? 0) + d }));
+    setUnsaved(u => ({ ...u, [key]: q2((u[key] ?? 0) + d) }));
     clearTimeout(timersRef.current[key]);
     timersRef.current[key] = setTimeout(() => flush(key), 700);
   };
