@@ -15,20 +15,27 @@ type Pick = {
   tmTarget: number | null; tmStop: number | null; tmNeither: number | null; tmAvgR: number | null;
   histTrades: number | null; histTarget: number | null; histAvgR: number | null; verdict: string; notes: string;
   result: Result | null;
-  // Filtered strategy (opening volume >= 1.5x, gap up, market above its open at the breakout).
+  // Retired filtered strategy columns (old rows only).
   top5?: boolean; gapPct?: number | null; filterSetup?: string; filterResult?: string; filterRules?: string;
 };
 type Filtered = { setups?: number; taken: number; wins: number; pnl: number | null };
-type Day = { date: string; picks: number; graded: boolean; triggered: number; taken: number; wins: number; rulesPnl: number | null; allPnl: number | null; filtered?: Filtered };
+// Gap-down reversal: opened 3%+ down, bought the first 5-min close back above VWAP by 12:00 NY.
+type Reversal = { graded?: boolean; days?: number; setups?: number; triggered?: number; taken: number; wins: number; pnl: number | null };
+type RevTrade = {
+  ticker: string; gapPct: number | null; signal: string; time: string; entry: number | null; stop: number | null; target: number | null;
+  shares: number | null; maxLoss: number | null; outcome: string; exit: number | null; r: number | null; pnl: number | null; rules: string;
+};
+type Day = { date: string; picks: number; graded: boolean; triggered: number; taken: number; wins: number; rulesPnl: number | null; allPnl: number | null; filtered?: Filtered; reversal?: Reversal };
 export type TradingFeed = {
   ok: boolean; error?: string; generatedAt?: string;
   rules?: { maxLossPerTrade: number; maxDailyLoss: number; maxTradesPerDay: number; minRR: number; budget: number; flatBy: string;
-    filter?: { MIN_REL_VOL: number; GAP_UP: boolean; MARKET_UP: boolean; MARKET_SYMBOL: string } };
+    reversal?: { GAP: number; BY: string; TARGET_R: number } };
   status?: { nyDate: string; nyTime: string; tradingDay: boolean; nextScan: string | null; scanState: string; evalState: string };
-  scan?: { date: string; at?: string; scanned?: number; candidates?: number; best?: string; headline?: string; errors?: string[]; note?: string; filtered?: string[]; marketUp?: boolean | null } | null;
+  scan?: { date: string; at?: string; scanned?: number; candidates?: number; best?: string; headline?: string; errors?: string[]; note?: string; gapDowns?: { ticker: string; gapPct: number }[]; marketUp?: boolean | null } | null;
   latest?: { date: string; picks: Pick[] } | null;
+  reversal?: { date: string; trades: RevTrade[] } | null;
   days?: Day[];
-  totals?: { days: number; taken: number; wins: number; rulesPnl: number; allPnl: number; filtered?: Filtered };
+  totals?: { days: number; taken: number; wins: number; rulesPnl: number; allPnl: number; filtered?: Filtered; reversal?: Reversal };
 };
 
 const signed = (n: number | null | undefined) =>
@@ -85,10 +92,6 @@ function PickRow({ p }: { p: Pick }) {
           <Circle size={10} strokeWidth={2.5} aria-hidden fill={verdictColor(p.verdict)} style={{ display: 'block', flexShrink: 0, color: verdictColor(p.verdict) }} />
           <span className="text-sm font-bold" style={{ color: 'var(--color-ink-label)' }}>{p.ticker}</span>
           <span className="text-[11px] truncate" style={{ color: verdictColor(p.verdict) }}>{shortVerdict(p.verdict)}</span>
-          {p.filterSetup === 'yes' && (
-            <span className="text-[9px] font-bold uppercase tracking-widest rounded-full px-2 py-0.5"
-              style={{ background: 'var(--color-brand-peach-soft)', color: 'var(--color-brand-bark)', fontFamily: '"stolzl", sans-serif' }}>Filtered</span>
-          )}
         </div>
         {r ? (
           <span className="text-sm font-bold tabular-nums" style={{ color: pnlColor(r.pnl), opacity: counted || !r.entry ? 1 : 0.5 }}>
@@ -112,11 +115,28 @@ function PickRow({ p }: { p: Pick }) {
           <span style={{ color: 'var(--color-ink-muted)' }}> · {r.rules}</span>
         </div>
       )}
-      {r && p.filterSetup === 'yes' && (
-        <div className="mt-0.5 text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>
-          Filtered: {p.filterResult === 'pass' ? p.filterRules || 'pass' : p.filterResult || '—'}
+    </div>
+  );
+}
+
+function RevRow({ t }: { t: RevTrade }) {
+  const counted = /^taken/.test(t.rules);
+  return (
+    <div className="rounded-xl px-3 py-2.5" style={ROW}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-bold" style={{ color: 'var(--color-ink-label)' }}>{t.ticker}</span>
+          <span className="text-[11px] tabular-nums" style={{ color: 'var(--color-danger)' }}>{t.gapPct != null ? t.gapPct.toFixed(1) + '%' : ''}</span>
         </div>
-      )}
+        <span className="text-sm font-bold tabular-nums" style={{ color: pnlColor(t.pnl), opacity: counted || !t.time ? 1 : 0.5 }}>
+          {t.time ? signed(t.pnl) : 'no entry'}
+        </span>
+      </div>
+      <div className="mt-1 text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>
+        {t.time
+          ? <>In {px(t.entry)} at {t.time} · stop {px(t.stop)} · target {px(t.target)} · {t.shares} sh → {t.outcome}{t.r != null ? ` (${t.r}R)` : ''} · {t.rules}</>
+          : t.signal}
+      </div>
     </div>
   );
 }
@@ -160,7 +180,9 @@ export default function TradingCard({ active, onFeed }: { active: boolean; onFee
   const totals = feed.totals;
   const rules = feed.rules;
   const winRate = totals && totals.taken ? Math.round((totals.wins / totals.taken) * 100) + '%' : '—';
-  const fWinRate = totals?.filtered?.taken ? Math.round((totals.filtered.wins / totals.filtered.taken) * 100) + '%' : '—';
+  const rev = totals?.reversal;
+  const rWinRate = rev?.taken ? Math.round((rev.wins / rev.taken) * 100) + '%' : '—';
+  const revToday = feed.reversal && feed.reversal.date === latest?.date ? feed.reversal : null;
 
   return (
     <div className="space-y-5">
@@ -179,19 +201,29 @@ export default function TradingCard({ active, onFeed }: { active: boolean; onFee
           {today?.graded && (
             <div className="flex gap-2 mb-2">
               <Stat label="Current rules" value={signed(today.rulesPnl)} color={pnlColor(today.rulesPnl)} />
-              <Stat label="Filtered" value={signed(today.filtered?.pnl)} color={pnlColor(today.filtered?.pnl)} />
-              <Stat label="Trades" value={`${today.taken} · ${today.filtered?.taken ?? 0}`} />
+              <Stat label="Reversal" value={today.reversal?.graded ? signed(today.reversal.pnl) : '—'} color={pnlColor(today.reversal?.pnl)} />
+              <Stat label="Trades" value={`${today.taken} · ${today.reversal?.taken ?? 0}`} />
             </div>
           )}
-          {!today?.graded && !!feed.scan?.filtered && (
+          {!revToday && !!feed.scan?.gapDowns && (
             <div className="text-[11px] mb-2" style={{ color: 'var(--color-ink-label)' }}>
-              Filtered setups: {feed.scan.filtered.length ? feed.scan.filtered.join(', ') : 'none today'}
-              {feed.scan.marketUp != null && <span style={{ color: 'var(--color-ink-muted)' }}> · market {feed.scan.marketUp ? 'above' : 'below'} its open at the scan</span>}
+              Gap-down reversal watch: {feed.scan.gapDowns.length
+                ? feed.scan.gapDowns.map((g) => `${g.ticker} ${g.gapPct.toFixed(1)}%`).join(', ')
+                : 'no stock opened 3%+ down'}
+              {!!feed.scan.gapDowns.length && <span style={{ color: 'var(--color-ink-muted)' }}> · buy only on a 5-min close back above VWAP by 12:00 NY</span>}
             </div>
           )}
           <div className="space-y-2">
             {latest.picks.map((p) => <PickRow key={p.ticker} p={p} />)}
           </div>
+          {!!revToday?.trades.length && (
+            <div className="mt-3">
+              <SectionLabel>Gap-down reversal</SectionLabel>
+              <div className="space-y-2">
+                {revToday.trades.map((t) => <RevRow key={t.ticker} t={t} />)}
+              </div>
+            </div>
+          )}
           {!today?.graded && (
             <div className="text-[11px] mt-2" style={{ color: 'var(--color-ink-muted)' }}>
               A pick counts only if a 5-min bar closes above its OR high before 15:30 NY. Graded after the close (~8:10am Melbourne).
@@ -205,25 +237,25 @@ export default function TradingCard({ active, onFeed }: { active: boolean; onFee
         <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>No scans yet. The first one runs {melb(feed.status?.nextScan)}.</div>
       )}
 
-      {totals && totals.days > 0 && (
+      {totals && (totals.days > 0 || !!rev?.days) && (
         <div>
-          <SectionLabel>Last {totals.days} graded day{totals.days === 1 ? '' : 's'}: current rules vs filtered</SectionLabel>
+          <SectionLabel>Last {Math.max(totals.days, rev?.days ?? 0)} graded days: current rules vs gap-down reversal</SectionLabel>
           <div className="flex gap-2 mb-1">
             <Stat label="Current P&L" value={signed(totals.rulesPnl)} color={pnlColor(totals.rulesPnl)} />
             <Stat label="Trades" value={String(totals.taken)} />
             <Stat label="Win rate" value={winRate} />
           </div>
           <div className="flex gap-2 mb-2">
-            <Stat label="Filtered P&L" value={signed(totals.filtered?.pnl)} color={pnlColor(totals.filtered?.pnl)} />
-            <Stat label="Trades" value={String(totals.filtered?.taken ?? 0)} />
-            <Stat label="Win rate" value={fWinRate} />
+            <Stat label="Reversal P&L" value={signed(rev?.pnl)} color={pnlColor(rev?.pnl)} />
+            <Stat label="Trades" value={String(rev?.taken ?? 0)} />
+            <Stat label="Win rate" value={rWinRate} />
           </div>
           <div className="space-y-1">
-            {(feed.days || []).filter((d) => d.graded).map((d) => (
+            {(feed.days || []).filter((d) => (d.graded && d.picks) || d.reversal?.graded).map((d) => (
               <div key={d.date} className="flex items-center justify-between rounded-xl px-3 py-1.5 text-xs tabular-nums" style={ROW}>
                 <span style={{ color: 'var(--color-ink-label)' }}>{dayLabel(d.date)}</span>
-                <span className="font-bold" style={{ color: pnlColor(d.rulesPnl) }}>{signed(d.rulesPnl)}</span>
-                <span className="font-bold" style={{ color: pnlColor(d.filtered?.pnl) }}>{signed(d.filtered?.pnl)}</span>
+                <span className="font-bold" style={{ color: pnlColor(d.picks ? d.rulesPnl : null) }}>{d.picks ? signed(d.rulesPnl) : '—'}</span>
+                <span className="font-bold" style={{ color: pnlColor(d.reversal?.pnl) }}>{d.reversal?.graded ? signed(d.reversal.pnl) : '—'}</span>
               </div>
             ))}
           </div>
@@ -233,8 +265,8 @@ export default function TradingCard({ active, onFeed }: { active: boolean; onFee
       {rules && (
         <div className="text-[10px]" style={{ color: 'var(--color-ink-muted)' }}>
           Rules: ${rules.maxLossPerTrade} max loss a trade · ${rules.maxDailyLoss} a day · {rules.maxTradesPerDay} trades a day · {rules.minRR}R minimum · flat by {rules.flatBy} NY.
-          {rules.filter && <> Filtered: opening volume ≥ {rules.filter.MIN_REL_VOL}× normal, gap up, {rules.filter.MARKET_SYMBOL} above its open at the breakout.</>}
-          {' '}Hypothetical fills, no slippage or fees. Not financial advice.
+          {rules.reversal && <> Gap-down reversal: opens {Math.round(rules.reversal.GAP * 100)}%+ below yesterday&apos;s close, buy the first 5-min close back above VWAP by {rules.reversal.BY} NY, stop 1¢ under the day&apos;s low, {rules.reversal.TARGET_R}R target; P&amp;L after estimated costs.</>}
+          {' '}Current-rules fills are hypothetical with no fees. Not financial advice.
         </div>
       )}
     </div>
