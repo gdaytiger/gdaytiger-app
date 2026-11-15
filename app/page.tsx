@@ -1398,7 +1398,7 @@ function IngredientChangeCard({ ing }: { ing: IngredientChange }) {
                 </span>
                 <span style={{ color: col, fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>
                   {hasShift
-                    ? `${p.oldPct.toFixed(1)}%→${p.newPct.toFixed(1)}% (${p.dp > 0 ? '+' : ''}${p.dp.toFixed(1)}pp)`
+                    ? `${p.oldPct.toFixed(1)}%→${p.newPct.toFixed(1)}%`
                     : `${p.newPct.toFixed(1)}%`}
                 </span>
               </div>
@@ -1468,7 +1468,7 @@ function ChangeCard({ c }: { c: MarginChange }) {
           <div className="flex justify-between text-xs">
             <span className="text-gray-400">Margin shift</span>
             <span className="font-semibold" style={{ color: arrowCol, fontVariantNumeric: 'tabular-nums' }}>
-              {c.oldPct.toFixed(1)}% → {c.newPct.toFixed(1)}% ({c.dp > 0 ? '+' : ''}{c.dp.toFixed(1)}pp)
+              {c.oldPct.toFixed(1)}% → {c.newPct.toFixed(1)}%
             </span>
           </div>
           <div className="flex justify-between text-xs">
