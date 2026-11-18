@@ -10,7 +10,8 @@
 //  Posted + hidden photo IDs live in the `google_photo_pool` block on the OS page.
 //
 //  gbpPhotoNudge() runs each morning: if no photo has gone onto the profile for
-//  7+ days, it adds "[STICKY] Add photos to Google" to today's To Do (ADMIN).
+//  7+ days, it adds a normal one-off task "[YYYY-MM-DD] Add photos to Google" to
+//  today's To Do (ADMIN) — not pinned; if missed it shows as missed like any task.
 //  The task links to TIGER OS ?open=google and is removed once a photo goes up.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -181,6 +182,7 @@ function gbpLastProfilePhotoAt_(s) {
 
 function gbpPhotoNudge() {
   var s = gbpPoolState_();
+  gbpUnpinNudge_(s);
   var last = gbpLastProfilePhotoAt_(s);
   var days = last ? (Date.now() - new Date(last).getTime()) / 86400000 : 999;
 
@@ -194,7 +196,8 @@ function gbpPhotoNudge() {
   if (s.nudgeBlockId && gbpNotionBlockAlive_(s.nudgeBlockId)) return;   // one at a time
 
   var page = GBP_DAY_PAGES[Number(Utilities.formatDate(new Date(), 'Australia/Melbourne', 'u')) % 7];
-  var id = gbpAddTaskUnderHeading_(page, 'ADMIN', '[STICKY] ' + GBP_NUDGE_TEXT);
+  var today = Utilities.formatDate(new Date(), 'Australia/Melbourne', 'yyyy-MM-dd');
+  var id = gbpAddTaskUnderHeading_(page, 'ADMIN', '[' + today + '] ' + GBP_NUDGE_TEXT);
   if (id) { s.nudgeBlockId = id; s.nudgeAt = new Date().toISOString(); gbpSavePoolState_(s); }
 }
 
@@ -235,4 +238,20 @@ function gbpAddTaskUnderHeading_(pageId, heading, text) {
   }
   var r = gbpNotion_('blocks/' + pageId + '/children', 'patch', body);
   return r.results && r.results[0] ? r.results[0].id : null;
+}
+
+// One-off migration: an older nudge written as "[STICKY] …" becomes a normal task
+// dated today, so it stops showing as pinned.
+function gbpUnpinNudge_(s) {
+  if (!s.nudgeBlockId) return;
+  try {
+    var b = gbpNotion_('blocks/' + s.nudgeBlockId, 'get');
+    if (b.archived || b.in_trash || !b.bulleted_list_item) return;
+    var text = (b.bulleted_list_item.rich_text || []).map(function (t) { return t.plain_text; }).join('');
+    if (!/^\[STICKY/.test(text)) return;
+    var today = Utilities.formatDate(new Date(), 'Australia/Melbourne', 'yyyy-MM-dd');
+    gbpNotion_('blocks/' + s.nudgeBlockId, 'patch', {
+      bulleted_list_item: { rich_text: [{ type: 'text', text: { content: '[' + today + '] ' + GBP_NUDGE_TEXT } }] }
+    });
+  } catch (e) { Logger.log('unpin nudge: ' + e); }
 }
