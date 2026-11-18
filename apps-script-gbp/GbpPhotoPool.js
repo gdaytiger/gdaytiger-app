@@ -235,23 +235,33 @@ function gbpAddTaskUnderHeading_(pageId, heading, text) {
     var after = kids[hi].id;
     for (var k = hi + 1; k < kids.length && !isHead(kids[k]); k++) after = kids[k].id;
     body.after = after;
+  } else {
+    // No such heading on this day's page — add it at the bottom with the task under it.
+    body.children = [{ object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: heading } }] } }, block];
   }
   var r = gbpNotion_('blocks/' + pageId + '/children', 'patch', body);
-  return r.results && r.results[0] ? r.results[0].id : null;
+  var made = (r.results || []).filter(function (x) { return x.type === 'bulleted_list_item'; })[0];
+  return made ? made.id : null;
 }
 
-// One-off migration: an older nudge written as "[STICKY] …" becomes a normal task
-// dated today, so it stops showing as pinned.
+// Clean up an old-style nudge: a pinned "[STICKY] …" task, or a dated task that
+// ended up on a different weekday's page (TigerOS only shows a dated task on its
+// own day's page). Either way it's removed, and the normal flow below adds a
+// fresh dated task on today's page.
 function gbpUnpinNudge_(s) {
   if (!s.nudgeBlockId) return;
   try {
     var b = gbpNotion_('blocks/' + s.nudgeBlockId, 'get');
     if (b.archived || b.in_trash || !b.bulleted_list_item) return;
     var text = (b.bulleted_list_item.rich_text || []).map(function (t) { return t.plain_text; }).join('');
-    if (!/^\[STICKY/.test(text)) return;
+    var parent = String((b.parent && b.parent.page_id) || '').replace(/-/g, '');
+    var todayPage = GBP_DAY_PAGES[Number(Utilities.formatDate(new Date(), 'Australia/Melbourne', 'u')) % 7];
     var today = Utilities.formatDate(new Date(), 'Australia/Melbourne', 'yyyy-MM-dd');
-    gbpNotion_('blocks/' + s.nudgeBlockId, 'patch', {
-      bulleted_list_item: { rich_text: [{ type: 'text', text: { content: '[' + today + '] ' + GBP_NUDGE_TEXT } }] }
-    });
+    var pinned = /^\[STICKY/.test(text);
+    var wrongPage = text.indexOf('[' + today + ']') === 0 && parent && parent !== todayPage;
+    if (!pinned && !wrongPage) return;
+    gbpNotion_('blocks/' + s.nudgeBlockId, 'delete');
+    s.nudgeBlockId = null; s.nudgeAt = null;
+    gbpSavePoolState_(s);
   } catch (e) { Logger.log('unpin nudge: ' + e); }
 }
