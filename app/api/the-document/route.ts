@@ -24,6 +24,12 @@ const FIXED_LINES: Record<string, RegExp> = {
   GELATO: /gelato/i,
   'SOURDOUGH LOAF': /sourdough/i,
   'MILK (2L)': /sungold jersey|full cream/i,
+  'EGGS (CARTON)': /^eggs/i,
+};
+// Standing lines logged in a smaller unit than Supplier Prices buys them in:
+// eggs are bought by the 15-dozen box but counted by the dozen carton.
+const FIXED_DIVIDE: Record<string, { by: number; unit: string }> = {
+  'EGGS (CARTON)': { by: 15, unit: 'carton' },
 };
 
 export type DocRow = {
@@ -146,7 +152,9 @@ function findPrice(item: string, catalogue: CatItem[]): CatItem | null {
   const name = item.trim().toUpperCase();
   const priced = catalogue.filter(c => c.price > 0);
   const fixed = FIXED_LINES[name];
-  return priced.find(c => (fixed ? fixed.test(c.name) : c.name.trim().toUpperCase() === name)) ?? null;
+  const hit = priced.find(c => (fixed ? fixed.test(c.name) : c.name.trim().toUpperCase() === name)) ?? null;
+  const div = FIXED_DIVIDE[name];
+  return hit && div ? { ...hit, price: Math.round((hit.price / div.by) * 10000) / 10000, unit: div.unit } : hit;
 }
 
 // A line's entries since the last settle-up (rows arrive newest first).
@@ -201,7 +209,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Remove an added line: archives its entries since the last settle-up (both venues).
-    // Gelato, sourdough and milk always stay.
+    // Gelato, sourdough, milk and eggs always stay.
     if (body.action === 'deleteLine') {
       const name = String(body.item || '').trim().toUpperCase();
       if (!name) return NextResponse.json({ error: 'Item required' }, { status: 400 });

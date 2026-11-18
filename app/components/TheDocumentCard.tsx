@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, Pencil, Search, Trash2, IceCreamCone, Minus, Plus, Wheat, Milk, Package } from 'lucide-react';
+import { ArrowRight, Check, Pencil, Search, Trash2, IceCreamCone, Minus, Plus, Wheat, Milk, Egg, Package } from 'lucide-react';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
 // THE DOCUMENT — running stock tally between G'Day Tiger and Isola Di Capri.
@@ -213,6 +213,7 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const [saving, setSaving] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [milkPack, setMilkPack] = useState<'bottle' | 'crate'>('crate');
+  const [eggPack, setEggPack] = useState<'carton' | 'box'>('box');
   const [item, setItem] = useState('');
   const [price, setPrice] = useState(''); // only for items that aren't in Supplier Prices
   const [category, setCategory] = useState('Other');
@@ -227,21 +228,38 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const gelato = data.fixedPrices['GELATO'];
   const bread = data.fixedPrices['SOURDOUGH LOAF'];
   const milk = data.fixedPrices['MILK (2L)'];
+  const eggs = data.fixedPrices['EGGS (CARTON)'];
   const catalogueItem = (name: string) => data.catalogue.find(c => c.price > 0 && c.name.trim().toUpperCase() === name.trim().toUpperCase());
-  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number; removable?: boolean; customPrice?: boolean; editablePrice?: boolean };
+  type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number; pack?: string; units?: string; removable?: boolean; customPrice?: boolean; editablePrice?: boolean };
   const lines: Line[] = [
     { key: 'gelato', item: 'GELATO', category: 'Gelato', price: gelato?.price ?? null, unit: gelato?.unit || 'tub', icon: <IceCreamCone size={14} strokeWidth={2.25} aria-hidden /> },
     { key: 'bread', item: 'SOURDOUGH LOAF', category: 'Bread', price: bread?.price ?? null, unit: 'loaf', icon: <Wheat size={14} strokeWidth={2.25} aria-hidden /> },
     {
       key: 'milk', category: 'Milk',
       // The counter always counts BOTTLES; in crate mode each tap adds 9.
-      item: 'MILK (2L)', price: milk?.price ?? null, unit: 'bottle', per: milkPack === 'crate' ? 9 : 1,
+      item: 'MILK (2L)', price: milk?.price ?? null, unit: 'bottle', per: milkPack === 'crate' ? 9 : 1, pack: 'crate', units: 'bottles',
       icon: <Milk size={14} strokeWidth={2.25} aria-hidden />,
       sub: (
         <div className="flex gap-1 justify-center flex-wrap">
           {(['crate', 'bottle'] as const).map(k => (
             <button key={k} type="button" onClick={() => setMilkPack(k)} style={{ ...chip(milkPack === k), height: '20px', padding: '0 8px', fontSize: '9px' }}>
               {k === 'crate' ? 'CRATE (9)' : 'BOTTLE (1)'}
+            </button>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: 'eggs', category: 'Other',
+      // Same as milk: the counter always counts CARTONS (1 dozen); in box mode each tap adds 15.
+      // Priced per carton = Supplier Prices 15-dozen box ÷ 15 (the server does the split).
+      item: 'EGGS (CARTON)', price: eggs?.price ?? null, unit: 'carton', per: eggPack === 'box' ? 15 : 1, pack: 'box', units: 'cartons',
+      icon: <Egg size={14} strokeWidth={2.25} aria-hidden />,
+      sub: (
+        <div className="flex gap-1 justify-center flex-wrap">
+          {(['box', 'carton'] as const).map(k => (
+            <button key={k} type="button" onClick={() => setEggPack(k)} style={{ ...chip(eggPack === k), height: '20px', padding: '0 8px', fontSize: '9px' }}>
+              {k === 'box' ? 'BOX (15)' : 'CARTON (1)'}
             </button>
           ))}
         </div>
@@ -435,7 +453,7 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
               ) : (
                 <div className="text-[11px] leading-tight text-gray-400 tabular-nums uppercase">
                   {l.price !== null
-                    ? (l.per && l.per > 1 ? `${money(l.price * l.per)} / crate (${l.per} bottles)` : `${money(l.price)}${l.unit ? ` / ${l.unit}` : ''}`)
+                    ? (l.per && l.per > 1 ? `${money(l.price * l.per)} / ${l.pack ?? 'pack'} (${l.per} ${l.units ?? 'units'})` : `${money(l.price)}${l.unit ? ` / ${l.unit}` : ''}`)
                     : 'No price in Supplier Prices'}
                 </div>
               )}
