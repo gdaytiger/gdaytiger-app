@@ -481,7 +481,7 @@ function CleanPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<
   const [unsaved, setUnsaved] = useState<Record<string, number>>({}); // `${item}|${venue}` → delta not yet in Notion
   const [saveError, setSaveError] = useState<string | null>(null);
   // Eggs: counted in CARTONS (1 dozen); BOX mode steps by 15 — same as milk crates on Log Stock.
-  const [eggPack, setEggPack] = useState<'box' | 'carton'>('box');
+  const [eggPack, setEggPack] = useState<'box' | 'carton'>('carton');
   const EGGS = 'EGGS (CARTON)';
   const asCleanItem = (name: string) => (/^EGGS?\b(?!PLANT)/i.test(name.trim()) ? EGGS : name.trim().toUpperCase());
 
