@@ -213,7 +213,6 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const [saving, setSaving] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [milkPack, setMilkPack] = useState<'bottle' | 'crate'>('crate');
-  const [eggPack, setEggPack] = useState<'carton' | 'box'>('box');
   const [item, setItem] = useState('');
   const [price, setPrice] = useState(''); // only for items that aren't in Supplier Prices
   const [category, setCategory] = useState('Other');
@@ -228,7 +227,6 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
   const gelato = data.fixedPrices['GELATO'];
   const bread = data.fixedPrices['SOURDOUGH LOAF'];
   const milk = data.fixedPrices['MILK (2L)'];
-  const eggs = data.fixedPrices['EGGS (CARTON)'];
   const catalogueItem = (name: string) => data.catalogue.find(c => c.price > 0 && c.name.trim().toUpperCase() === name.trim().toUpperCase());
   type Line = { key: string; item: string; category: string; price: number | null; unit: string; icon: React.ReactNode; sub?: React.ReactNode; per?: number; pack?: string; units?: string; removable?: boolean; customPrice?: boolean; editablePrice?: boolean };
   const lines: Line[] = [
@@ -244,22 +242,6 @@ function DocumentPart({ data, run, reload }: { data: Data; run: (fn: () => Promi
           {(['crate', 'bottle'] as const).map(k => (
             <button key={k} type="button" onClick={() => setMilkPack(k)} style={{ ...chip(milkPack === k), height: '20px', padding: '0 8px', fontSize: '9px' }}>
               {k === 'crate' ? 'CRATE (9)' : 'BOTTLE (1)'}
-            </button>
-          ))}
-        </div>
-      ),
-    },
-    {
-      key: 'eggs', category: 'Other',
-      // Same as milk: the counter always counts CARTONS (1 dozen); in box mode each tap adds 15.
-      // Priced per carton = Supplier Prices 15-dozen box ÷ 15 (the server does the split).
-      item: 'EGGS (CARTON)', price: eggs?.price ?? null, unit: 'carton', per: eggPack === 'box' ? 15 : 1, pack: 'box', units: 'cartons',
-      icon: <Egg size={14} strokeWidth={2.25} aria-hidden />,
-      sub: (
-        <div className="flex gap-1 justify-center flex-wrap">
-          {(['box', 'carton'] as const).map(k => (
-            <button key={k} type="button" onClick={() => setEggPack(k)} style={{ ...chip(eggPack === k), height: '20px', padding: '0 8px', fontSize: '9px' }}>
-              {k === 'box' ? 'BOX (15)' : 'CARTON (1)'}
             </button>
           ))}
         </div>
@@ -498,6 +480,10 @@ function CleanPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<
   const [showLog, setShowLog] = useState(false);
   const [unsaved, setUnsaved] = useState<Record<string, number>>({}); // `${item}|${venue}` → delta not yet in Notion
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Eggs: counted in CARTONS (1 dozen); BOX mode steps by 15 — same as milk crates on Log Stock.
+  const [eggPack, setEggPack] = useState<'box' | 'carton'>('box');
+  const EGGS = 'EGGS (CARTON)';
+  const asCleanItem = (name: string) => (/^EGGS?\b(?!PLANT)/i.test(name.trim()) ? EGGS : name.trim().toUpperCase());
 
   const open = data.clean.filter(r => r.status !== 'Squared');
   const keyOf = (name: string, v: Venue) => `${name}|${v}`;
@@ -508,7 +494,7 @@ function CleanPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<
   const names: string[] = [];
   for (const r of [...open].reverse()) if (!names.includes(r.item)) names.push(r.item);
   for (const key of Object.keys(unsaved)) { const n = key.split('|')[0]; if (!names.includes(n)) names.push(n); }
-  const typed = item.trim();
+  const typed = item.trim() ? asCleanItem(item) : '';
   if (typed && !names.includes(typed)) names.push(typed);
   const shownNames = names.filter(n => n === typed || countOf(n, 'GDT') > 0 || countOf(n, 'ISOLA') > 0 || unsaved[keyOf(n, 'GDT')] || unsaved[keyOf(n, 'ISOLA')]);
 
@@ -605,17 +591,34 @@ function CleanPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<
             </div>
           ))}
         </div>
-        {shownNames.map(n => (
-          <div key={n} className="grid gap-2 items-center rounded-2xl overflow-hidden" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px', background: 'rgba(255,255,255,0.55)', height: `${TILE_H}px` }}>
-            <MiniCounter count={countOf(n, 'GDT')} onChange={c => setCount(n, 'GDT', c)} who={`G'Day borrowed: ${n}`} />
-            <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight text-center" style={{ fontFamily: '"stolzl", sans-serif' }}>
-              <Package size={14} strokeWidth={2.25} aria-hidden className="shrink-0" style={{ color: 'var(--color-ink-muted)' }} />
-              <span className="line-clamp-2 break-words">{n}</span>
+        {shownNames.map(n => {
+          const isEggs = n === EGGS;
+          const by = isEggs && eggPack === 'box' ? 15 : 1;
+          return (
+            <div key={n} className="grid gap-2 items-center rounded-2xl overflow-hidden" style={{ gridTemplateColumns: '84px minmax(0,1fr) 84px', background: 'rgba(255,255,255,0.55)', height: `${TILE_H}px` }}>
+              <MiniCounter count={countOf(n, 'GDT')} onChange={c => setCount(n, 'GDT', c)} who={`G'Day borrowed: ${n}`} by={by} />
+              <div className="flex flex-col items-center gap-0.5 min-w-0 text-center">
+                <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 uppercase min-w-0 leading-tight max-w-full" style={{ fontFamily: '"stolzl", sans-serif' }}>
+                  {isEggs
+                    ? <Egg size={14} strokeWidth={2.25} aria-hidden className="shrink-0" style={{ color: 'var(--color-ink-muted)' }} />
+                    : <Package size={14} strokeWidth={2.25} aria-hidden className="shrink-0" style={{ color: 'var(--color-ink-muted)' }} />}
+                  <span className={isEggs ? 'truncate' : 'line-clamp-2 break-words'}>{n}</span>
+                </div>
+                {isEggs && (
+                  <div className="flex gap-1 justify-center flex-wrap">
+                    {(['box', 'carton'] as const).map(k => (
+                      <button key={k} type="button" onClick={() => setEggPack(k)} style={{ ...chip(eggPack === k), height: '20px', padding: '0 8px', fontSize: '9px' }}>
+                        {k === 'box' ? 'BOX (15)' : 'CARTON (1)'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <MiniCounter count={countOf(n, 'ISOLA')} onChange={c => setCount(n, 'ISOLA', c)} who={`Isola borrowed: ${n}`} by={by} />
             </div>
-            <MiniCounter count={countOf(n, 'ISOLA')} onChange={c => setCount(n, 'ISOLA', c)} who={`Isola borrowed: ${n}`} />
-          </div>
-        ))}
-        <ItemSearch catalogue={data.catalogue} value={item} onChange={v => setItem(v.toUpperCase())} onPick={c => setItem(c.name.toUpperCase())} />
+          );
+        })}
+        <ItemSearch catalogue={data.catalogue} value={item} onChange={v => setItem(v.toUpperCase())} onPick={c => setItem(asCleanItem(c.name))} />
         {saveError && <div className="text-xs pt-1 uppercase" style={{ color: 'var(--color-danger)' }}>{saveError}</div>}
       </div>
 
