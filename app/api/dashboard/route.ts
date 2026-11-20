@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ensureCashLedger } from '@/app/lib/banking';
 import { ensureMonthlyDocumentTask } from '@/app/lib/documentTask';
+import { loadCleanOpenCount } from '@/app/lib/theDocument';
 import { DAY_PAGES, parseDayTaskBlocks, formatYMD, shiftYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
 import { melbNowDate } from '@/app/lib/melbTime';
 import { getWeather } from '@/app/lib/weather';
@@ -286,13 +287,14 @@ export async function GET() {
   // balance). Runs before the day pages are read so it shows on this same load.
   await ensureMonthlyDocumentTask(todayStr).catch(e => console.error('document task', e));
 
-  const [weather, dailyTasks, projects, osPageBlocks, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates, pastPages }] = await Promise.all([
+  const [weather, dailyTasks, projects, osPageBlocks, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates, pastPages }, cleanOpen] = await Promise.all([
     getWeather(),
     getDailyTasks(dayOfWeek, today),
     getProjects(),
     getOSPageBlocks(),
     getShoppingTasks(),
     fetchCarryAndStickyCandidates(today),
+    loadCleanOpenCount().catch(() => 0),
   ]);
 
   // Derived in memory from the single OS-page fetch above — no extra Notion calls.
@@ -397,7 +399,8 @@ export async function GET() {
   // are managed locally and posted to /api/checked-state separately, so the
   // user never sees their own tap as "missing" from the cached payload.
   return NextResponse.json(
-    { dateStr, weather, dailyTasks, projects, personalTodos, todayStr },
+    // cleanOpen = THE DOCUMENT Clean Transactions items still owed (drives the To Do link row).
+    { dateStr, weather, dailyTasks, projects, personalTodos, todayStr, cleanOpen },
     { headers: { 'Cache-Control': 's-maxage=30, stale-while-revalidate=60' } }
   );
 }

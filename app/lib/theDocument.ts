@@ -116,3 +116,28 @@ export async function createSettlement(loggedBy: Venue, note = ''): Promise<{ id
   if (!page.id) throw new Error(page.message || 'Notion create failed');
   return { id: page.id, amount: Math.abs(bal) };
 }
+
+// Clean Transactions still owed: one per item per borrowing venue with a positive open count
+// (lines are +/− deltas, so sum them). Same number as the widget's "N ITEMS TO REORDER".
+export function cleanOpenCount(rows: DocRow[]): number {
+  const sums = new Map<string, number>();
+  for (const r of rows) {
+    if (r.section !== 'Clean' || r.status === 'Squared') continue;
+    const k = `${r.item}|${r.from}`;
+    sums.set(k, (sums.get(k) ?? 0) + r.qty);
+  }
+  return [...sums.values()].filter(v => v > 0.001).length;
+}
+
+// Dashboard: open Clean rows only (filtered in Notion, so it stays quick as history grows).
+export async function loadCleanOpenCount(): Promise<number> {
+  const data = await notionFetch(`/databases/${DB_ID}/query`, 'POST', {
+    page_size: 100,
+    filter: { and: [
+      { property: 'Section', select: { equals: 'Clean' } },
+      { property: 'Status', select: { does_not_equal: 'Squared' } },
+    ] },
+  });
+  if (!data.results) return 0;
+  return cleanOpenCount(data.results.map(toRow));
+}

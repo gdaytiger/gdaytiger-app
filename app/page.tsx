@@ -88,6 +88,7 @@ interface DashboardData {
   dailyTasks: Todo[];
   projects: Project[];
   personalTodos: Todo[];
+  cleanOpen?: number; // THE DOCUMENT Clean Transactions items still owed
 }
 
 interface WeekDay {
@@ -2373,6 +2374,9 @@ export default function Home() {
   const [socialTab, setSocialTab] = useState<'story' | 'google'>('story');
   // THE DOCUMENT launcher badge — net $ owed either way (Isola tally).
   const [docBalance, setDocBalance] = useState<number | null>(null);
+  // THE DOCUMENT tab + live Clean Transactions count (the widget's own number wins once it has loaded).
+  const [docTab, setDocTab] = useState<'document' | 'clean'>('document');
+  const [docCleanLive, setDocCleanLive] = useState<number | null>(null);
   // Partner (Isola / Claudio) login — sees only Supplier Prices, Costings, Weekly Flash and
   // The Document, read-only. Set from /api/whoami before the first data load.
   const [isPartner, setIsPartner] = useState(false);
@@ -2397,6 +2401,11 @@ export default function Home() {
       setTimeout(() => { setOpenWidgets(new Set(['socials'])); if (p !== 'socials') setSocialTab(p); }, 0);
     }
   }, []);
+  // Daily To Do "Clean Transactions" link row — opens THE DOCUMENT on that tab.
+  const openCleanTransactions = () => {
+    setDocTab('clean');
+    setOpenWidgets(prev => prev.has('document') ? new Set() : new Set(['document']));
+  };
   // Used by the Daily To Do shopping link row — opens the Shopping sheet.
   const openShoppingWidget = () => {
     setOpenWidgets(prev => prev.has('shopping') ? new Set() : new Set(['shopping']));
@@ -3103,6 +3112,7 @@ export default function Home() {
   const shoppingAllUnchecked = _shopAll.filter(t => !t.checked);
   const shoppingAllChecked = _shopAll.filter(t => t.checked);
   const shoppingBadge = shoppingAllUnchecked.length;
+  const cleanBadge = docCleanLive ?? data?.cleanOpen ?? 0;
 
   const CATEGORIES = ['Coffee', 'Food', 'Sweets', 'Retail', 'Vending', 'Uncategorised'];
 
@@ -3280,6 +3290,18 @@ export default function Home() {
                       <span className="flex-1 text-sm font-semibold text-gray-800 uppercase">Shopping List</span>
                       <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{shoppingBadge}</span>
                       <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('shopping') ? '▼' : '▶'}</span>
+                    </div>
+                  )}
+                  {/* THE DOCUMENT — Clean Transactions link row, same as the shopping row:
+                      shows while anything borrowed is still owed; tap opens the Clean tab. */}
+                  {!isViewingOtherDay && cleanBadge > 0 && (
+                    <div key="clean-transactions" onClick={openCleanTransactions} role="button"
+                      className="rounded-2xl cursor-pointer flex items-center gap-3 px-3"
+                      style={{ ...tileStyle, minHeight: '62px', ...(openWidgets.has('document') && docTab === 'clean' ? { border: '1.5px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow), var(--glass-ring)' } : {}) }}>
+                      <WidgetIcon name="document" chip={28} glyph={17} />
+                      <span className="flex-1 text-sm font-semibold text-gray-800 uppercase">Clean Transactions</span>
+                      <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{cleanBadge}</span>
+                      <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('document') && docTab === 'clean' ? '▼' : '▶'}</span>
                     </div>
                   )}
                   {checkedItems.map(({ task, category }) => (
@@ -3466,7 +3488,7 @@ export default function Home() {
             Badge: + = Isola owes us, − = we owe Isola. Mounted always so the badge loads on open of the dashboard. */}
         <div style={{ display: openWidgets.has('document') ? 'block' : 'none' }}>
           <Card bare icon={<WidgetIcon name="document" chip={28} glyph={17} />} title="The Document" onCollapse={() => toggleWidget('document')}>
-            <TheDocumentCard active={openWidgets.has('document')} onBalance={(b) => setDocBalance(b)} />
+            <TheDocumentCard active={openWidgets.has('document')} onBalance={(b, clean) => { setDocBalance(b); setDocCleanLive(clean); }} tab={docTab} onTabChange={setDocTab} />
           </Card>
         </div>
 

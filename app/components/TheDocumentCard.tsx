@@ -634,9 +634,23 @@ function CleanPart({ data, run, reload }: { data: Data; run: (fn: () => Promise<
   );
 }
 
-export default function TheDocumentCard({ active = true, onBalance }: { active?: boolean; onBalance?: (balance: number, openClean: number) => void }) {
+type DocTab = 'document' | 'clean';
+// Items still owed in Clean Transactions (rows are +/− deltas, so sum per item & lender).
+function openCleanCount(rows: Row[]): number {
+  const sums = new Map<string, number>();
+  for (const r of rows) if (r.status !== 'Squared') sums.set(`${r.item}|${r.from}`, (sums.get(`${r.item}|${r.from}`) ?? 0) + r.qty);
+  return [...sums.values()].filter(v => v > 0.001).length;
+}
+
+// `tab` / `onTabChange` are optional: pass them to control the tab from outside (the
+// Daily To Do "Clean Transactions" row opens straight onto that tab).
+export default function TheDocumentCard({ active = true, onBalance, tab: tabProp, onTabChange }: {
+  active?: boolean; onBalance?: (balance: number, openClean: number) => void; tab?: DocTab; onTabChange?: (t: DocTab) => void;
+}) {
   const [data, setData] = useState<Data | null>(null);
-  const [tab, setTab] = useState<'document' | 'clean'>('document');
+  const [tabState, setTabState] = useState<DocTab>('document');
+  const tab = tabProp ?? tabState;
+  const setTab = onTabChange ?? setTabState;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Ref so an inline onBalance from the parent doesn't re-trigger the load effect.
@@ -647,7 +661,7 @@ export default function TheDocumentCard({ active = true, onBalance }: { active?:
     .then((d: Data) => {
       setData(d);
       setError(null);
-      onBalanceRef.current?.(d.balance, d.clean.filter(r => r.status !== 'Squared').length);
+      onBalanceRef.current?.(d.balance, openCleanCount(d.clean));
     })
     .catch((e: Error) => setError(e.message)), []);
 
@@ -658,7 +672,7 @@ export default function TheDocumentCard({ active = true, onBalance }: { active?:
       .then((d: Data) => {
         setData(d);
         setError(null);
-        onBalanceRef.current?.(d.balance, d.clean.filter(r => r.status !== 'Squared').length);
+        onBalanceRef.current?.(d.balance, openCleanCount(d.clean));
       })
       .catch((e: Error) => setError(e.message));
   }, [active]);
@@ -673,7 +687,7 @@ export default function TheDocumentCard({ active = true, onBalance }: { active?:
     finally { setBusy(false); }
   }, [busy, load]);
 
-  const openClean = data?.clean.filter(r => r.status !== 'Squared').length ?? 0;
+  const openClean = data ? openCleanCount(data.clean) : 0;
 
   return (
     <div className="flex flex-col gap-4" style={{ opacity: busy ? 0.7 : 1, transition: 'opacity 150ms' }}>
