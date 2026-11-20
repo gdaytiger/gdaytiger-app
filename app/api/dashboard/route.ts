@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ensureCashLedger } from '@/app/lib/banking';
+import { ensureMonthlyDocumentTask } from '@/app/lib/documentTask';
 import { DAY_PAGES, parseDayTaskBlocks, formatYMD, shiftYMD, STICKY_PREFIX_RE, isReviewPricingTask } from '@/app/lib/dayTasks';
 import { melbNowDate } from '@/app/lib/melbTime';
 import { getWeather } from '@/app/lib/weather';
@@ -280,6 +281,10 @@ export async function GET() {
   // Mondays: record last week's cash difference in the cash_ledger (Weekly Flash
   // CD row). Idempotent; never blocks the dashboard if it fails.
   if (dayOfWeek === 1) await ensureCashLedger(todayStr).catch(() => {});
+
+  // Days 1–7: make sure this month's "SETTLE THE DOCUMENT" task exists (THE DOCUMENT
+  // balance). Runs before the day pages are read so it shows on this same load.
+  await ensureMonthlyDocumentTask(todayStr).catch(e => console.error('document task', e));
 
   const [weather, dailyTasks, projects, osPageBlocks, shoppingItems, { carry: carryCandidates, sticky: stickyCandidates, pastPages }] = await Promise.all([
     getWeather(),
