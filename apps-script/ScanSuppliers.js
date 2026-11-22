@@ -791,6 +791,13 @@ function parseFaireOrderText_(text) {
   return out;
 }
 
+// One-off backfill for Faire only (food side). Doesn't touch the last-scan timestamp.
+function rescanFaire() {
+  const log = [];
+  const n = scanFaireFromGmail_(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), log);
+  Logger.log(log.join('\n') + `\n\n${n} price(s) updated.`);
+}
+
 // One-off: log what the parser sees in the latest Faire order email.
 function printFaireOrderText() {
   const t = GmailApp.search(`from:${GMAIL_FAIRE} subject:"Thanks for your order"`, 0, 1)[0];
