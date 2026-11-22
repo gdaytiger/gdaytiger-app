@@ -136,15 +136,21 @@ const FIVEWAYS_MAP = [
   { match: ['SGGP', 'CHEESE GRANA GRATED', 'SORESI GRANA'],cell: 'F9',  convert: p => p,              note: 'Parmesan Grated Soresi /kg' },
   { match: ['MFDM', 'MUSTARD DIJON'],                       cell: 'J5',  convert: p => p,              note: 'Dijon Mustard 2.5kg jar' },
   { match: ['HRD', 'HELLMANS', 'HELLMANN', 'MAYO REAL'],   cell: 'J6',  convert: p => p,              note: 'Hellmans Real Mayo 20kg' },
-  { match: ['HEINZ KETCHUP', 'HEINZ TOMATO', 'KETCHUP HEINZ'], cell: 'J7', convert: p => p,           note: 'Heinz Ketchup 4LT' },
+  { match: ['HTK', 'HEINZ KETCHUP', 'HEINZ TOMATO', 'KETCHUP HEINZ'], cell: 'J7', convert: p => p,           note: 'Heinz Ketchup 4LT' },
   { match: ['WSB', 'BUTTER SALTED ORIG WESTERN STA'],       cell: 'N5',  convert: p => p,              note: 'Western Star Butter /1.5 kg block' },
-  { match: ['BON CHEF', 'POMACE OLIVE OIL'],                cell: 'N6',  convert: p => p,              note: 'Bon Chef Pomace Olive Oil 4LT' },
+  { match: ['BCPO4', 'BON CHEF', 'POMACE OLIVE OIL'],       cell: 'N6',  convert: p => p,              note: 'Bon Chef Pomace Olive Oil 4LT' },
   { match: ['PEPPER BLACK', 'PEPPER GROUND', 'BLACK PEPPER'],cell: 'N8', convert: p => p,             note: 'Pepper 1kg' },
   { match: ['ADPLF10', 'FLOUR PLAIN ALLIED'],               cell: 'R5',  convert: p => p,              note: 'Plain Flour Allied /12.5 kg bag' },
-  { match: ['FLOUR S/RAISING', 'FLOUR SELF RAISING'],       cell: 'R6',  convert: p => p,              note: 'Self Raising Flour Allied /12.5 kg bag' },
+  { match: ['AMSRF12.5', 'FLOUR S/RAISING', 'FLOUR SELF RAISING'], cell: 'R6',  convert: p => p,              note: 'Self Raising Flour Allied /12.5 kg bag' },
   { match: ['LVO', 'VEGETABLE OIL GEPPINO', 'GEPPINO'],    cell: 'R11', convert: p => p,              note: 'Vegetable Oil Geppino 20LT' },
   { match: ['BCSI5', 'SUGAR CASTER BUNDABERG'],             cell: 'R7',  convert: p => p,              note: 'Bundaberg Caster Sugar /15kg bag' },
-  { match: ['BRS15', 'SUGAR RAW BUNDABERG', 'RAW BUNDABERG'],cell: 'R8', convert: p => p,             note: 'Bundaberg Raw/Brown Sugar /15kg bag' },
+  // R8 is BROWN sugar (BSB15). Raw sugar (BRS15) has its own row, R16 — they were
+  // previously crossed, so R8 showed the raw-sugar price.
+  { match: ['BSB15', 'SUGAR BROWN BUNDABERG'],               cell: 'R8',  convert: p => p,              note: 'Bundaberg Brown Sugar /15kg bag' },
+  { match: ['BRS15', 'SUGAR RAW BUNDABERG', 'RAW BUNDABERG'],cell: 'R16', convert: p => p,             note: 'Bundaberg Raw Sugar /15kg bag' },
+  // 5Ways sells 10KG bags (PCS); the sheet row is costed per 25KG → ×2.5.
+  { match: ['PCS'],                                          cell: 'N7',  convert: p => r2(p * 2.5),    note: 'Sea Salt Super Fine (10kg bag → per 25kg)' },
+  { match: ['WV4', 'VINEGAR WHITE EDLYN'],                   cell: 'N10', convert: p => p,              note: 'White Vinegar Edlyn 4LT' },
   { match: ['BICS500', 'BI-CARB SODA', 'BICARB SODA'],     cell: 'R9',  convert: p => p,              note: 'Bi-Carb Soda /500g pkt' },
   { match: ['CPG', 'CINNAMON POWDER', 'CINNAMON GROUND'],   cell: 'R10', convert: p => p,              note: 'Cinnamon Powder Ground /500g bag' },
   { match: ['NJPB', 'BREADCRUMBS JAPANESE PANKO', 'PANKO'],cell: 'R13', convert: p => p,              note: 'Japanese Panko Breadcrumbs /10kg bag' },
@@ -808,6 +814,30 @@ function parseFaireOrderText_(text) {
 // Fennel H10 after a "Box (20)" line was written as a per-each price.
 function rescanFoodLast7Days() {
   return scanFoodSuppliers(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+}
+
+// One-off: re-read 5Ways FOOD invoices only, over the last 90 days (oldest → newest,
+// newest wins). Used 23 Nov 2026 after adding item codes (HTK, BCPO4, AMSRF12.5,
+// BSB15, PCS, WV4) and un-crossing brown/raw sugar. Doesn't touch the last-scan time.
+function rescan5WaysFood90Days() {
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const sheet  = SpreadsheetApp.openById(SS_FOOD).getSheetByName(SHEET_FOOD);
+  const maps   = FIVEWAYS_MAP.concat(scannerMapEntriesFor_('5Ways', 'food'));
+  const log    = ['--- 5WAYS FOOD (90-day rescan) ---'];
+  let updates  = 0;
+  const files  = getSortedPdfs(FOLDER_5WAYS, 'TAX INVOICE', cutoff);
+  log.push(`${files.length} invoice(s)`);
+  files.forEach(f => {
+    const text = extractPdfText(f.getId()); if (!text) return;
+    parse5WaysLines(text).forEach(item => {
+      maps.forEach(map => {
+        if (matchesAny(item.itemCode, map.match)) {
+          if (updateIfChanged(sheet, map.cell, map.convert(item.unitPrice), map.note, log)) updates++;
+        }
+      });
+    });
+  });
+  Logger.log(log.join('\n') + `\n\n${updates} price change(s).`);
 }
 
 // One-off backfill for Faire only (food side). Doesn't touch the last-scan timestamp.
