@@ -971,7 +971,9 @@ function parse5WaysLines(text) {
   const SKIP = {KG:1,CTN:1,TIN:1,BAG:1,PKT:1,JAR:1,DRUM:1,BLK:1,UNIT:1,EACH:1,BTL:1,BOX:1,
                 EA:1,PK:1,PCE:1,LTR:1,VIC:1,PTY:1,LTD:1,ABN:1,BSB:1,GST:1,INC:1,REF:1,
                 PAGE:1,TAX:1,AND:1,OF:1};
-  const codeRe = /^[A-Z][A-Z0-9\/]{1,11}$/;
+  // '.' allowed — e.g. AMSRF12.5 (SR flour). Without it the whole code column
+  // breaks on that line and every item on the invoice is missed.
+  const codeRe = /^[A-Z][A-Z0-9\/.]{1,11}$/;
   let icStart = -1, icLines = [];
   for (let i = tcStart + n + n; i < lines.length; i++) {
     const l = lines[i]; if (!l) continue;
