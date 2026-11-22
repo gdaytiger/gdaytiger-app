@@ -66,7 +66,8 @@ const DRIVE_ROOT_FOLDER  = 'Supplier Invoices';
 
 // Gmail senders
 const GMAIL_PFD    = 'PFDPortal@pfdfoods.com.au';
-const GMAIL_ABICOR = 'sales@triosuppliesaustralia.com.au';  // formerly sales@abicorsouthern.com.au
+const GMAIL_ABICOR = 'sales@triosuppliesaustralia.com.au';
+const GMAIL_FAIRE  = 'updates@info.faire.com';  // Faire wholesale order confirmations ("Thanks for your order!")  // formerly sales@abicorsouthern.com.au
 
 // Scan windows
 const FALLBACK_DAYS = 60;  // used when no scan history exists
@@ -110,7 +111,8 @@ const COFFEE_CELL_META = {
 const FOOD_CELL_META = {
   R12: { min: 3,  max: 6,   refreshDays: 14, label: 'Sungold FC 2LT (cross-write)' },
   N12: { min: 15, max: 35,  refreshDays: 14, label: 'DVDL Thick Cream 3LT (cross-write)' },
-  R15: { min: 30, max: 80,  refreshDays: 60, label: 'Pinenuts /1kg', manual: true }, // never appears on a scanned invoice — maintained by hand in FOOD COSTINGS
+  R15: { min: 30, max: 80,  refreshDays: 60, label: 'Pinenuts /1kg', manual: true },
+  J8:  { min: 6,  max: 15,  refreshDays: 90, label: 'Fermented Chilli 150g (Faire — The Broth Sisters)' }, // bulk-ordered (~36 jars), so long refresh window // never appears on a scanned invoice — maintained by hand in FOOD COSTINGS
   // Add ranges for other Food sheet cells incrementally as needed.
 };
 
@@ -211,6 +213,12 @@ const PFD_MAP = [
     cell: 'D9', convert: p => p, note: 'PFD Chicken /kg' },
   { match: ['SAUERKRAUT', 'SAUER KRAUT'],
     cell: 'H6', convert: p => p, note: 'PFD Sauerkraut /unit' },
+];
+
+// Faire — order-confirmation emails list "<Product> $<line total ex-GST> Qty: <n>".
+// Unit price = line total ÷ qty (ex-GST; Faire adds GST separately as "Tax").
+const FAIRE_MAP = [
+  { match: ['FERMENTED CHILLI'], cell: 'J8', note: 'Fermented Chilli 150g (The Broth Sisters via Faire)' },
 ];
 
 const FIVEWAYS_COFFEE_MAP = [
@@ -477,6 +485,11 @@ function scanFoodSuppliers(cutoffOverride) {
     updates += scanPfdFromGmail_(cutoff, log);
   } catch(e) { log.push('ERROR (PFD): ' + e.message); }
 
+  // ── Faire (Gmail order confirmations — The Broth Sisters etc.)
+  try {
+    updates += scanFaireFromGmail_(cutoff, log);
+  } catch(e) { log.push('ERROR (Faire): ' + e.message); }
+
   // ── Abicor (Gmail Tax Invoice PDFs)
   log.push('\n--- ABICOR / TRIO SUPPLIES ---');
   try {
@@ -713,6 +726,73 @@ function scanPfdFromGmail_(cutoff, log) {
     log.push('  WARN: prices not found for cells: ' + Object.keys(needed).join(', '));
 
   return updates;
+}
+
+// Faire — Gmail "Thanks for your order!" confirmations (no PDF; prices in the body).
+// Body line looks like: "Fermented Chilli 150g $358.20 Qty: 36" (line total ex-GST).
+function scanFaireFromGmail_(cutoff, log) {
+  log.push('\n--- FAIRE (Gmail order confirmations) ---');
+  const sheet = SpreadsheetApp.openById(SS_FOOD).getSheetByName(SHEET_FOOD);
+  let updates = 0;
+
+  const daysBack = Math.max(1, Math.ceil((Date.now() - cutoff.getTime()) / 86400000));
+  const query    = `from:${GMAIL_FAIRE} subject:"Thanks for your order" newer_than:${daysBack}d`;
+  let threads;
+  try { threads = GmailApp.search(query, 0, 20); }
+  catch(e) { log.push('ERROR searching Gmail (Faire): ' + e.message); return 0; }
+  if (!threads || threads.length === 0) { log.push('No Faire order emails found'); return 0; }
+
+  const messages = [];
+  threads.forEach(t => t.getMessages().forEach(m => messages.push(m)));
+  messages.sort((a, b) => b.getDate() - a.getDate());   // newest first — newest price wins
+  log.push(`${messages.length} email(s)`);
+
+  const faireEffective = FAIRE_MAP.concat(scannerMapEntriesFor_('Faire', 'food'));
+  const needed = {};
+  faireEffective.forEach(m => { needed[m.cell] = true; });
+
+  for (const msg of messages) {
+    if (Object.keys(needed).length === 0) break;
+    log.push(`\n${msg.getSubject()} (${msg.getDate().toLocaleDateString('en-AU')})`);
+    const items = parseFaireOrderText_(msg.getPlainBody() || msg.getBody().replace(/<[^>]+>/g, ' '));
+    if (!items.length) { log.push('  WARN: no line items parsed — run printFaireOrderText()'); continue; }
+
+    items.forEach(item => {
+      faireEffective.forEach(map => {
+        if (!needed[map.cell]) return;
+        if (!matchesAny(item.description, map.match)) return;
+        if (validateAndUpdate(sheet, map.cell, item.unitPrice, map.note, log, FOOD_CELL_META)) updates++;
+        delete needed[map.cell];
+      });
+    });
+    recordUnmappedItems_('Faire', items, function (it) {
+      return faireEffective.some(function (m) { return matchesAny(it.description, m.match); });
+    }, log);
+  }
+  return updates;
+}
+
+// "<desc> $<total> Qty: <n>" → [{ description, unitPrice, qty, total }]
+function parseFaireOrderText_(text) {
+  const flat = String(text || '').replace(/[|\u034f\u00a0]/g, ' ').replace(/\s+/g, ' ');
+  const re = /([A-Za-z][^$]{2,80}?)\s*\$\s*([\d,]+\.\d{2})\s*Qty:\s*(\d+)/gi;
+  const out = [];
+  let m;
+  while ((m = re.exec(flat)) !== null) {
+    const total = parseFloat(m[2].replace(/,/g, ''));
+    const qty   = parseInt(m[3], 10);
+    if (!qty || !total) continue;
+    out.push({ description: m[1].trim(), unitPrice: r2(total / qty), qty: qty, total: total });
+  }
+  return out;
+}
+
+// One-off: log what the parser sees in the latest Faire order email.
+function printFaireOrderText() {
+  const t = GmailApp.search(`from:${GMAIL_FAIRE} subject:"Thanks for your order"`, 0, 1)[0];
+  if (!t) { Logger.log('No Faire order email found'); return; }
+  const msg = t.getMessages().pop();
+  Logger.log(JSON.stringify(parseFaireOrderText_(msg.getPlainBody()), null, 2));
 }
 
 // Trio Supplies (formerly Abicor) — Gmail Tax Invoice PDFs

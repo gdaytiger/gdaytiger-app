@@ -46,6 +46,7 @@ const FOOD_INGREDIENTS = [
     { key: 'dijon_mustard',      name: 'Dijon Mustard (2.5kg jar)',         col: 10, row: 5,  unit: '2.5kg jar', supplier: '5Ways' },
     { key: 'mayo',               name: 'Hellmans Mayo (20kg)',              col: 10, row: 6,  unit: '20kg',      supplier: '5Ways' },
     { key: 'ketchup',            name: 'Heinz Ketchup (4L)',                col: 10, row: 7,  unit: '4L',        supplier: '5Ways' },
+    { key: 'fermented_chilli',   name: 'Fermented Chilli (150g jar)',       col: 10, row: 8,  unit: '150g jar',  supplier: 'Faire' },
     // ── MADE IN HOUSE ────────────────────────────────────────────────────────
     { key: 'tuna_mix',           name: 'Tuna Mix (5.75kg)',                 col: 12, row: 5,  unit: '5.75kg',    supplier: 'GDay Tiger' },
     { key: 'caponata',           name: 'Caponata (9.35kg)',                 col: 12, row: 6,  unit: '9.35kg',    supplier: 'GDay Tiger' },

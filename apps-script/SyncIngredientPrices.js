@@ -110,6 +110,7 @@ function sipCollectPrices_() {
   //   Woolworths → F10
   //   Redi Milk  → R12
   //   Abicor     → P8, P9
+  //   Faire      → J8 (Fermented Chilli — The Broth Sisters, Gmail order confirmations)
   //   GDay Tiger → L col (Made In House — formula-driven); P7, P10 (branded printed bags)
   //   Manual     → B6 (Candied), B8 (Noisette), N7, P5, P6, H20 (Leni Peppers — 5Ways product, price entered manually)
 
