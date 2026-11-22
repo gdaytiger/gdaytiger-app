@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, useEffect, useState, useRef, useMemo, useSyncExternalStore } from 'react';
-import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, GalleryVerticalEnd, Megaphone, ScrollText, Users, type LucideIcon } from 'lucide-react';
+import { Zap, CalendarDays, Target, Coffee, Sandwich, Package, Rocket, ShoppingCart, TrendingUp, Sun, Star, X, TriangleAlert, Pin, Ham, Cookie, Wheat, Leaf, Dice4, Croissant, CakeSlice, Drumstick, CupSoda, Carrot, Milk, LeafyGreen, Beef, ShoppingBag, Circle, RotateCcw, SlidersHorizontal, Check, Receipt, GalleryVerticalEnd, Megaphone, ScrollText, ChartCandlestick, type LucideIcon } from 'lucide-react';
 import {
   DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors,
   closestCenter, pointerWithin, useDroppable, type CollisionDetection,
@@ -15,10 +15,10 @@ import MorningCard from './components/MorningCard';
 import GoogleReviewsCard from './components/GoogleReviewsCard';
 import StoryMakerCard from './components/StoryMakerCard';
 import TheDocumentCard from './components/TheDocumentCard';
+import TradingCard, { tradingBadge, type TradingFeed } from './components/TradingCard';
 import Greeting from './components/Greeting';
 import WeatherLine from './components/WeatherLine';
 import WeeklyFlashCard, { type WeeklyFlashData, type FlashExtrasData } from './components/WeeklyFlashCard';
-import RosterCheckCard, { type RosterCheckData } from './components/RosterCheckCard';
 import { VERSION, UPDATED, COMMITS } from './lib/version';
 import { glassTileStyle, glassStrongStyle, glassPeachStyle, glassDangerStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from './lib/theme';
 import { melbNowDate } from '@/app/lib/melbTime';
@@ -127,10 +127,10 @@ const btnChip = (on: boolean): React.CSSProperties => (on ? { ...glassButtonStyl
 // ── Widget icons (Lucide) ────────────────────────────────────────────────────
 // One place mapping each widget to its Lucide icon. `glyph` sets the icon size;
 // falls back to ~56% of the chip. Colour: neutral grey (--color-ink-label).
-type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings' | 'story' | 'socials' | 'document' | 'labour';
+type WidgetIconName = 'daily' | 'week' | 'projects' | 'coffee' | 'food' | 'sweets' | 'supplier' | 'updates' | 'shopping' | 'flash' | 'morning' | 'google' | 'costings' | 'story' | 'socials' | 'document' | 'trading';
 
 const WIDGET_ICON: Record<WidgetIconName, LucideIcon> = {
-  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt, story: GalleryVerticalEnd, socials: Megaphone, document: ScrollText, labour: Users,
+  daily: Zap, week: CalendarDays, projects: Target, coffee: Coffee, food: Sandwich, sweets: CakeSlice, supplier: Package, updates: Rocket, shopping: ShoppingCart, flash: TrendingUp, morning: Sun, google: Star, costings: Receipt, story: GalleryVerticalEnd, socials: Megaphone, document: ScrollText, trading: ChartCandlestick,
 };
 
 function WidgetIcon({ name, chip = 28, glyph }: { name: WidgetIconName; chip?: number; glyph?: number }) {
@@ -440,7 +440,7 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, onUnpin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight, onRename, rawText, missed }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, onUnpin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight, onRename, rawText, missed, onTextLink }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
@@ -477,6 +477,9 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   rawText?: string;
   // Unticked "not completed yesterday" task — red tile + red label.
   missed?: boolean;
+  // Renders the task text as a link (same look as supplier ORDER links). Used by
+  // "Review pricing – <Item>" to-dos to jump to that item in the Costings widget.
+  onTextLink?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
@@ -767,6 +770,9 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
                 style={{ borderColor: 'var(--color-brand-peach)' }}
               />
             ) : (() => {
+              if (onTextLink && !checked) {
+                return <button type="button" className="font-semibold underline underline-offset-2 text-left" style={{ color: '#c8926a' }} title="Open in Costings" onClick={e => { e.stopPropagation(); onTextLink(); }}>{text.toUpperCase()}</button>;
+              }
               const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
               if (supplierUrl && !checked) {
                 const internal = supplierUrl.startsWith('/');
@@ -1056,17 +1062,34 @@ type MarginReviewData = {
 // marginReview.items at render time so the Daily To Do always matches the
 // live figure. The underlying Notion block text (task.text) is left
 // untouched — only the on-screen label is rewritten.
-const REVIEW_PRICING_PCT_RE = /^(review pricing\b[\s\-–—:]*)(.+?)\s*\([\d.]+%\)\s*$/i;
+// Handles both "(NN.N%)" and "($10, NN%)" suffixes — anything before the % in
+// the brackets (e.g. the price) is kept as-is.
+const REVIEW_PRICING_PCT_RE = /^(review pricing\b[\s\-–—:]*)(.+?)\s*\(([^)]*?)[\d.]+%\)\s*$/i;
 // reviewMap is keyed by product name (ALL CAPS) → current gross margin %.
 // Built from `costings` (30-min Notion sync, covers every product) NOT from
 // marginReview.items (weekly run, only flagged items — too sparse for this).
 function withLiveReviewMargin(text: string, reviewMap: Map<string, number>): string {
   const m = text.match(REVIEW_PRICING_PCT_RE);
   if (!m) return text;
-  const [, prefix, itemName] = m;
+  const [, prefix, itemName, pre] = m;
   const margin = reviewMap.get(itemName.trim().toUpperCase());
   if (margin === undefined) return text;
-  return `${prefix}${itemName.trim()} (${margin.toFixed(1)}%)`;
+  return `${prefix}${itemName.trim()} (${pre}${margin.toFixed(1)}%)`;
+}
+
+// Resolve a "Review pricing – <Item> (...)" to-do to its Costings product, so the
+// task can deep-link into the Costings widget. Exact name first, then a
+// contains-match either way (handles "CANDIED PIE" vs "Candied Pie (Apple)").
+const REVIEW_PRICING_NAME_RE = /^review pricing\b[\s\-–—:]*(.+?)\s*(?:\([^)]*\))?\s*$/i;
+function findReviewProduct(text: string, costings: CostingProduct[]): CostingProduct | null {
+  const m = text.trim().match(REVIEW_PRICING_NAME_RE);
+  if (!m) return null;
+  const want = m[1].trim().toUpperCase();
+  if (!want) return null;
+  const norm = (p: CostingProduct) => p.name.toUpperCase().trim();
+  return costings.find(p => norm(p) === want)
+    ?? costings.find(p => norm(p).includes(want) || want.includes(norm(p)))
+    ?? null;
 }
 
 // Rolling "True Payment Cost" — Square fees as a % of total revenue, computed
@@ -1852,7 +1875,7 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, b
   );
 }
 
-function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, paymentFees, recipeMap, onIngredientsChanged, open, onCollapse }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; paymentFees: PaymentFeesData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { costings: boolean; supplier: boolean }; onCollapse: (key: 'costings' | 'supplier') => void }) {
+function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, paymentFees, recipeMap, onIngredientsChanged, open, onCollapse, focus }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; paymentFees: PaymentFeesData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { costings: boolean; supplier: boolean }; onCollapse: (key: 'costings' | 'supplier') => void; focus?: { name: string; nonce: number } | null }) {
   // Made-in-house components (sub-recipes like Fennel Slaw, Pickled Onions) are
   // tracked in the Supplier Prices widget, NOT as sellable products. Exclude any
   // costing row whose Notes flag it as a component so it never renders as a tile.
@@ -2039,6 +2062,18 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   const [foodQuery, setFoodQuery] = useState('');
   const [sweetsQuery, setSweetsQuery] = useState('');
   const [costingCat, setCostingCat] = useState<'coffee' | 'food' | 'sweets'>('coffee');
+  // Deep-link from a "Review pricing" to-do: switch to the item's category tab and
+  // filter that tab's list down to it. Adjust-state-on-prop-change pattern (no effect).
+  const [focusNonce, setFocusNonce] = useState<number | null>(null);
+  if (focus && focus.nonce !== focusNonce) {
+    setFocusNonce(focus.nonce);
+    const fp = costings.find(p => p.name === focus.name);
+    if (fp) {
+      const cat = fp.category === 'Coffee' ? 'coffee' : fp.category === 'Sweets' ? 'sweets' : 'food';
+      setCostingCat(cat);
+      (cat === 'coffee' ? setCoffeeQuery : cat === 'sweets' ? setSweetsQuery : setFoodQuery)(fp.name);
+    }
+  }
   const matchName = (p: CostingProduct, q: string) => p.name.toLowerCase().includes(q.trim().toLowerCase());
   const coffeeShown = coffeeQuery.trim() ? coffeeItems.filter(p => matchName(p, coffeeQuery)) : coffeeItems;
   const foodShown   = foodQuery.trim()   ? foodItems.filter(p => matchName(p, foodQuery))     : foodItems;
@@ -2360,7 +2395,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [weeklyFlash, setWeeklyFlash] = useState<WeeklyFlashData>(null);
-  const [rosterCheck, setRosterCheck] = useState<RosterCheckData>(null);
   const [flashExtras, setFlashExtras] = useState<FlashExtrasData>(null);
   const [weekTasks, setWeekTasks] = useState<Record<string, WeekDay>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -2389,8 +2423,16 @@ export default function Home() {
     setOpenWidgets(prev => prev.has(key) ? new Set() : new Set([key]));
   };
   const closeWidgets = () => setOpenWidgets(new Set());
+  // "Review pricing" to-do → open Costings focused on that product.
+  const [costingFocus, setCostingFocus] = useState<{ name: string; nonce: number } | null>(null);
+  const openCostingFor = (name: string) => {
+    setCostingFocus({ name, nonce: Date.now() });
+    setOpenWidgets(new Set(['costings']));
+  };
   // Google reviews awaiting a reply — set by GoogleReviewsCard (always mounted) for the tile badge.
   const [googlePending, setGooglePending] = useState(0);
+  // Day Trader Scan feed — set by TradingCard (always mounted for the owner) for the tile badge.
+  const [tradingFeed, setTradingFeed] = useState<TradingFeed | null>(null);
   // Tapping the 5am push opens /?open=morning — jump straight to the Morning card.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get('open');
@@ -2723,7 +2765,6 @@ export default function Home() {
     fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
     fetch('/api/tigeros-tasks').then(r => r.json()).then(d => setTigerTasks(d.tasks || [])).catch(() => {});
     fetch('/api/weekly-flash').then(r => r.json()).then(d => setWeeklyFlash(d)).catch(() => {});
-    fetch('/api/roster-check').then(r => r.json()).then(d => setRosterCheck(d)).catch(() => {});
     fetch('/api/flash-extras').then(r => r.json()).then(d => setFlashExtras(d)).catch(() => {});
     fetchTaskContext().catch(() => {});
     fetchTaskOrder().catch(() => {});
@@ -3191,6 +3232,7 @@ export default function Home() {
               const itemProps = (task: typeof displayedTasks[0], category: string) => ({
                 id: task.id,
                 text: withLiveReviewMargin(task.text, reviewMarginMap),
+                onTextLink: (() => { const rp = findReviewProduct(task.text, costings); return rp ? () => openCostingFor(rp.name) : undefined; })(),
                 rawText: task.text,
                 onRename: (rid: string, rtext: string) => handleRenameTask(rid, rtext, isViewingOtherDay ? 'week' : 'daily', isViewingOtherDay ? selectedDate! : undefined),
                 checked: task.checked,
@@ -3339,8 +3381,8 @@ export default function Home() {
           <LauncherTile icon={<WidgetIcon name="costings" chip={48} glyph={26} />} title="Costings" badgeText={(coffeeCount + foodCount + sweetsCount) || undefined} alert={coffeeAlert || foodAlert || sweetsAlert} active={openWidgets.has('costings')} onClick={() => toggleWidget('costings')} />
           {!isPartner && <LauncherTile icon={<WidgetIcon name="socials" chip={48} glyph={26} />} title="Socials" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('socials')} onClick={() => toggleWidget('socials')} />}
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
-          {!isPartner && <LauncherTile icon={<WidgetIcon name="labour" chip={48} glyph={26} />} title="Roster Check" badgeText={rosterCheck?.totals?.projectedPct != null ? `${Math.round(rosterCheck.totals.projectedPct)}%` : undefined} alert={rosterCheck?.totals?.verdict === 'above'} active={openWidgets.has('labour')} onClick={() => toggleWidget('labour')} />}
           {!isPartner && <LauncherTile icon={<WidgetIcon name="updates" chip={48} glyph={26} />} title="TigerOS Updates" badgeText={tigerOpenCount || undefined} active={openWidgets.has('updates')} onClick={() => toggleWidget('updates')} />}
+          {!isPartner && <LauncherTile icon={<WidgetIcon name="trading" chip={48} glyph={26} />} title="Trading" badgeText={tradingBadge(tradingFeed)} alert={!!tradingFeed?.ok && !!(tradingFeed.scan?.gapDowns?.length || tradingFeed.scan?.best) && !tradingFeed.days?.[0]?.graded} active={openWidgets.has('trading')} onClick={() => toggleWidget('trading')} />}
           <LauncherTile icon={<WidgetIcon name="document" chip={48} glyph={26} />} title="The Document" badgeText={docBalance != null && Math.abs(docBalance) >= 1 ? `${docBalance > 0 ? '+' : '−'}$${Math.round(Math.abs(docBalance))}` : undefined} active={openWidgets.has('document')} onClick={() => toggleWidget('document')} />
         </LauncherGrid>
         {isPartner && (
@@ -3440,15 +3482,6 @@ export default function Home() {
           </Card>
         </div>
 
-        {/* ROSTER CHECK — next 7 days rostered (Deputy) vs same week last year: projected labour %, people on at 10am / 1pm */}
-        {!isPartner && (
-          <div style={{ display: openWidgets.has('labour') ? 'block' : 'none' }}>
-            <Card bare icon={<WidgetIcon name="labour" chip={28} glyph={17} />} title="Roster Check" onCollapse={() => toggleWidget('labour')}>
-              <RosterCheckCard data={rosterCheck} />
-            </Card>
-          </div>
-        )}
-
         {!isPartner && (<>
         {/* SOCIALS — Daily Story (Instagram story maker) + Google (reviews, photos, menu check),
             switched by a tile-height selector like Costings. Both stay mounted so the
@@ -3482,6 +3515,15 @@ export default function Home() {
           </Card>
         </div>
 
+        {/* TRADING — Day Trader Scan (owner only, paper / analysis only). 09:46 NY opening-range
+            scan + Time Machine from the Day Trader Scan Apps Script, graded after the close.
+            Mounted always so the tile badge (latest day's P&L following the rules) loads. */}
+        <div style={{ display: openWidgets.has('trading') ? 'block' : 'none' }}>
+          <Card bare icon={<WidgetIcon name="trading" chip={28} glyph={17} />} title="Trading" onCollapse={() => toggleWidget('trading')}>
+            <TradingCard active={openWidgets.has('trading')} onFeed={setTradingFeed} />
+          </Card>
+        </div>
+
         </>)}
 
         {/* THE DOCUMENT — G'Day Tiger × Isola Di Capri stock tally (also the Isola login's only page, /document).
@@ -3495,6 +3537,7 @@ export default function Home() {
         {/* COSTINGS — Coffee, Food, Ingredient Prices (each renders only when its tile is open) */}
         <CostingsCard costings={costings} ingredientPrices={ingredientPrices} priceDrift={priceDrift} marginReview={marginReview} paymentFees={paymentFees} recipeMap={recipeMap}
           open={{ costings: openWidgets.has('costings'), supplier: openWidgets.has('supplier') }}
+          focus={costingFocus}
           onCollapse={(k) => toggleWidget(k)}
           onIngredientsChanged={() => fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {})} />
 
