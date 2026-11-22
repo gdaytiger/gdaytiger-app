@@ -774,8 +774,12 @@ function scanFaireFromGmail_(cutoff, log) {
 
 // "<desc> $<total> Qty: <n>" → [{ description, unitPrice, qty, total }]
 function parseFaireOrderText_(text) {
-  const flat = String(text || '').replace(/[|\u034f\u00a0]/g, ' ').replace(/\s+/g, ' ');
-  const re = /([A-Za-z][^$]{2,80}?)\s*\$\s*([\d,]+\.\d{2})\s*Qty:\s*(\d+)/gi;
+  const flat = String(text || '')
+    .replace(/<[^>]*>/g, ' ¦ ')          // Gmail plain body wraps links as <https://…> — treat as a break
+    .replace(/https?:\/\/\S+/g, ' ¦ ')
+    .replace(/[|\u034f\u00a0\[\]()]/g, ' ¦ ')
+    .replace(/\s+/g, ' ');
+  const re = /([A-Za-z][^$¦]{2,80}?)\s*\$\s*([\d,]+\.\d{2})\s*Qty:\s*(\d+)/gi;
   const out = [];
   let m;
   while ((m = re.exec(flat)) !== null) {
