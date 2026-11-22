@@ -104,6 +104,7 @@ const COFFEE_CELL_META = {
   H5:  { min: 60,  max: 120, refreshDays: 90, label: 'Cup 6oz /1000',  pack: 1000 },
   H6:  { min: 70,  max: 140, refreshDays: 90, label: 'Cup 12oz /1000', pack: 1000 },
   H7:  { min: 50,  max: 100, refreshDays: 90, label: 'Hot Lid /1000',  pack: 1000 },
+  H8:  { min: 90,  max: 180, refreshDays: 60, label: 'Detpak 16oz cup /1000', pack: 1000 },
   H9:  { min: 40,  max: 80,  refreshDays: 60, label: 'Sipper Lid /1000' },
   H10: { min: 80,  max: 150, refreshDays: 60, label: 'Paper Straw /2500', manual: true }, // Trio, bought too rarely to track on a window — still auto-captures when invoiced
 };
@@ -238,8 +239,9 @@ const FIVEWAYS_COFFEE_MAP = [
   // and parse5WaysLines reads that column — so write it straight through. The
   // F6 guard (8–20) rejects any OCR mis-read of the carton total.
   { match: ['BHS750'], cell: 'F6', convert: p => p, note: 'B-Honey Squeeze 750G /bottle' },
-  // H8 Detpak 16oz: item code TBC — add once confirmed on invoice
-  // { match: ['???DETPAK???'], cell: 'H8', convert: p => p, note: 'Detpak 16oz x1000' },
+  // DGTCC = G'Day Tiger branded clear 16oz cup (Detpak), CTN of 1000. Unit Price
+  // column is ex-GST per carton ($122.25 Nov 2026) — sheet stores per 1000.
+  { match: ['DGTCC'], cell: 'H8', convert: p => p, note: "G'Day Tiger 16oz Detpak cup /1000" },
 ];
 
 // ─── DYNAMIC SCANNER MAP (custom ingredients added via the Supplier Prices "+" widget) ─
@@ -645,8 +647,8 @@ function scanCoffeeSuppliers(cutoffOverride) {
       const items = parse5WaysLines(text);
       items.forEach(item => {
         FIVEWAYS_COFFEE_MAP.forEach(map => {
-          if (!seen[map.cell] && matchesAny(item.itemCode, map.match)) {
-            seen[map.cell] = true;
+          // Files run oldest → newest, so let every match write — the newest invoice wins.
+          if (matchesAny(item.itemCode, map.match)) {
             if (validateAndUpdate(coffeeSheet, map.cell, map.convert(item.unitPrice), map.note, log, COFFEE_CELL_META)) updates++;
           }
         });
