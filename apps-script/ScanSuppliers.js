@@ -112,6 +112,8 @@ const FOOD_CELL_META = {
   R12: { min: 3,  max: 6,   refreshDays: 14, label: 'Sungold FC 2LT (cross-write)' },
   N12: { min: 15, max: 35,  refreshDays: 14, label: 'DVDL Thick Cream 3LT (cross-write)' },
   R15: { min: 30, max: 80,  refreshDays: 60, label: 'Pinenuts /1kg', manual: true },
+  H10: { min: 1,  max: 8,   refreshDays: 21, label: 'Fennel /each' },  // a whole-box price (~$50) must never land here
+  H19: { min: 0.3, max: 4,  refreshDays: 30, label: 'Cucumber /each' },
   J8:  { min: 6,  max: 15,  refreshDays: 90, label: 'Fermented Chilli 150g (Faire — The Broth Sisters)' }, // bulk-ordered (~36 jars), so long refresh window // never appears on a scanned invoice — maintained by hand in FOOD COSTINGS
   // Add ranges for other Food sheet cells incrementally as needed.
 };
@@ -149,13 +151,21 @@ const FIVEWAYS_MAP = [
   { match: ['TPMU1', 'NUTS PINENUT', 'PINENUT KERNAL'],    cell: 'R15', convert: p => p,              note: 'Pinenuts Kernel Medium /1kg bag' },
 ];
 
+// Per-each items that Sciclunas sometimes sells by the box: "Box (20)" → price ÷ 20.
+// Only a bare count in brackets counts — "Box (4kg)"/"Tray (5kg)" are left alone.
+function perEachFromBox_(p, unit) {
+  const m = String(unit || '').match(/\((\d+)\)/);
+  return m && parseInt(m[1], 10) > 1 ? r2(p / parseInt(m[1], 10)) : p;
+}
+
 const SCICLUNAS_MAP = [
   { match: ['Tomatoes', 'Tomato'],                 cell: 'H5',
     convert: (p, unit) => { const m = unit.match(/\((\d+)kg\)/i); return m ? r2(p / parseFloat(m[1])) : p; },
     note: 'Tomatoes /kg (Tray ÷ kg weight)' },
   { match: ['Mushrooms'],                          cell: 'H8',  convert: p => p, note: 'Mushrooms /box (4 kg)' },
   { match: ['Red Onion', 'Onion Red'],             cell: 'H9',  convert: p => p, note: 'Red Onion /kg' },
-  { match: ['Fennel'],                             cell: 'H10', convert: p => p, note: 'Fennel /each' },
+  // Sold Each OR "Box (20)" — a box price is divided by the count in brackets.
+  { match: ['Fennel'],                             cell: 'H10', convert: perEachFromBox_, note: 'Fennel /each' },
   { match: ['Chillies - Long Red', 'Long Red Chill'], cell: 'H11', convert: p => p, note: 'Red Chilli /kg' },
   { match: ['Chillies - Jalapeno', 'Jalapeno', 'Jalapeño'], cell: 'H12', convert: p => p, note: 'Jalapeno /kg' },
   { match: ['Parsley'],                            cell: 'H13', convert: p => p, note: 'Parsley /bunch' },
@@ -164,7 +174,7 @@ const SCICLUNAS_MAP = [
   { match: ['Eggplant'],                           cell: 'H16', convert: p => p, note: 'Eggplant /box (7 kg)' },
   { match: ['Lemon', 'Lemons'],                    cell: 'H17', convert: p => p, note: 'Lemons /kg' },
   { match: ['Carrot', 'Carrots'],                  cell: 'H18', convert: p => p, note: 'Carrots /kg' },
-  { match: ['Cucumber'],                           cell: 'H19', convert: p => p, note: 'Cucumber /each' },
+  { match: ['Cucumber'],                           cell: 'H19', convert: perEachFromBox_, note: 'Cucumber /each' },
   { match: ['Basil'],                              cell: 'H21', convert: p => p, note: 'Basil /bunch' },
   { match: ['Crushed Garlic', 'Garlic - Crushed', 'Garlic'], cell: 'H22', convert: p => p, note: 'Crushed Garlic /kg' },
   { match: ['Eggs', 'Egg Free Range'],             cell: 'N9',  convert: p => p, note: 'Eggs /box (15 doz)' },
@@ -401,7 +411,7 @@ function scanFoodSuppliers(cutoffOverride) {
       const items = parseSciclunasLines(text);
       items.forEach(item => {
         const map = sciclunasEffective.find(m => matchesAny(item.description, m.match));
-        if (map) { if (updateIfChanged(sheet, map.cell, map.convert(item.unitPrice, item.unit), map.note, log)) updates++; }
+        if (map) { if (validateAndUpdate(sheet, map.cell, map.convert(item.unitPrice, item.unit), map.note, log, FOOD_CELL_META)) updates++; }
         else if (matchesAny(item.description, SCICLUNAS_IGNORE)) {
           log.push(`  IGNORED (untracked soup veg): ${item.description}`);
         }
@@ -789,6 +799,13 @@ function parseFaireOrderText_(text) {
     out.push({ description: m[1].trim(), unitPrice: r2(total / qty), qty: qty, total: total });
   }
   return out;
+}
+
+// One-off: re-read the last 7 days of FOOD invoices (oldest → newest, so the newest
+// price wins). Doesn't touch the last-scan timestamp. Used 23 Nov 2026 to correct
+// Fennel H10 after a "Box (20)" line was written as a per-each price.
+function rescanFoodLast7Days() {
+  return scanFoodSuppliers(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
 }
 
 // One-off backfill for Faire only (food side). Doesn't touch the last-scan timestamp.
