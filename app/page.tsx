@@ -3118,13 +3118,12 @@ export default function Home() {
 
   // ── Launcher tile metadata (counts + attention dots) ──
   const costMargin   = costings.filter(p => p.margin !== null);
-  const coffeeCount  = costMargin.filter(p => p.category === 'Coffee').length;
   const coffeeAlert  = costMargin.some(p => p.category === 'Coffee' && p.margin! < COFFEE_BANDS.red);
   const isFood       = (p: CostingProduct) => p.category !== 'Coffee' && p.category !== 'Sweets';
-  const foodCount    = costMargin.filter(isFood).length;
   const foodAlert    = costMargin.some(p => isFood(p) && p.margin! < FOOD_BANDS.red);
-  const sweetsCount  = costMargin.filter(p => p.category === 'Sweets').length;
   const sweetsAlert  = costMargin.some(p => p.category === 'Sweets' && p.margin! < SWEETS_BANDS.red);
+  // Launcher badge = products in the red (below their category's margin floor), not the total tracked.
+  const costingsRedCount = costMargin.filter(p => p.margin! < (p.category === 'Coffee' ? COFFEE_BANDS.red : p.category === 'Sweets' ? SWEETS_BANDS.red : FOOD_BANDS.red)).length;
   // Launcher badge = suppliers' prices that shifted in the last 7 days (not the total tracked).
   const supplierCount = supplierShifted;
   const supplierAlert = (priceDrift?.warnings?.length ?? 0) > 0;
@@ -3376,7 +3375,7 @@ export default function Home() {
         <LauncherGrid>
           {!isPartner && <LauncherTile icon={<WidgetIcon name="shopping" chip={48} glyph={26} />} title="Shopping List" badgeText={shoppingBadge || undefined} active={openWidgets.has('shopping')} onClick={() => toggleWidget('shopping')} />}
           <LauncherTile icon={<WidgetIcon name="supplier" chip={48} glyph={26} />} title="Supplier Prices" badgeText={supplierCount || undefined} alert={supplierAlert} active={openWidgets.has('supplier')} onClick={() => toggleWidget('supplier')} />
-          <LauncherTile icon={<WidgetIcon name="costings" chip={48} glyph={26} />} title="Costings" badgeText={(coffeeCount + foodCount + sweetsCount) || undefined} alert={coffeeAlert || foodAlert || sweetsAlert} active={openWidgets.has('costings')} onClick={() => toggleWidget('costings')} />
+          <LauncherTile icon={<WidgetIcon name="costings" chip={48} glyph={26} />} title="Costings" badgeText={costingsRedCount || undefined} alert={coffeeAlert || foodAlert || sweetsAlert} active={openWidgets.has('costings')} onClick={() => toggleWidget('costings')} />
           {!isPartner && <LauncherTile icon={<WidgetIcon name="socials" chip={48} glyph={26} />} title="Socials" badgeText={googlePending || undefined} alert={googlePending > 0} active={openWidgets.has('socials')} onClick={() => toggleWidget('socials')} />}
           <LauncherTile icon={<WidgetIcon name="flash" chip={48} glyph={26} />} title="Weekly Flash" badgeText={weeklyFlash?.salesWoW != null ? `${weeklyFlash.salesWoW >= 0 ? '+' : ''}${weeklyFlash.salesWoW.toFixed(0)}%` : undefined} active={openWidgets.has('flash')} onClick={() => toggleWidget('flash')} />
           {!isPartner && <LauncherTile icon={<WidgetIcon name="labour" chip={48} glyph={26} />} title="Roster Check" badgeText={rosterCheck?.totals?.projectedPct != null ? `${Math.round(rosterCheck.totals.projectedPct)}%` : undefined} alert={rosterCheck?.totals?.verdict === 'above'} active={openWidgets.has('labour')} onClick={() => toggleWidget('labour')} />}
