@@ -129,7 +129,6 @@ function DayPartSection({ extras }: { extras: FlashExtrasData }) {
   const peak = hours.reduce((a, b) => (b.net > a.net ? b : a), hours[0]);
   return (
     <div>
-      <SectionLabel>Day shape · net by hour</SectionLabel>
       <div className="rounded-2xl px-3 flex items-end" onMouseLeave={() => setActive(null)}
         style={{ height: `${TILE_H}px`, paddingTop: '8px', paddingBottom: '6px', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
         <div className="flex items-end gap-1 w-full h-full">
@@ -202,6 +201,20 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
       </div>
 
       <MixSection extras={extras} />
+      {/* BEST / WORST DAY */}
+      {week.best && week.worst && (
+        <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+              <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-ink-muted)' }}>Best day</div>
+              <div className="text-sm font-bold" style={{ color: GREEN }}>{week.best.weekday} · {money(week.best.net)}</div>
+            </div>
+            <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+              <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-ink-muted)' }}>Worst day</div>
+              <div className="text-sm font-bold" style={{ color: 'var(--color-ink-label)' }}>{week.worst.weekday} · {money(week.worst.net)}</div>
+            </div>
+        </div>
+      )}
+
       <DayPartSection extras={extras} />
 
       {/* SCORECARD */}
@@ -219,28 +232,8 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
           {meta.pending && (
             <div className="text-[10px] px-1" style={{ color: 'var(--color-ink-muted)' }}>{meta.pending}</div>
           )}
-          <ScoreRow label="Sales trend"
-            value={wow != null ? `${wow >= 0 ? '+' : ''}${wow.toFixed(1)}%` : '—'}
-            zone="WoW" color={wowCol} dot={dot(wowCol)} />
         </div>
       </div>
-
-      {/* BEST / WORST DAY */}
-      {week.best && week.worst && (
-        <div>
-          <SectionLabel>Best &amp; quietest day</SectionLabel>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
-              <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-ink-muted)' }}>Best</div>
-              <div className="text-sm font-bold" style={{ color: GREEN }}>{week.best.weekday} · {money(week.best.net)}</div>
-            </div>
-            <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
-              <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-ink-muted)' }}>Quietest</div>
-              <div className="text-sm font-bold" style={{ color: 'var(--color-ink-label)' }}>{week.worst.weekday} · {money(week.worst.net)}</div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Tips — cash difference (surplus is tips): last week + calendar-year running total */}
       {data.cashDiff && (() => {
