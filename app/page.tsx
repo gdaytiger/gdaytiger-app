@@ -754,7 +754,9 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm leading-snug">
+          {/* Fixed-height tile: title is clamped to one line (full text on hover).
+              Extra detail goes in subtasks, never in the title. */}
+          <div className="text-sm leading-snug truncate" title={editing ? undefined : text.toUpperCase()}>
             {editing ? (
               <input
                 value={draftText}
@@ -771,7 +773,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
               />
             ) : (() => {
               if (onTextLink && !checked) {
-                return <button type="button" className="font-semibold underline underline-offset-2 text-left" style={{ color: '#c8926a' }} title="Open in Costings" onClick={e => { e.stopPropagation(); onTextLink(); }}>{text.toUpperCase()}</button>;
+                return <button type="button" className="font-semibold underline underline-offset-2 text-left max-w-full truncate align-bottom" style={{ color: '#c8926a' }} title="Open in Costings" onClick={e => { e.stopPropagation(); onTextLink(); }}>{text.toUpperCase()}</button>;
               }
               const supplierUrl = SUPPLIER_LINKS[text.toLowerCase()];
               if (supplierUrl && !checked) {
@@ -781,7 +783,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
               return <span onClick={onRename ? handleTextTap : undefined} className={`transition-colors font-semibold ${checked ? 'line-through text-gray-400' : 'text-gray-800'} ${onRename ? 'cursor-text' : ''}`}>{text.toUpperCase()}</span>;
             })()}
           </div>
-          {label && <p className={`text-xs mt-0.5 uppercase ${missed ? '' : 'text-gray-400'}`} style={missed ? { color: 'var(--color-danger)' } : undefined}>{label}</p>}
+          {label && <p className={`text-xs mt-0.5 uppercase truncate ${missed ? '' : 'text-gray-400'}`} style={missed ? { color: 'var(--color-danger)' } : undefined}>{label}</p>}
         </div>
         {isSticky && (onUnpin ? (
           <button onClick={e => { e.stopPropagation(); onUnpin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Unpin task" title="Unpin — back to a normal task"><Pin size={13} strokeWidth={2.25} aria-hidden style={{ display: 'block', color: 'var(--color-ink-label)' }} fill="currentColor" /></button>
