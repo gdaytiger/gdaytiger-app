@@ -29,6 +29,15 @@ function gbpSnapshotFile_() {
 function gbpDetectRemoved_(seen, n, removed) {
   removed = removed || [];
   if (!seen || !n) return removed;
+
+  // Reviews Google hid for a while (its spam filter often holds new reviews for a
+  // day or so) come back — drop them from the removed list when they reappear.
+  var back = {};
+  Object.keys(seen).forEach(function (k) { back[seen[k].r + '|' + seen[k].d] = true; });
+  removed = removed.filter(function (x) {
+    if (x.name && seen[x.name]) return false;
+    return !back[x.reviewer + '|' + x.date];
+  });
   var file = gbpSnapshotFile_();
   var prev = {};
   try { prev = JSON.parse(file.getBlob().getDataAsString() || '{}'); } catch (e) { prev = {}; }
@@ -41,7 +50,7 @@ function gbpDetectRemoved_(seen, n, removed) {
 
   if (!first && missing.length <= GBP_MAX_BATCH_DROP) {
     missing.forEach(function (k) {
-      if (suspects[k]) confirmed.push(suspects[k]);      // missing twice in a row
+      if (suspects[k]) { var c = suspects[k]; c.name = k; confirmed.push(c); }   // missing twice in a row
       else nextSuspects[k] = prevReviews[k];
     });
   } else if (!first) {
@@ -59,7 +68,7 @@ function gbpDetectRemoved_(seen, n, removed) {
   if (confirmed.length) {
     var now = new Date().toISOString();
     confirmed.forEach(function (c) {
-      removed.unshift({ reviewer: c.r, stars: c.s, date: c.d, comment: c.c, removedAt: now });
+      removed.unshift({ name: c.name, reviewer: c.r, stars: c.s, date: c.d, comment: c.c, removedAt: now });
     });
     removed = removed.slice(0, 20);
     gbpPushRemoved_(confirmed);
