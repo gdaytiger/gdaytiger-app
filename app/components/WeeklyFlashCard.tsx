@@ -50,6 +50,8 @@ const money = (n: number | null | undefined) => n == null ? '—' : '$' + Math.r
 const money2 = (n: number | null | undefined) => n == null ? '—' : '$' + n.toFixed(2);
 const signedMoney = (n: number | null | undefined) => n == null ? '—' : `${n >= 0 ? '+' : '−'}$${Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const CD_TOLERANCE = 20; // $ either way for the week before it's flagged
+// ISO yyyy-mm-dd → dd/mm/yyyy (AU).
+const auDate = (iso: string) => { const [y, m, d] = iso.split('-'); return d && m && y ? `${d}/${m}/${y}` : iso; };
 const hourLabel = (h: number) => {
   const ap = h < 12 ? 'am' : 'pm';
   const hr = h % 12 === 0 ? 12 : h % 12;
@@ -182,12 +184,15 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
     <div className="flex flex-col gap-5 uppercase">
       {/* HERO */}
       <div>
-        <SectionLabel>Net sales · week ending {week.end}</SectionLabel>
         <div className="rounded-2xl px-4 flex items-center justify-between gap-3"
           style={{ minHeight: '62px', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
-          <div className="flex items-baseline gap-2">
-            <span className="font-bold tabular-nums leading-none" style={{ fontSize: '28px', color: 'var(--color-ink-label)' }}>{money(week.net)}</span>
-            {wow != null && <span className="text-xs font-bold tabular-nums" style={{ color: wowCol }}>{wowArrow} {Math.abs(wow).toFixed(1)}%</span>}
+          <div className="flex flex-col gap-1 py-2">
+            <div className="flex items-baseline gap-2">
+              <span className="font-bold tabular-nums leading-none" style={{ fontSize: '28px', color: 'var(--color-ink-label)' }}>{money(week.net)}</span>
+              {wow != null && <span className="text-xs font-bold tabular-nums" style={{ color: wowCol }}>{wowArrow} {Math.abs(wow).toFixed(1)}%</span>}
+            </div>
+            <div className="text-[10px] font-bold tracking-widest leading-none tabular-nums"
+              style={{ fontFamily: '"stolzl", sans-serif', color: 'var(--color-ink-muted)' }}>Net sales · week ending {auDate(week.end)}</div>
           </div>
           <div className="flex flex-col items-end text-[10px] leading-snug tabular-nums" style={{ color: 'var(--color-ink-muted)' }}>
             <span><span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{week.orders.toLocaleString()}</span> orders</span>
