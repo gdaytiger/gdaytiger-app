@@ -3065,6 +3065,13 @@ export default function Home() {
     } : prev);
     await fetch('/api/delete-task', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId }) });
   };
+  // Subtask on a regular day task — appended as a child to_do under the task's own
+  // Notion block (add-project-action just PATCHes /blocks/{id}/children).
+  const handleAddSubtaskToTask = async (taskId: string, text: string) => {
+    if (!text.trim()) return;
+    await fetch('/api/add-project-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: taskId, text: text.trim() }) });
+    await refreshAfterMutation({ dashboard: true });
+  };
   const handleAddSubtaskToPinned = async (projectId: string, text: string) => {
     if (!text.trim()) return;
     await fetch('/api/add-project-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, text: text.trim() }) });
@@ -3251,20 +3258,25 @@ export default function Home() {
                   ))}
                   <SortableContext items={sortableIdsRef.current} strategy={verticalListSortingStrategy}>
                     {orderedUnchecked.map(({ task, category }) => {
-                      if (!task.subtasks?.length || task.projectId) {
+                      if (task.projectId) {
                         return <SortableCheckItem key={task.id} {...itemProps(task, category)} />;
                       }
-                      // Regular task with child to_dos (e.g. Monday's DO THE BANKING +
-                      // the weekly cash tally). Tap the row to show/hide them.
+                      // Any task: tap the row to show/hide its child to_dos (subtasks)
+                      // plus a "+ Add subtask" row. Replaces the old context panel.
                       const isOpen = expandedPins.has(task.id);
                       return (
                         <SortableWrapper key={task.id} id={task.id}>
                           <div className="space-y-2">
                             <CheckItem {...itemProps(task, category)} onRowClick={() => togglePinExpanded(task.id)} />
-                            {isOpen && task.subtasks.map(s => (
-                              <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} rawText={s.text}
-                                onChange={(sid, schecked) => toggleTaskSubtask(task.id, sid, schecked)} />
-                            ))}
+                            {isOpen && (
+                              <>
+                                {(task.subtasks || []).map(s => (
+                                  <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} rawText={s.text}
+                                    onChange={(sid, schecked) => toggleTaskSubtask(task.id, sid, schecked)} />
+                                ))}
+                                <AddSubtaskRow onAdd={t => handleAddSubtaskToTask(task.id, t)} />
+                              </>
+                            )}
                           </div>
                         </SortableWrapper>
                       );
@@ -3276,23 +3288,25 @@ export default function Home() {
                       checklist as sibling tiles underneath and drag as one block. */}
                   <SortableContext items={pinnedIdsRef.current} strategy={verticalListSortingStrategy}>
                     {stickyItems.map(({ task, category }) => {
-                      if (!task.projectId && task.subtasks?.length) {
-                        // Pinned task with child to_dos on its day page (no linked project).
+                      if (!task.projectId) {
+                        // Pinned task with no linked project: child to_dos on its day page.
                         const isOpen = expandedPins.has(task.id);
                         return (
                           <SortableWrapper key={task.id} id={task.id}>
                             <div className="space-y-2">
                               <CheckItem {...itemProps(task, category)} onRowClick={() => togglePinExpanded(task.id)} />
-                              {isOpen && task.subtasks.map(s => (
-                                <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} rawText={s.text}
-                                  onChange={(sid, schecked) => toggleTaskSubtask(task.id, sid, schecked)} />
-                              ))}
+                              {isOpen && (
+                                <>
+                                  {(task.subtasks || []).map(s => (
+                                    <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} rawText={s.text}
+                                      onChange={(sid, schecked) => toggleTaskSubtask(task.id, sid, schecked)} />
+                                  ))}
+                                  <AddSubtaskRow onAdd={t => handleAddSubtaskToTask(task.id, t)} />
+                                </>
+                              )}
                             </div>
                           </SortableWrapper>
                         );
-                      }
-                      if (!task.projectId) {
-                        return <SortableCheckItem key={task.id} {...itemProps(task, category)} />;
                       }
                       const isOpen = expandedPins.has(task.id);
                       return (
