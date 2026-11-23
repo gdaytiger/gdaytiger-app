@@ -71,18 +71,30 @@ function zoneVerdict(v: number | null, [lo, hi]: readonly [number, number]) {
   return 'in';
 }
 
+// Notion fetch with retry — a 429 / 5xx used to come back as an error body with no
+// `results`, which readBlock treated as "no blocks" → ready:false ("still landing")
+// even though the data was there. Now retries, then throws so failures aren't silent.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function notionFetch(path: string): Promise<any> {
-  const res = await fetch(`https://api.notion.com/v1${path}`, {
-    headers: { Authorization: `Bearer ${NOTION_API_KEY}`, 'Notion-Version': '2022-06-28' },
-    cache: 'no-store',
-  });
-  return res.json();
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`https://api.notion.com/v1${path}`, {
+      headers: { Authorization: `Bearer ${NOTION_API_KEY}`, 'Notion-Version': '2022-06-28' },
+      cache: 'no-store',
+    });
+    if (res.ok) return res.json();
+    if ((res.status === 429 || res.status >= 500) && attempt < 3) {
+      const wait = Number(res.headers.get('retry-after')) * 1000 || 500 * (attempt + 1);
+      await new Promise((r) => setTimeout(r, Math.min(wait, 3000)));
+      continue;
+    }
+    throw new Error(`Notion ${res.status} on ${path}`);
+  }
 }
 
-// Reads a JSON code block (identified by its "<key>" marker) from the OS page.
+// Reads the OS page's children ONCE and returns the JSON code blocks for each
+// requested "<key>" marker (was three parallel full-page reads → rate limits).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function readBlock(key: string): Promise<any | null> {
+async function readBlocks(keys: string[]): Promise<Record<string, any | null>> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let blocks: any[] = [];
   let cursor: string | undefined;
@@ -94,14 +106,19 @@ async function readBlock(key: string): Promise<any | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const textOf = (b: any) => (b.code?.rich_text || []).map((r: any) => r.plain_text).join('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const block = blocks.find((b: any) => b.type === 'code' && textOf(b).includes(`"${key}"`));
-  if (!block) return null;
-  try { return JSON.parse(textOf(block)); } catch { return null; }
+  const out: Record<string, any | null> = {};
+  for (const key of keys) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const block = blocks.find((b: any) => b.type === 'code' && textOf(b).includes(`"${key}"`));
+    try { out[key] = block ? JSON.parse(textOf(block)) : null; } catch { out[key] = null; }
+  }
+  return out;
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const [salesBlock, labourBlock, cashBlock] = await Promise.all([readBlock('sales_daily'), readBlock('labour_weekly'), readBlock('cash_ledger')]);
+    const blocks = await readBlocks(['sales_daily', 'labour_weekly', 'cash_ledger']);
+    const salesBlock = blocks.sales_daily, labourBlock = blocks.labour_weekly, cashBlock = blocks.cash_ledger;
     const days: SalesDay[] = salesBlock?.days || [];
     const labourWeeks: LabourWeek[] = labourBlock?.weeks || [];
     const labourByStart = new Map(labourWeeks.map((w) => [w.start, w]));
