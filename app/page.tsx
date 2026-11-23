@@ -440,7 +440,7 @@ function SwipeToDelete({ children, onDelete, onClick }: { children: React.ReactN
   );
 }
 
-function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, onUnpin, label, context, onContextSave, isSticky, subtaskCount, onRowClick, highlight, onRename, rawText, missed, onTextLink }: {
+function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeRight, onPin, onUnpin, label, isSticky, subtaskCount, onRowClick, highlight, onRename, rawText, missed, onTextLink }: {
   id: string; text: string; checked: boolean;
   onChange: (id: string, checked: boolean) => void;
   onDelete?: (id: string) => void;
@@ -491,22 +491,11 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
   const [swiping, setSwiping] = useState(false);
   const [committed, setCommitted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draftText, setDraftText] = useState('');
   const lastTextTapRef = useRef(0);
   const textTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [localContext, setLocalContext] = useState(context ?? '');
   const THRESHOLD = 90;
-
-  // Reset the local draft when the incoming context prop changes. Done during
-  // render (React's "adjust state when a prop changes" pattern) instead of in an
-  // effect, which avoids an extra cascading render.
-  const [ctxSnapshot, setCtxSnapshot] = useState(context);
-  if (context !== ctxSnapshot) {
-    setCtxSnapshot(context);
-    setLocalContext(context ?? '');
-  }
 
   const mouseDownRef = useRef(false);
   // Detect touch/mobile vs mouse/desktop. useSyncExternalStore is the SSR-safe
@@ -673,7 +662,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
       if (textTapTimerRef.current) clearTimeout(textTapTimerRef.current);
       textTapTimerRef.current = setTimeout(() => {
         textTapTimerRef.current = null;
-        if (onRowClick) onRowClick(); else setExpanded(x => !x);
+        onRowClick?.();
       }, 300);
     }
   };
@@ -748,7 +737,7 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
           transition: swiping ? 'none' : 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
           willChange: 'transform',
         }}
-        onClick={() => { if (!didSwipeRef.current) { if (onRowClick) onRowClick(); else setExpanded(e => !e); } didSwipeRef.current = false; }}
+        onClick={() => { if (!didSwipeRef.current) { onRowClick?.(); } didSwipeRef.current = false; }}
       >
         <div onClick={e => { e.stopPropagation(); onChange(id, !checked); }} className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer" style={{ background: checked ? 'var(--color-brand-peach)' : 'rgba(255,255,255,0.6)', border: checked ? '1.5px solid var(--color-brand-peach)' : '1.5px solid rgba(0,0,0,0.15)', marginTop: '2px' }}>
           {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -792,25 +781,9 @@ function CheckItem({ id, text, checked, onChange, onDelete, onDelegate, onSwipeR
         ))}
         {!isSticky && !checked && onPin && <button onClick={e => { e.stopPropagation(); onPin(); }} className="shrink-0 leading-none transition-opacity opacity-0 group-hover:opacity-60 hover:!opacity-100 mt-0.5" aria-label="Pin task" title="Make persistent — stays until ticked off"><Pin size={13} strokeWidth={2.25} aria-hidden style={{ display: 'block', color: 'var(--color-ink-label)' }} /></button>}
         {subtaskCount && subtaskCount.total > 0 && <span className="shrink-0 text-xs text-gray-400 tabular-nums mt-0.5">{subtaskCount.done}/{subtaskCount.total}</span>}
-        {context && !expanded && <div className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--color-brand-peach)' }} title="Has context" />}
         {onDelegate && <button onClick={e => { e.stopPropagation(); onDelegate!(); }} className="shrink-0 transition-opacity leading-none opacity-50 hover:opacity-100 mt-0.5" aria-label="Ask Claude" title="Ask Claude"><ClaudeLogo size={15} /></button>}
         {!isMobile && onDelete && <button onClick={e => { e.stopPropagation(); onDelete(id); }} className="shrink-0 leading-none text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 mt-0.5" aria-label="Delete" title="Delete"><X size={14} strokeWidth={2.25} aria-hidden style={{ display: 'block' }} /></button>}
       </div>
-      {expanded && !onRowClick && (
-        <div className="px-4 pb-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}
-          onMouseDown={e => e.stopPropagation()}
-          onClick={e => e.stopPropagation()}>
-          <textarea
-            value={localContext}
-            onChange={e => setLocalContext(e.target.value)}
-            onBlur={() => onContextSave?.(id, localContext)}
-            placeholder="Add context…"
-            autoFocus
-            rows={3}
-            className="w-full text-xs text-gray-600 bg-transparent resize-none focus:outline-none placeholder-gray-300 mt-2 leading-relaxed"
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -3299,6 +3272,21 @@ export default function Home() {
                       checklist as sibling tiles underneath and drag as one block. */}
                   <SortableContext items={pinnedIdsRef.current} strategy={verticalListSortingStrategy}>
                     {stickyItems.map(({ task, category }) => {
+                      if (!task.projectId && task.subtasks?.length) {
+                        // Pinned task with child to_dos on its day page (no linked project).
+                        const isOpen = expandedPins.has(task.id);
+                        return (
+                          <SortableWrapper key={task.id} id={task.id}>
+                            <div className="space-y-2">
+                              <CheckItem {...itemProps(task, category)} onRowClick={() => togglePinExpanded(task.id)} />
+                              {isOpen && task.subtasks.map(s => (
+                                <CheckItem key={s.id} id={s.id} text={s.text} checked={s.checked} rawText={s.text}
+                                  onChange={(sid, schecked) => toggleTaskSubtask(task.id, sid, schecked)} />
+                              ))}
+                            </div>
+                          </SortableWrapper>
+                        );
+                      }
                       if (!task.projectId) {
                         return <SortableCheckItem key={task.id} {...itemProps(task, category)} />;
                       }

@@ -89,7 +89,7 @@ async function fetchCarryAndStickyCandidates(today: Date) {
   );
 
   const carry: { id: string; text: string; header: string }[] = [];
-  const sticky: { id: string; text: string; header: string; startDate: string | null; projectId: string | null }[] = [];
+  const sticky: { id: string; text: string; header: string; startDate: string | null; projectId: string | null; hasChildren: boolean }[] = [];
   const seenIds = new Set<string>();
 
   for (const data of pages) {
@@ -121,7 +121,7 @@ async function fetchCarryAndStickyCandidates(today: Date) {
       const stickyMatch = raw.match(STICKY_PREFIX_RE);
       if (stickyMatch) {
         seenIds.add(block.id);
-        sticky.push({ id: block.id, text: raw.replace(STICKY_PREFIX_RE, '').trim(), header: currentHeader, startDate: stickyMatch[1] || null, projectId: stickyMatch[2] || null });
+        sticky.push({ id: block.id, text: raw.replace(STICKY_PREFIX_RE, '').trim(), header: currentHeader, startDate: stickyMatch[1] || null, projectId: stickyMatch[2] || null, hasChildren: !!block.has_children });
       }
     }
   }
@@ -343,6 +343,19 @@ export async function GET() {
   // completed/archived/older pin with no linked project) just renders as a plain pin.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const projectMap = new Map(projects.map((p: any) => [p.id, p]));
+  // Plain stickies (no linked project) with child to_do blocks on their day page —
+  // attach them as `subtasks`, same as getDailyTasks() does for regular tasks.
+  const stickyKids = new Map<string, { id: string; text: string; checked: boolean }[]>();
+  await Promise.all(stickies.filter(s => s.hasChildren && !(s.projectId && projectMap.has(s.projectId))).map(async s => {
+    const kids = await notionFetch(`/blocks/${s.id}/children?page_size=50`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    stickyKids.set(s.id, (kids.results || []).filter((b: any) => b.type === 'to_do').map((b: any) => ({
+      id: b.id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      text: (b.to_do?.rich_text || []).map((r: any) => r.plain_text).join(''),
+      checked: b.to_do?.checked || false,
+    })));
+  }));
   for (const sticky of stickies) {
     const linkedProject = sticky.projectId ? projectMap.get(sticky.projectId) : undefined;
     const stickyTask = {
@@ -351,7 +364,8 @@ export async function GET() {
       checked: false,
       isRecurring: false,
       isSticky: true,
-      ...(linkedProject ? { projectId: sticky.projectId, subtasks: linkedProject.todos } : {}),
+      ...(linkedProject ? { projectId: sticky.projectId, subtasks: linkedProject.todos }
+        : stickyKids.get(sticky.id)?.length ? { subtasks: stickyKids.get(sticky.id) } : {}),
     };
     const headerIdx = dailyTasks.findIndex((t: { isHeader?: boolean; text: string }) => t.isHeader && t.text === sticky.header);
     if (headerIdx !== -1) {
