@@ -106,29 +106,49 @@ function MixSection({ extras }: { extras: FlashExtrasData }) {
 }
 
 // Day-part — net sales by clock hour as mini vertical bars, peak highlighted.
+// Tile matches the 62px Daily To Do tiles. Peak bar uses the pinned-task recipe
+// (peach outline, faint peach fill). Hover (or tap on mobile) any hour for its $ / %.
+const TILE_H = 62;
+const BAR_MAX = 30;
+const PINNED_STYLE: React.CSSProperties = {
+  background: 'rgba(251,205,173,0.12)',
+  border: '1px solid var(--color-brand-peach)',
+  boxShadow: 'var(--glass-shadow)',
+};
+
 function DayPartSection({ extras }: { extras: FlashExtrasData }) {
+  const [active, setActive] = React.useState<number | null>(null);
   if (!extras?.ready || !extras.dayPart.length) return null;
-  const maxNet = Math.max(...extras.dayPart.map((d) => d.net));
-  const peak = extras.dayPart.reduce((a, b) => (b.net > a.net ? b : a), extras.dayPart[0]);
+  const hours = extras.dayPart;
+  const maxNet = Math.max(...hours.map((d) => d.net));
+  const peak = hours.reduce((a, b) => (b.net > a.net ? b : a), hours[0]);
   return (
     <div>
       <SectionLabel>Day shape · net by hour</SectionLabel>
-      <div className="rounded-xl px-3 py-3" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
-        <div className="flex items-end gap-1" style={{ height: '68px' }}>
-          {extras.dayPart.map((h) => {
+      <div className="rounded-2xl px-3 flex items-end" onMouseLeave={() => setActive(null)}
+        style={{ height: `${TILE_H}px`, paddingTop: '8px', paddingBottom: '6px', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+        <div className="flex items-end gap-1 w-full h-full">
+          {hours.map((h, i) => {
             const isPeak = h.hour === peak.hour;
-            const hpx = Math.max(3, maxNet > 0 ? (h.net / maxNet) * 56 : 0);
+            const isActive = active === h.hour;
+            const hpx = Math.max(3, maxNet > 0 ? (h.net / maxNet) * BAR_MAX : 0);
+            const align = i < 2 ? { left: 0 } : i > hours.length - 3 ? { right: 0 } : { left: '50%', transform: 'translateX(-50%)' };
             return (
-              <div key={h.hour} className="flex-1 flex flex-col items-center justify-end gap-1">
+              <div key={h.hour} className="relative flex-1 h-full flex flex-col items-center justify-end gap-0.5 cursor-pointer"
+                onMouseEnter={() => setActive(h.hour)}
+                onClick={() => setActive(isActive ? null : h.hour)}>
+                {isActive && (
+                  <div className="absolute z-20 pointer-events-none whitespace-nowrap rounded-lg px-2 py-1 text-[10px] font-semibold tabular-nums"
+                    style={{ bottom: 'calc(100% + 4px)', ...align, background: 'rgba(255,255,255,0.95)', border: '1px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow)', color: 'var(--color-ink-label)' }}>
+                    {hourLabel(h.hour)} · {money(h.net)} ({h.pct.toFixed(0)}% of the week)
+                  </div>
+                )}
                 <div className="w-full rounded-t"
-                  style={{ height: `${hpx}px`, background: isPeak ? 'var(--color-brand-peach)' : 'rgba(0,0,0,0.12)' }} />
-                <div className="text-[9px] tabular-nums" style={{ color: 'var(--color-ink-muted)' }}>{hourLabel(h.hour)}</div>
+                  style={{ height: `${hpx}px`, boxSizing: 'border-box', ...(isPeak ? PINNED_STYLE : { background: isActive ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.12)' }) }} />
+                <div className="text-[9px] leading-none tabular-nums" style={{ color: 'var(--color-ink-muted)' }}>{hourLabel(h.hour)}</div>
               </div>
             );
           })}
-        </div>
-        <div className="text-[10px] mt-2" style={{ color: 'var(--color-ink-muted)' }}>
-          Peak <span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{hourLabel(peak.hour)}</span> · {money(peak.net)} ({peak.pct.toFixed(0)}% of the week)
         </div>
       </div>
     </div>
@@ -136,9 +156,9 @@ function DayPartSection({ extras }: { extras: FlashExtrasData }) {
 }
 
 export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashData; extras: FlashExtrasData }) {
-  if (!data) return <div className="text-xs text-gray-400 py-6 text-center">Loading…</div>;
+  if (!data) return <div className="text-xs py-6 text-center uppercase" style={{ color: 'var(--color-ink-muted)' }}>Loading…</div>;
   if (!data.ready || !data.week) {
-    return <div className="text-xs py-6 text-center" style={{ color: 'var(--color-ink-muted)' }}>
+    return <div className="text-xs py-6 text-center uppercase" style={{ color: 'var(--color-ink-muted)' }}>
       Last week&apos;s data is still landing — check back after the overnight sync.
     </div>;
   }
@@ -156,19 +176,20 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
   const gmMonth = grossMargin.month ? ` (${grossMargin.month})` : '';
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 uppercase">
       {/* HERO */}
       <div>
         <SectionLabel>Net sales · week ending {week.end}</SectionLabel>
-        <div className="rounded-2xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
-          <div className="flex items-baseline gap-3">
-            <span className="font-bold tabular-nums leading-none" style={{ fontSize: '40px', color: 'var(--color-ink-label)' }}>{money(week.net)}</span>
-            {wow != null && <span className="text-sm font-bold tabular-nums" style={{ color: wowCol }}>{wowArrow} {Math.abs(wow).toFixed(1)}%</span>}
+        <div className="rounded-2xl px-4 flex items-center justify-between gap-3"
+          style={{ minHeight: '62px', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+          <div className="flex items-baseline gap-2">
+            <span className="font-bold tabular-nums leading-none" style={{ fontSize: '28px', color: 'var(--color-ink-label)' }}>{money(week.net)}</span>
+            {wow != null && <span className="text-xs font-bold tabular-nums" style={{ color: wowCol }}>{wowArrow} {Math.abs(wow).toFixed(1)}%</span>}
           </div>
-          <div className="flex gap-4 mt-2 text-xs" style={{ color: 'var(--color-ink-muted)' }}>
+          <div className="flex flex-col items-end text-[10px] leading-snug tabular-nums" style={{ color: 'var(--color-ink-muted)' }}>
             <span><span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{week.orders.toLocaleString()}</span> orders</span>
             <span>avg sale <span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{money2(week.avgSale)}</span></span>
-            <span className="tabular-nums">vs prior wk</span>
+            <span>vs prior wk</span>
           </div>
         </div>
       </div>
