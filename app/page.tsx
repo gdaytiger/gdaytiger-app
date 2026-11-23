@@ -1853,7 +1853,7 @@ function MarginBadges({ items, atRisk, atRiskPct, uncosted, week, paymentFees, b
   );
 }
 
-function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, paymentFees, recipeMap, onIngredientsChanged, open, onCollapse, focus }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; paymentFees: PaymentFeesData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; open: { costings: boolean; supplier: boolean }; onCollapse: (key: 'costings' | 'supplier') => void; focus?: { name: string; nonce: number } | null }) {
+function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, paymentFees, recipeMap, onIngredientsChanged, onChangedCount, open, onCollapse, focus }: { costings: CostingProduct[]; ingredientPrices: IngredientPricesData | null; priceDrift: PriceDriftData | null; marginReview: MarginReviewData | null; paymentFees: PaymentFeesData | null; recipeMap: RecipeMapData | null; onIngredientsChanged?: () => void; onChangedCount?: (n: number) => void; open: { costings: boolean; supplier: boolean }; onCollapse: (key: 'costings' | 'supplier') => void; focus?: { name: string; nonce: number } | null }) {
   // Made-in-house components (sub-recipes like Fennel Slaw, Pickled Onions) are
   // tracked in the Supplier Prices widget, NOT as sellable products. Exclude any
   // costing row whose Notes flag it as a component so it never renders as a tile.
@@ -2033,6 +2033,9 @@ function CostingsCard({ costings, ingredientPrices, priceDrift, marginReview, pa
   }, [withMargin.length, ingredientPrices, priceDrift, recipeMap]);
 
   const changedCount = ingredientChanges.filter(i => i.delta !== undefined).length;
+  // Report the 7-day shifted-price count up to Home for the Supplier Prices launcher badge.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { onChangedCount?.(changedCount); }, [changedCount]);
 
   // Per-widget product search (Coffee / Food). Filters the visible list only;
   // the summary badges keep showing the full-category figures.
@@ -2380,6 +2383,7 @@ export default function Home() {
   // Which pinned "ongoing project" rows have their checklist expanded (sibling
   // tiles below, not nested inside the row) — see the Daily To Do render.
   const [expandedPins, setExpandedPins] = useState<Set<string>>(new Set());
+  const [supplierShifted, setSupplierShifted] = useState(0);
   const togglePinExpanded = (id: string) => setExpandedPins(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   // Which of the four launcher widgets are expanded to full cards. Empty = all
   // collapsed to square tiles (resets every load by design).
@@ -3121,7 +3125,8 @@ export default function Home() {
   const foodAlert    = costMargin.some(p => isFood(p) && p.margin! < FOOD_BANDS.red);
   const sweetsCount  = costMargin.filter(p => p.category === 'Sweets').length;
   const sweetsAlert  = costMargin.some(p => p.category === 'Sweets' && p.margin! < SWEETS_BANDS.red);
-  const supplierCount = ingredientPrices?.ingredients?.length ?? 0;
+  // Launcher badge = suppliers' prices that shifted in the last 7 days (not the total tracked).
+  const supplierCount = supplierShifted;
   const supplierAlert = (priceDrift?.warnings?.length ?? 0) > 0;
   const tigerOpenCount = tigerTasks.filter(t => !t.done).length;
 
@@ -3532,6 +3537,7 @@ export default function Home() {
           open={{ costings: openWidgets.has('costings'), supplier: openWidgets.has('supplier') }}
           focus={costingFocus}
           onCollapse={(k) => toggleWidget(k)}
+          onChangedCount={setSupplierShifted}
           onIngredientsChanged={() => fetch('/api/ingredient-prices').then(r => r.json()).then(d => setIngredientPrices(d)).catch(() => {})} />
 
         </div>{/* end widget panels */}
