@@ -1605,6 +1605,7 @@ const CELL_TO_INGREDIENT_KEY = {
   H5:  'cup_small_6oz',        // Planetware 6oz Slim Cup /1000
   H6:  'cup_large_12oz',       // Planetware 12oz Slim Cup /1000
   H7:  'lid_hot',              // Planetware Hot Lid /1000
+  H8:  'cup_detpak_16oz',      // G'Day Tiger clear 16oz cup /1000 (5Ways DGTCC)
   H9:  'lid_sipper',           // Trio Sipper Lid /1000
   H10: 'straw',                // Trio Paper Straw 2500
   // FOOD sheet

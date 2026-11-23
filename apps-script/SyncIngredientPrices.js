@@ -91,6 +91,8 @@ function sipCollectPrices_() {
     { key: 'matcha',        name: 'Matsu Matcha (500g)',       col: 2, row: 10, unit: '500g', supplier: 'Matsu Tea' },
     { key: 'honey_squeeze', name: 'B-Honey Squeeze (750g)',    col: 6, row: 6,  unit: '750g', supplier: '5Ways' },
     { key: 'milk_gelato',   name: 'Milk Gelato (6L)',          col: 6, row: 7,  unit: '6L',   supplier: 'Isola Di Capri' },
+    // H8 G'Day Tiger branded clear 16oz cup (5Ways DGTCC, carton of 1000) — linked 23 Nov 2026.
+    { key: 'cup_detpak_16oz', name: "G'Day Tiger Clear Cup 16oz (1000)", col: 8, row: 8, unit: '1000pk', supplier: '5Ways' },
   ];
   COFFEE_MASTER_CELLS.forEach(function (c) {
     const price = cc(c.col, c.row);
