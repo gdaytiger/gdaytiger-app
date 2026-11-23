@@ -191,8 +191,7 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
           </div>
           <div className="flex flex-col items-end text-[10px] leading-snug tabular-nums" style={{ color: 'var(--color-ink-muted)' }}>
             <span><span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{week.orders.toLocaleString()}</span> orders</span>
-            <span>avg sale <span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{money2(week.avgSale)}</span></span>
-            <span>vs prior wk</span>
+            <span><span className="font-semibold" style={{ color: 'var(--color-ink-label)' }}>{money2(week.avgSale)}</span> avg sale</span>
           </div>
         </div>
       </div>
