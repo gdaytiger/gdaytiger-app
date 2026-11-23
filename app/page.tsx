@@ -2717,6 +2717,18 @@ export default function Home() {
     return state;
   };
 
+  // Weekly Flash feeds: a refresh fires ~13 Notion-backed calls at once, so one can
+  // come back ready:false from a rate limit. Retry once after a pause, and never let a
+  // not-ready response overwrite good data already on screen (was flipping the card
+  // to "still landing" on tab refocus).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const loadFlash = (url: string, set: (fn: (prev: any) => any) => void, retried = false) => {
+    fetch(url, { cache: 'no-store' }).then(r => r.json()).then(d => {
+      if (!d?.ready && !retried) { setTimeout(() => loadFlash(url, set, true), 2500); }
+      set(prev => (d?.ready || !prev?.ready) ? d : prev);
+    }).catch(() => { if (!retried) setTimeout(() => loadFlash(url, set, true), 2500); });
+  };
+
   // Partner view: header + only the read-only feeds its four widgets need.
   const refreshPartner = async () => {
     const h = await fetch('/api/header').then(r => r.json()).catch(() => ({}));
@@ -2727,8 +2739,8 @@ export default function Home() {
     fetch('/api/margin-review').then(r => r.json()).then(d => setMarginReview(d)).catch(() => {});
     fetch('/api/payment-fees').then(r => r.json()).then(d => setPaymentFees(d)).catch(() => {});
     fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
-    fetch('/api/weekly-flash').then(r => r.json()).then(d => setWeeklyFlash(d)).catch(() => {});
-    fetch('/api/flash-extras').then(r => r.json()).then(d => setFlashExtras(d)).catch(() => {});
+    loadFlash('/api/weekly-flash', setWeeklyFlash);
+    loadFlash('/api/flash-extras', setFlashExtras);
   };
 
   // Pull every data source. Reused on first load and on tab refocus.
@@ -2745,9 +2757,9 @@ export default function Home() {
     fetch('/api/payment-fees').then(r => r.json()).then(d => setPaymentFees(d)).catch(() => {});
     fetch('/api/recipe-map').then(r => r.json()).then(d => setRecipeMap(d)).catch(() => {});
     fetch('/api/tigeros-tasks').then(r => r.json()).then(d => setTigerTasks(d.tasks || [])).catch(() => {});
-    fetch('/api/weekly-flash').then(r => r.json()).then(d => setWeeklyFlash(d)).catch(() => {});
+    loadFlash('/api/weekly-flash', setWeeklyFlash);
     fetch('/api/roster-check').then(r => r.json()).then(d => setRosterCheck(d)).catch(() => {});
-    fetch('/api/flash-extras').then(r => r.json()).then(d => setFlashExtras(d)).catch(() => {});
+    loadFlash('/api/flash-extras', setFlashExtras);
     fetchTaskContext().catch(() => {});
     fetchTaskOrder().catch(() => {});
   };
