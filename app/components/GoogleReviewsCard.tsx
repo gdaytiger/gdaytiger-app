@@ -185,11 +185,17 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
   return (
     <div className="flex flex-col gap-4 uppercase">
       {/* Summary */}
-      <InfoTile info={reviews?.updated ? `Checked ${ago(reviews.updated)}` : 'Not checked yet'}
+      <InfoTile info={notConnected
+          ? 'Switches on once Google approves the Business Profile API (case 1-6049000042499) and the GBP Apps Script is set up.'
+          : awaitingApproval
+          ? 'Waiting on Google to approve API access — reviews will appear here once it does.'
+          : reviews?.updated ? `Checked ${ago(reviews.updated)}` : 'Not checked yet'}
         style={{ ...box, padding: '0 14px' }} className="flex items-center justify-between gap-3">
         <div className="flex flex-col gap-1 py-2">
           <span className="font-bold tabular-nums leading-none" style={{ fontSize: '28px', color: 'var(--color-ink-label)' }}>
-            {reviews?.exact != null ? `${reviews.exact.toFixed(4)} ★` : reviews?.average != null ? `${reviews.average.toFixed(2)} ★` : '—'}
+            {reviews?.exact != null ? `${reviews.exact.toFixed(4)} ★` : reviews?.average != null ? `${reviews.average.toFixed(2)} ★`
+              : notConnected ? <span style={{ fontSize: '18px' }}>Not connected</span>
+              : awaitingApproval ? <span style={{ fontSize: '18px' }}>Awaiting Google</span> : '—'}
           </span>
           <div className="leading-none tabular-nums" style={muted}>Google rating{reviews?.total != null ? ` · ${reviews.total} reviews` : ''}</div>
         </div>
@@ -205,12 +211,9 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
 
       {msg && <div className="text-sm font-semibold px-1">{msg}</div>}
 
-      {notConnected && (
-        <div style={box} className="text-sm flex items-center">Not connected yet. This switches on once Google approves the Business Profile API (case 1-6049000042499) and the GBP Apps Script is set up.</div>
-      )}
-      {reviews?.error && (
+      {reviews?.error && !awaitingApproval && (
         <div style={{ ...box, color: 'var(--color-danger-deep)' }} className="text-sm flex items-center">
-          {awaitingApproval ? 'Waiting on Google to approve API access — reviews will appear here once it does.' : `Last check failed: ${reviews.error}`}
+          Last check failed: {reviews.error}
         </div>
       )}
 
@@ -362,7 +365,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
           <div style={label}>Google menu prices vs Square</div>
           <button style={ghost} disabled={!!busy} onClick={() => act({ action: 'menuSync', apply: false }, 'menu', 'Menu checked ✓')}>{busy === 'menu' ? 'Checking…' : 'Check'}</button>
         </div>
-        {!menu && <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>No check run yet.</div>}
+        {!menu && <div style={muted}>No check run yet</div>}
         {menu && (
           <>
             {menu.error && <div className="text-sm" style={{ color: 'var(--color-danger-deep)' }}>{menu.error}</div>}
