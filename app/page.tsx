@@ -3282,6 +3282,18 @@ export default function Home() {
                       );
                     })}
                   </SortableContext>
+                  {/* 🛒 Shopping List — collapsible tile with a count badge. Sits above
+                      the pinned tasks so it stays visible while there's shopping to do. */}
+                  {!isViewingOtherDay && shoppingBadge > 0 && (
+                    <div key="shopping" onClick={openShoppingWidget} role="button"
+                      className="rounded-2xl cursor-pointer flex items-center gap-3 px-3"
+                      style={{ ...tileStyle, minHeight: '62px', ...(openWidgets.has('shopping') ? { border: '1.5px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow), var(--glass-ring)' } : {}) }}>
+                      <WidgetIcon name="shopping" chip={28} glyph={17} />
+                      <span className="flex-1 text-sm font-semibold text-gray-800 uppercase">Shopping List</span>
+                      <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{shoppingBadge}</span>
+                      <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('shopping') ? '▼' : '▶'}</span>
+                    </div>
+                  )}
                   {/* Pinned (📌) tasks — parked at the bottom, highlighted, and now
                       drag-reorderable among themselves (own group, global order). Ones
                       linked to a Projects DB page ("ongoing projects") expand into their
@@ -3333,18 +3345,6 @@ export default function Home() {
                       );
                     })}
                   </SortableContext>
-                  {/* 🛒 Shopping List — collapsible tile with a count badge. Above the
-                      checked bucket so it stays visible while there's shopping to do. */}
-                  {!isViewingOtherDay && shoppingBadge > 0 && (
-                    <div key="shopping" onClick={openShoppingWidget} role="button"
-                      className="rounded-2xl cursor-pointer flex items-center gap-3 px-3"
-                      style={{ ...tileStyle, minHeight: '62px', ...(openWidgets.has('shopping') ? { border: '1.5px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow), var(--glass-ring)' } : {}) }}>
-                      <WidgetIcon name="shopping" chip={28} glyph={17} />
-                      <span className="flex-1 text-sm font-semibold text-gray-800 uppercase">Shopping List</span>
-                      <span className="flex items-center justify-center rounded-full font-bold" style={{ width: '22px', height: '22px', background: 'var(--color-brand-peach)', color: '#333', fontSize: '11px', flexShrink: 0 }}>{shoppingBadge}</span>
-                      <span className="text-gray-400" style={{ fontSize: '10px', flexShrink: 0 }}>{openWidgets.has('shopping') ? '▼' : '▶'}</span>
-                    </div>
-                  )}
                   {/* THE DOCUMENT — Clean Transactions link row, same as the shopping row:
                       shows while anything borrowed is still owed; tap opens the Clean tab. */}
                   {!isViewingOtherDay && cleanBadge > 0 && (
