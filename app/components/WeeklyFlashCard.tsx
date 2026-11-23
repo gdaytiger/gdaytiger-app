@@ -65,11 +65,22 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ScoreRow({ label, value, zone, color, dot }:
-  { label: string; value: string; zone: string; color: string; dot: string }) {
+// Optional `info` pops up on hover (tap on mobile) — replaces the old footnote.
+function ScoreRow({ label, value, zone, color, dot, info }:
+  { label: string; value: string; zone: string; color: string; dot: string; info?: string }) {
+  const [open, setOpen] = React.useState(false);
   return (
-    <div className="flex items-center justify-between rounded-xl px-3 py-2"
-      style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+    <div className={`relative flex items-center justify-between rounded-2xl px-3${info ? ' cursor-pointer' : ''}`}
+      onMouseEnter={info ? () => setOpen(true) : undefined}
+      onMouseLeave={info ? () => setOpen(false) : undefined}
+      onClick={info ? () => setOpen((o) => !o) : undefined}
+      style={{ minHeight: '62px', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+      {info && open && (
+        <div className="absolute z-20 pointer-events-none rounded-lg px-2 py-1 text-[10px] font-semibold leading-snug"
+          style={{ bottom: 'calc(100% + 4px)', left: '12px', maxWidth: '300px', background: 'rgba(255,255,255,0.95)', border: '1px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow)', color: 'var(--color-ink-label)' }}>
+          {info}
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <Circle size={10} strokeWidth={2.5} aria-hidden fill={dot || 'none'} style={{ display: 'block', flexShrink: 0, color: dot || 'var(--color-ink-muted)' }} />
         <span className="text-xs font-semibold" style={{ color: 'var(--color-ink-label)' }}>{label}</span>
@@ -204,11 +215,11 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
       {/* BEST / WORST DAY */}
       {week.best && week.worst && (
         <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+            <div className="rounded-2xl px-3 flex flex-col justify-center" style={{ minHeight: '62px', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
               <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-ink-muted)' }}>Best day</div>
               <div className="text-sm font-bold" style={{ color: GREEN }}>{week.best.weekday} · {money(week.best.net)}</div>
             </div>
-            <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+            <div className="rounded-2xl px-3 flex flex-col justify-center" style={{ minHeight: '62px', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
               <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-ink-muted)' }}>Worst day</div>
               <div className="text-sm font-bold" style={{ color: 'var(--color-ink-label)' }}>{week.worst.weekday} · {money(week.worst.net)}</div>
             </div>
@@ -219,19 +230,18 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
 
       {/* SCORECARD */}
       <div>
-        <SectionLabel>Benchmark scorecard</SectionLabel>
         <div className="flex flex-col gap-2">
           <ScoreRow label={`Gross margin${gmMonth}`} value={`${grossMargin.pct}%`}
-            zone={`${zones.grossMargin[0]}–${zones.grossMargin[1]}%`} color={gmCol} dot={dot(gmCol)} />
+            zone={`${zones.grossMargin[0]}–${zones.grossMargin[1]}%`} color={gmCol} dot={dot(gmCol)}
+            info={`Gross margin: ${grossMargin.source}${gmMonth}.`} />
           <ScoreRow label="Line-staff labour"
             value={scorecard.labour.value != null ? `${scorecard.labour.value.toFixed(1)}%` : '—'}
-            zone={`≤${zones.labour[0]}% · watch to ${zones.labour[1]}%`} color={labCol} dot={dot(labCol)} />
+            zone={`≤${zones.labour[0]}% · watch to ${zones.labour[1]}%`} color={labCol} dot={dot(labCol)}
+            info={`Labour = ${meta.labourBasis} (payroll wage sheet). Line staff excludes the owner wage.`} />
           <ScoreRow label="Total labour incl owner"
             value={data.labourTotal?.value != null ? `${data.labourTotal.value.toFixed(1)}%` : '—'}
-            zone="context" color="var(--color-ink-label)" dot="" />
-          {meta.pending && (
-            <div className="text-[10px] px-1" style={{ color: 'var(--color-ink-muted)' }}>{meta.pending}</div>
-          )}
+            zone="context" color="var(--color-ink-label)" dot=""
+            info={`Labour = ${meta.labourBasis} (payroll wage sheet). Includes the owner wage.`} />
         </div>
       </div>
 
@@ -241,8 +251,8 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
         const wkCol = cd.week == null ? 'var(--color-ink-muted)'
           : Math.abs(cd.week) < CD_TOLERANCE ? GREEN : cd.week < 0 ? RED : AMBER;
         return (
-          <div className="flex items-center justify-between rounded-xl px-3 py-2"
-            style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
+          <div className="flex items-center justify-between rounded-2xl px-3"
+            style={{ minHeight: '62px', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}>
             <div className="flex items-center gap-2">
               <Circle size={10} strokeWidth={2.5} aria-hidden fill={dot(wkCol) || 'none'} style={{ display: 'block', flexShrink: 0, color: dot(wkCol) || 'var(--color-ink-muted)' }} />
               <span className="text-xs font-semibold" style={{ color: 'var(--color-ink-label)' }}>***</span>
@@ -257,10 +267,6 @@ export default function WeeklyFlashCard({ data, extras }: { data: WeeklyFlashDat
         );
       })()}
 
-      {/* FOOTNOTE */}
-      <div className="text-[10px] leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
-        Labour = {meta.labourBasis} (payroll wage sheet). Line staff excludes the owner wage. Gross margin: {grossMargin.source}{gmMonth}.
-      </div>
     </div>
   );
 }
