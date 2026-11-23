@@ -51,7 +51,7 @@ const money2 = (n: number | null | undefined) => n == null ? '—' : '$' + n.toF
 const signedMoney = (n: number | null | undefined) => n == null ? '—' : `${n >= 0 ? '+' : '−'}$${Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const CD_TOLERANCE = 20; // $ either way for the week before it's flagged
 const hourLabel = (h: number) => {
-  const ap = h < 12 ? 'a' : 'p';
+  const ap = h < 12 ? 'am' : 'pm';
   const hr = h % 12 === 0 ? 12 : h % 12;
   return `${hr}${ap}`;
 };
@@ -119,7 +119,10 @@ const PINNED_STYLE: React.CSSProperties = {
 function DayPartSection({ extras }: { extras: FlashExtrasData }) {
   const [active, setActive] = React.useState<number | null>(null);
   if (!extras?.ready || !extras.dayPart.length) return null;
-  const hours = extras.dayPart;
+  // Close at 3pm — drop the 3pm+ stragglers (end-of-day orders) from the chart.
+  const CLOSE_HOUR = 15;
+  const hours = extras.dayPart.filter((d) => d.hour < CLOSE_HOUR);
+  if (!hours.length) return null;
   const maxNet = Math.max(...hours.map((d) => d.net));
   const peak = hours.reduce((a, b) => (b.net > a.net ? b : a), hours[0]);
   return (
