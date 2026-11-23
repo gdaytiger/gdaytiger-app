@@ -1582,10 +1582,13 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
     if (Number.isFinite(v) && v > 0) onOverride?.(Math.round(v * 100) / 100);
   };
   // Slider on the margin bar: drag to a target margin → price = cost ÷ (1 − m),
-  // rounded to the nearest 10c (how menu prices are actually set).
+  // snapped to the nearest 50c (menu prices move in 50c steps — finer was too fiddly).
+  const PRICE_STEP = 0.5;
+  const snapPrice = (v: number) => Math.max(PRICE_STEP, Math.round(v / PRICE_STEP) * PRICE_STEP);
   const fromMargin = (m: number) => {
     if (cost === null || m >= 100) return;
-    onOverride?.(Math.max(0.1, Math.round(cost / (1 - m / 100) * 10) / 10));
+    const next = snapPrice(cost / (1 - m / 100));
+    if (Math.abs(next - simPrice) > 0.001) onOverride?.(next);
   };
 
   // "was X%" — prior gross GP before the last supplier cost/price change moved it.
@@ -1673,7 +1676,7 @@ function ProductItem({ p, review, weeklyQty, feePct, simulate, override, onOverr
           {simulate && cost !== null && (
             <input type="range" min={0} max={95} step={0.5} value={Math.min(95, Math.max(0, shown))}
               onChange={e => fromMargin(parseFloat(e.target.value))}
-              aria-label={`Drag to set margin for ${p.name}`}
+              aria-label={`Drag to set price for ${p.name} (50c steps)`}
               className="margin-slider absolute inset-0 w-full h-5 m-0 cursor-pointer" />
           )}
         </div>
