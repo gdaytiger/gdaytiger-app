@@ -210,6 +210,7 @@ function scanSweetsInvoices_(log) {
   var seen = {};
   try { (JSON.parse(props.getProperty('SWEETS_SEEN') || '[]')).forEach(function (id) { seen[id] = 1; }); } catch (e) {}
   var cutoff = new Date(Date.now() - 45 * 86400000);
+  var cutoffStr = Utilities.formatDate(cutoff, 'Australia/Melbourne', 'yyyy-MM-dd');
   var updates = 0, newlySeen = [];
 
   SWEETS_SUPPLIERS.forEach(function (sup) {
@@ -231,12 +232,22 @@ function scanSweetsInvoices_(log) {
     if (!pdfs.length) { log.push('[Sweets/' + sup.name + '] no new invoices'); return; }
 
     pdfs.forEach(function (pdf) {
-      var text = extractPdfText(pdf.getId());
+      var invDate = (pdf.getName().match(/^(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
       newlySeen.push(pdf.getId());
+      // Go by the INVOICE date in the file name, not when the PDF landed in Drive —
+      // old invoices back-filled into Drive (e.g. the GST report, Nov 2026) must not
+      // overwrite current prices.
+      if (invDate && invDate < cutoffStr) {
+        log.push('[Sweets/' + sup.name + '] skipped old invoice ' + pdf.getName());
+        return;
+      }
+      var text = extractPdfText(pdf.getId());
       if (!text) return;
       var flat = text.replace(/\s+/g, ' ');
-      var invDate = (pdf.getName().match(/^(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
       rows.forEach(function (r) {
+        // Never let an invoice older than the one already recorded overwrite this row.
+        var rowLast = sweetsYmd_(r.lastInv);
+        if (invDate && rowLast && invDate < rowLast) return;
         var unit = sweetsExtractUnitPrice_(flat, r.match);
         if (unit === null) return;
         var old = r.pack;
@@ -250,7 +261,7 @@ function scanSweetsInvoices_(log) {
           log.push('[Sweets] ' + r.name + ' $' + (old === null ? '—' : old) + ' → $' + unit + ' (' + pdf.getName() + ')');
           r.pack = unit; updates++;
         }
-        if (invDate) data.sheet.getRange(r.row, SW.LAST_INV).setValue(invDate);
+        if (invDate) { data.sheet.getRange(r.row, SW.LAST_INV).setValue(invDate); r.lastInv = invDate; }
       });
     });
   });
@@ -261,6 +272,14 @@ function scanSweetsInvoices_(log) {
   }
   SpreadsheetApp.flush();
   return updates;
+}
+
+// LAST INVOICE cell → 'YYYY-MM-DD' (the sheet may hold a Date or a string).
+function sweetsYmd_(v) {
+  if (!v) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, 'Australia/Melbourne', 'yyyy-MM-dd');
+  var m = String(v).match(/(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : '';
 }
 
 // Xero-style invoice line: "<desc> <qty> <unit> [disc%] [tax%] <amount>".
