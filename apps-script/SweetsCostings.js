@@ -133,12 +133,31 @@ function ensureSweetsRows_(log) {
   return added;
 }
 
+// One small takeaway bag per portion: FOOD!P7 is the Small Bags carton price (20,200 bags).
+var SWEETS_BAG_CELL = 'FOOD!$P$7';
+var SWEETS_BAG_PACK = 20200;
+var SWEETS_BAG_EXPR_ = 'IFERROR(N(' + SWEETS_BAG_CELL + ')/' + SWEETS_BAG_PACK + ',0)';
+
+// Run once after deploying: rewrites COST/GP/STATUS formulas on every existing row.
+function applySweetsFormulas() {
+  var sh = SpreadsheetApp.openById(SWEETS_SS_ID).getSheetByName(SWEETS_TAB);
+  for (var r = SWEETS_FIRST; r <= sh.getLastRow(); r++) {
+    if (String(sh.getRange(r, SW.ITEM).getValue()).trim()) writeSweetsFormulas_(sh, r);
+  }
+  sh.getRange(SWEETS_HDR_ROW - 1, 1).setValue(
+    'Pack price auto-updates from Candied / Little Bertha / Dench / Noisette invoices. ' +
+    'Sell price auto-updates from Square. Edit PORTIONS / FREIGHT % by hand. ' +
+    'COST includes 1 small bag (FOOD!P7 / 20,200). GP is ex-GST. Bands: red <45%, amber 45–55%, green 55%+.');
+  SpreadsheetApp.flush();
+  Logger.log('Sweets formulas rewritten with small bag cost.');
+}
+
 function writeSweetsFormulas_(sh, r) {
   var A = function (col) { return sh.getRange(r, col).getA1Notation(); };
   sh.getRange(r, SW.COST).setFormula(
     '=IF(OR(' + A(SW.PACK) + '="",' + A(SW.PORTIONS) + '=""),"",' +
     'ROUND(IF(UPPER(' + A(SW.INCL_GST) + ')="Y",' + A(SW.PACK) + '/1.1,' + A(SW.PACK) + ')/' +
-    A(SW.PORTIONS) + '*(1+N(' + A(SW.FREIGHT) + ')/100),4))');
+    A(SW.PORTIONS) + '*(1+N(' + A(SW.FREIGHT) + ')/100)+' + SWEETS_BAG_EXPR_ + ',4))');
   sh.getRange(r, SW.GP).setFormula(
     '=IF(OR(' + A(SW.COST) + '="",' + A(SW.SELL) + '=""),"",ROUND((1-' + A(SW.COST) + '/(' + A(SW.SELL) + '/1.1))*100,1))');
   sh.getRange(r, SW.STATUS).setFormula(
