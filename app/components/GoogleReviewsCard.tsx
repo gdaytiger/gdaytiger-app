@@ -162,7 +162,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
       const r = await fetch('/api/google-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
-      setMsg(body.action === 'redraft' && typeof d.learned === 'string' && d.learned ? `${done} · Remembered for future replies: “${d.learned}”` : done);
+      setMsg(typeof d.learned === 'string' && d.learned ? `${done} · Remembered for future replies: “${d.learned}”` : done);
       if (body.action === 'redraft' && typeof d.draft === 'string') {
         setDrafts(prev => ({ ...prev, [body.reviewName as string]: d.draft }));
         setNotes(prev => ({ ...prev, [body.reviewName as string]: '' }));
