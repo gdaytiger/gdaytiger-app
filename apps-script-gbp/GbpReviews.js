@@ -50,7 +50,7 @@ function syncGoogleReviews() {
     (data.reviews || []).forEach(function (r) {
       if (r.reviewReply) return;                      // already answered (here or in Google)
       if (skipped[r.name]) return;
-      if (r.createTime < since) return;               // old backlog — leave alone
+      if ((r.updateTime || r.createTime) < since) return; // old backlog — leave alone (an edited old review counts as new)
       var existing = pendingById[r.name];
       if (existing && existing.updateTime === r.updateTime) { nextPending.push(existing); return; }
       if (!menu) menu = gbpMenuNames_();
