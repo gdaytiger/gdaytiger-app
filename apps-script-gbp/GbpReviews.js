@@ -50,7 +50,7 @@ function syncGoogleReviews() {
     (data.reviews || []).forEach(function (r) {
       if (r.reviewReply) return;                      // already answered (here or in Google)
       if (skipped[r.name]) return;
-      if (r.createTime < since) return;               // old backlog — leave alone
+      if ((r.updateTime || r.createTime) < since) return; // old backlog — leave alone (an edited old review counts as new)
       var existing = pendingById[r.name];
       if (existing && existing.updateTime === r.updateTime) { nextPending.push(existing); return; }
       if (!menu) menu = gbpMenuNames_();
@@ -153,7 +153,7 @@ function gbpDraftReply_(review, menuNames, note) {
     method: 'post',
     contentType: 'application/json',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    payload: JSON.stringify({ model: GBP_DRAFT_MODEL, max_tokens: 400, system: GBP_VOICE_RULES, messages: [{ role: 'user', content: user }] }),
+    payload: JSON.stringify({ model: GBP_DRAFT_MODEL, max_tokens: 400, system: GBP_VOICE_RULES + gbpReplyRulesPrompt_(), messages: [{ role: 'user', content: user }] }),
     muteHttpExceptions: true
   });
   if (res.getResponseCode() !== 200) throw new Error('Anthropic ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300));
@@ -196,7 +196,8 @@ function gbpRedraft_(reviewName, note) {
   var d = gbpDraftReply_({ starRating: stars, comment: p.comment, reviewer: { displayName: p.reviewer } }, gbpMenuNames_(), note || null);
   p.draft = d.reply; p.offMenu = d.offMenu;
   gbpWriteOsBlock_('google_reviews', s);
-  return { ok: true, draft: d.reply, offMenu: d.offMenu };
+  var learned = note ? gbpLearnNote_(note, p) : null;
+  return { ok: true, draft: d.reply, offMenu: d.offMenu, learned: learned };
 }
 
 // Exact average from the full star breakdown (the API's averageRating is rounded
