@@ -182,6 +182,7 @@ function doPost(e) {
       case 'poolSuggest': result = gbpPoolSuggest_(p); break;
       case 'poolUpload':  result = gbpPoolUpload_(p); break;
       case 'poolHide':    result = gbpPoolHide_(p); break;
+      case 'ruleDelete':  result = gbpDeleteReplyRule_(p.ruleId); break;
       case 'storyBrowse': result = gbpStoryBrowse_(p); break;
       case 'storyImage':  result = gbpStoryImage_(p); break;
       case 'storyTagQueue': result = gbpStoryTagQueue_(p); break;

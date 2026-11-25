@@ -74,6 +74,8 @@ function syncGoogleReviews() {
     if (exact) {
       state.exact = exact.exact; state.counts = exact.counts; state.nextShown = exact.nextShown; state.toNext = exact.toNext;
       try { state.removed = gbpDetectRemoved_(exact.seen, exact.n, state.removed); } catch (e) { Logger.log('removed-check: ' + e); }
+      state.examples = exact.examples || state.examples;
+      CacheService.getScriptCache().put('gbp_examples', JSON.stringify(state.examples || []), 21600);
     }
     state.updated = new Date().toISOString();
     state.error = null;
@@ -100,6 +102,7 @@ function gbpReviewState_() {
     nextShown: s.nextShown || null,
     toNext: s.toNext == null ? null : s.toNext,
     removed: s.removed || [],
+    examples: s.examples || [],
     pending: s.pending || [],
     skipped: (s.skipped || []).slice(-300),
     replied: (s.replied || []).slice(-20),
@@ -153,7 +156,7 @@ function gbpDraftReply_(review, menuNames, note) {
     method: 'post',
     contentType: 'application/json',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    payload: JSON.stringify({ model: GBP_DRAFT_MODEL, max_tokens: 400, system: GBP_VOICE_RULES + gbpReplyRulesPrompt_(), messages: [{ role: 'user', content: user }] }),
+    payload: JSON.stringify({ model: GBP_DRAFT_MODEL, max_tokens: 400, system: GBP_VOICE_RULES + gbpReplyRulesPrompt_() + gbpReplyExamplesPrompt_(), messages: [{ role: 'user', content: user }] }),
     muteHttpExceptions: true
   });
   if (res.getResponseCode() !== 200) throw new Error('Anthropic ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300));
@@ -177,7 +180,8 @@ function gbpPostReply_(reviewName, comment) {
   s.pending = s.pending.filter(function (x) { return x.name !== reviewName; });
   s.replied.push({ name: reviewName, reviewer: p ? p.reviewer : '', stars: p ? p.stars : null, reply: comment, at: new Date().toISOString() });
   gbpWriteOsBlock_('google_reviews', s);
-  return { ok: true, reply: res };
+  var learned = (p && p.draft && gbpNormText_(p.draft) !== gbpNormText_(comment)) ? gbpLearnEdit_(p.draft, comment, p) : null;
+  return { ok: true, reply: res, learned: learned };
 }
 
 function gbpSkipReview_(reviewName) {
@@ -204,7 +208,7 @@ function gbpRedraft_(reviewName, note) {
 // to one decimal). Also works out how many 5-star reviews it takes for Google's
 // displayed rating (one decimal, rounded) to tick up to the next 0.1.
 function gbpExactRating_(loc) {
-  var counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, tok = '', n = 0, sum = 0, seen = {};
+  var counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, tok = '', n = 0, sum = 0, seen = {}, replies = [];
   do {
     var r = gbpFetch_(GBP_V4 + loc + '/reviews?pageSize=50' + (tok ? '&pageToken=' + encodeURIComponent(tok) : ''));
     (r.reviews || []).forEach(function (v) {
@@ -217,15 +221,18 @@ function gbpExactRating_(loc) {
         d: String(v.createTime || '').slice(0, 10),
         c: String(v.comment || '').replace(/\s+/g, ' ').slice(0, 160)
       };
+      if (v.reviewReply && v.reviewReply.comment) replies.push({ t: v.reviewReply.updateTime || '', s: st, c: String(v.comment || '').replace(/\s+/g, ' ').slice(0, 200), r: String(v.reviewReply.comment).slice(0, 500) });
     });
     tok = r.nextPageToken;
   } while (tok);
   if (!n) return null;
+  replies.sort(function (a, b) { return a.t < b.t ? 1 : -1; });
+  var examples = replies.slice(0, GBP_EXAMPLE_COUNT).map(function (x) { return { s: x.s, c: x.c, r: x.r }; });
   var exact = sum / n;
   var shownTenths = Math.round(exact * 10);          // what Google shows, e.g. 46 = 4.6
-  if (shownTenths >= 50) return { exact: exact, counts: counts, nextShown: null, toNext: 0, seen: seen, n: n };
+  if (shownTenths >= 50) return { exact: exact, counts: counts, nextShown: null, toNext: 0, seen: seen, n: n, examples: examples };
   var threshold = shownTenths * 10 + 5;               // hundredths, e.g. 465 = 4.65
   // need 100*(sum + 5k) >= threshold*(n + k)  →  k >= (threshold*n - 100*sum) / (500 - threshold)
   var k = Math.max(0, Math.ceil((threshold * n - 100 * sum) / (500 - threshold)));
-  return { exact: exact, counts: counts, nextShown: (shownTenths + 1) / 10, toNext: k, seen: seen, n: n };
+  return { exact: exact, counts: counts, nextShown: (shownTenths + 1) / 10, toNext: k, seen: seen, n: n, examples: examples };
 }

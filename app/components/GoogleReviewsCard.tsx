@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import type { GoogleReviewsPayload, MenuSyncPayload, PendingReview, PoolSuggestion } from '@/app/lib/gbp';
+import type { GoogleReviewsPayload, MenuSyncPayload, PendingReview, PoolSuggestion, ReplyRule } from '@/app/lib/gbp';
 import { googleCategoryFor, PHOTO_TAGS } from '@/app/lib/photoTags';
 import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPrimaryStyle } from '@/app/lib/theme';
 
@@ -10,10 +10,13 @@ import { glassTileStyle, glassButtonStyle, glassButtonActiveStyle, glassButtonPr
 // check. Self-contained — fetches /api/google-reviews and /api/google-pool.
 // Nothing posts to Google without a tap here.
 
-type Data = { reviews: GoogleReviewsPayload | null; menu: MenuSyncPayload | null } | null;
+type Data = { reviews: GoogleReviewsPayload | null; menu: MenuSyncPayload | null; rules?: ReplyRule[] } | null;
 
 const label: React.CSSProperties = { fontFamily: '"stolzl", sans-serif', fontWeight: 700, fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-ink-label)' };
-const box: React.CSSProperties = { background: 'rgba(255,255,255,0.55)', borderRadius: '16px', padding: '12px 14px' };
+// Default TigerOS tile: 62px min height, rounded-2xl.
+const TILE_H = '62px';
+const box: React.CSSProperties = { background: 'rgba(255,255,255,0.55)', borderRadius: '16px', padding: '12px 14px', minHeight: TILE_H };
+const muted: React.CSSProperties = { fontFamily: '"stolzl", sans-serif', fontWeight: 700, fontSize: '10px', letterSpacing: '0.12em', color: 'var(--color-ink-muted)' };
 const btn: React.CSSProperties = { ...glassButtonStyle, ...glassButtonPrimaryStyle };
 const ghost: React.CSSProperties = glassButtonStyle;
 const chip = (on: boolean): React.CSSProperties => (on ? { ...glassButtonStyle, ...glassButtonActiveStyle } : glassButtonStyle);
@@ -32,6 +35,28 @@ const ago = (iso: string | null) => {
 };
 const withinDays = (iso: string, days: number) => Date.now() - new Date(iso).getTime() < days * 86400000;
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
+// ISO yyyy-mm-dd… → dd/mm/yyyy (AU). Anything else passes through untouched.
+const auDate = (v: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? `${m[3]}/${m[2]}/${m[1]}` : v; };
+
+// Tile whose secondary detail pops up on hover (tap on mobile) instead of sitting
+// as small print — same popover recipe as the Weekly Flash card.
+function InfoTile({ info, className, style, children }: { info?: string; className?: string; style?: React.CSSProperties; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`relative ${className ?? ''}`} style={style}
+      onMouseEnter={info ? () => setOpen(true) : undefined}
+      onMouseLeave={info ? () => setOpen(false) : undefined}
+      onClick={info ? (e) => { if ((e.target as HTMLElement).closest('button,input,textarea')) return; setOpen(o => !o); } : undefined}>
+      {info && open && (
+        <div className="absolute z-20 pointer-events-none rounded-lg px-2 py-1 text-[10px] font-semibold leading-snug"
+          style={{ bottom: 'calc(100% + 4px)', left: '12px', maxWidth: '320px', background: 'rgba(255,255,255,0.95)', border: '1px solid var(--color-brand-peach)', boxShadow: 'var(--glass-shadow)', color: 'var(--color-ink-label)' }}>
+          {info}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
 
 
 export default function GoogleReviewsCard({ active, onCount }: { active: boolean; onCount?: (n: number) => void }) {
@@ -137,7 +162,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
       const r = await fetch('/api/google-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok || d.ok === false) throw new Error(d.error || 'failed');
-      setMsg(done);
+      setMsg(typeof d.learned === 'string' && d.learned ? `${done} · Remembered for future replies: “${d.learned}”` : done);
       if (body.action === 'redraft' && typeof d.draft === 'string') {
         setDrafts(prev => ({ ...prev, [body.reviewName as string]: d.draft }));
         setNotes(prev => ({ ...prev, [body.reviewName as string]: '' }));
@@ -158,28 +183,37 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
   const awaitingApproval = !!reviews?.error && /quota is 0|not approved/i.test(reviews.error);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 uppercase">
       {/* Summary */}
-      <div style={box} className="flex items-center justify-between gap-3">
-        <div>
-          <div style={label}>Google rating</div>
-          <div className="text-lg font-bold tabular-nums">{reviews?.exact != null ? `${reviews.exact.toFixed(4)} ★` : reviews?.average != null ? `${reviews.average.toFixed(2)} ★` : '—'} <span className="text-sm font-semibold" style={{ color: 'var(--color-ink-muted)' }}>{reviews?.total != null ? `${reviews.total} reviews` : ''}</span></div>
-          {reviews?.toNext != null && reviews.nextShown != null && (
-            <div className="text-xs font-semibold">{reviews.toNext} × 5★ to show {reviews.nextShown.toFixed(1)}</div>
-          )}
-          <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>{reviews?.updated ? `Checked ${ago(reviews.updated)}` : 'Not checked yet'}</div>
+      <InfoTile info={notConnected
+          ? 'Switches on once Google approves the Business Profile API (case 1-6049000042499) and the GBP Apps Script is set up.'
+          : awaitingApproval
+          ? 'Waiting on Google to approve API access — reviews will appear here once it does.'
+          : reviews?.updated ? `Checked ${ago(reviews.updated)}` : 'Not checked yet'}
+        style={{ ...box, padding: '0 14px' }} className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-1 py-2">
+          <span className="font-bold tabular-nums leading-none" style={{ fontSize: '28px', color: 'var(--color-ink-label)' }}>
+            {reviews?.exact != null ? `${reviews.exact.toFixed(4)} ★` : reviews?.average != null ? `${reviews.average.toFixed(2)} ★`
+              : notConnected ? <span style={{ fontSize: '18px' }}>Not connected</span>
+              : awaitingApproval ? <span style={{ fontSize: '18px' }}>Awaiting Google</span> : '—'}
+          </span>
+          <div className="leading-none tabular-nums" style={muted}>Google rating{reviews?.total != null ? ` · ${reviews.total} reviews` : ''}</div>
         </div>
-        <button style={ghost} disabled={busy === 'sync'} onClick={() => act({ action: 'sync' }, 'sync', 'Checked for new reviews ✓')}>{busy === 'sync' ? 'Checking…' : 'Check now'}</button>
-      </div>
+        <div className="flex items-center gap-3">
+          {reviews?.toNext != null && reviews.nextShown != null && (
+            <span className="text-[10px] font-semibold tabular-nums text-right leading-snug" style={{ color: 'var(--color-ink-muted)' }}>
+              <span style={{ color: 'var(--color-ink-label)' }}>{reviews.toNext} × 5★</span> to show {reviews.nextShown.toFixed(1)}
+            </span>
+          )}
+          <button style={ghost} disabled={busy === 'sync'} onClick={() => act({ action: 'sync' }, 'sync', 'Checked for new reviews ✓')}>{busy === 'sync' ? 'Checking…' : 'Check now'}</button>
+        </div>
+      </InfoTile>
 
       {msg && <div className="text-sm font-semibold px-1">{msg}</div>}
 
-      {notConnected && (
-        <div style={box} className="text-sm">Not connected yet. This switches on once Google approves the Business Profile API (case 1-6049000042499) and the GBP Apps Script is set up.</div>
-      )}
-      {reviews?.error && (
-        <div style={{ ...box, color: 'var(--color-danger-deep)' }} className="text-sm">
-          {awaitingApproval ? 'Waiting on Google to approve API access — reviews will appear here once it does.' : `Last check failed: ${reviews.error}`}
+      {reviews?.error && !awaitingApproval && (
+        <div style={{ ...box, color: 'var(--color-danger-deep)' }} className="text-sm flex items-center">
+          Last check failed: {reviews.error}
         </div>
       )}
 
@@ -189,12 +223,11 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
         if (!recent.length) return null;
         return (
           <div className="flex flex-col gap-2">
-            <div style={label}>Removed from Google ({recent.length})</div>
             {recent.map(x => (
               <div key={`${x.reviewer}-${x.date}-${x.removedAt}`} style={{ ...box, border: '1.5px solid var(--color-danger)' }} className="flex flex-col gap-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-sm">{x.reviewer}</span>
-                  <span className="text-xs tabular-nums" style={{ color: x.stars <= 3 ? 'var(--color-danger)' : 'var(--color-warning)' }}>{stars(x.stars)} · posted {x.date}</span>
+                  <span className="text-xs tabular-nums" style={{ color: x.stars <= 3 ? 'var(--color-danger)' : 'var(--color-warning)' }}>{stars(x.stars)} · posted {auDate(x.date)}</span>
                 </div>
                 <div className="text-sm" style={{ color: x.comment ? undefined : 'var(--color-ink-muted)' }}>{x.comment || 'Stars only, no text'}</div>
                 <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>Gone from Google · noticed {ago(x.removedAt)}</div>
@@ -206,9 +239,8 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
 
       {/* Pending reviews */}
       <div className="flex flex-col gap-3">
-        <div style={label}>New reviews to reply to {reviews?.pending.length ? `(${reviews.pending.length})` : ''}</div>
         {reviews && reviews.pending.length === 0 && !reviews.error && (
-          <div style={box} className="text-sm" >All caught up — every new review has a reply.</div>
+          <div style={box} className="text-sm flex items-center">All caught up — every new review has a reply.</div>
         )}
         {reviews?.pending.map((r: PendingReview) => {
           const text = drafts[r.name] ?? r.draft;
@@ -229,15 +261,15 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
                 value={text}
                 onChange={e => setDrafts(prev => ({ ...prev, [r.name]: e.target.value }))}
                 rows={Math.min(6, Math.max(2, Math.ceil(text.length / 60)))}
-                className="w-full text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                className="w-full text-sm rounded-xl px-3 py-2 normal-case focus:outline-none focus:ring-2 focus:ring-orange-300"
                 style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.1)' }}
                 aria-label={`Reply to ${r.reviewer}`}
               />
               <input
                 value={notes[r.name] ?? ''}
                 onChange={e => setNotes(prev => ({ ...prev, [r.name]: e.target.value }))}
-                placeholder="Note for a redraft (optional), e.g. mention the new special"
-                className="w-full text-xs rounded-xl px-3 py-2 focus:outline-none"
+                placeholder="Note for a redraft — general preferences are remembered for future replies"
+                className="w-full text-xs rounded-xl px-3 py-2 normal-case focus:outline-none"
                 style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(0,0,0,0.06)' }}
               />
               <div className="flex gap-2 flex-wrap">
@@ -251,16 +283,15 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
       </div>
 
       {/* Paul's gallery → Google */}
-      <div style={box} className="flex flex-col gap-2">
+      <InfoTile style={box} className="flex flex-col gap-2 justify-center"
+        info={[
+          pool && pool.ok !== false ? `${pool.lastUploadAt ? `Last photo on Google ${ago(pool.lastUploadAt)}` : 'No photos on Google yet'} · ${pool.remaining} not yet posted` : '',
+          pool && pool.photos.length > 0 ? 'Tap photos to pick them · × hides one for good' : '',
+        ].filter(Boolean).join(' — ') || undefined}>
         <div className="flex items-center justify-between gap-2">
           <div style={label}>Photos from G’Day Tigers album</div>
           <button style={ghost} disabled={!!poolBusy} onClick={shuffle}>{poolBusy === 'load' ? 'Loading…' : 'Shuffle'}</button>
         </div>
-        {pool && pool.ok !== false && (
-          <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>
-            {pool.lastUploadAt ? `Last photo on Google ${ago(pool.lastUploadAt)}` : 'No photos on Google yet'} · {pool.remaining} not yet posted
-          </div>
-        )}
         {pool?.error && <div className="text-sm" style={{ color: 'var(--color-danger-deep)' }}>Couldn’t load photos: {pool.error}</div>}
         {!pool && poolBusy === 'load' && <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>Picking 5 photos…</div>}
         {pool && pool.ok !== false && pool.photos.length === 0 && <div className="text-sm">Every photo in the pool is already on Google. New ones arrive when Paul adds a set.</div>}
@@ -307,26 +338,36 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
                 </div>
               </>
             )}
-            <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>Tap photos to pick them · × hides one for good</div>
             <button style={btn} disabled={!picked.size || !!poolBusy} onClick={postPicked} className="self-start">
               {poolBusy === 'post' ? 'Posting…' : picked.size ? `Post ${picked.size} to Google` : 'Pick photos to post'}
             </button>
           </>
         )}
-      </div>
+      </InfoTile>
+
+      {/* Standing reply rules learned from redraft notes */}
+      {(data?.rules?.length ?? 0) > 0 && (
+        <div style={box} className="flex flex-col gap-2 justify-center">
+          <div style={label}>Reply rules learned from your redrafts ({data!.rules!.length})</div>
+          {data!.rules!.map(r => (
+            <div key={r.id} className="flex items-start justify-between gap-2 text-sm">
+              <span>{r.text}</span>
+              <button onClick={() => act({ action: 'ruleDelete', ruleId: r.id }, `rule:${r.id}`, 'Rule removed')} disabled={!!busy} className="text-[11px] font-bold rounded-full w-5 h-5 leading-5 text-center shrink-0" style={{ background: 'rgba(0,0,0,0.05)', color: 'var(--color-ink-label)' }} aria-label={`Remove rule: ${r.text}`}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Menu price sync */}
-      <div style={box} className="flex flex-col gap-2">
+      <InfoTile style={box} className="flex flex-col gap-2 justify-center"
+        info={menu ? `${menu.mode === 'live' ? 'Live — prices update automatically' : 'Preview — showing what would change, nothing sent'} · checked ${ago(menu.updated)}` : undefined}>
         <div className="flex items-center justify-between gap-2">
           <div style={label}>Google menu prices vs Square</div>
           <button style={ghost} disabled={!!busy} onClick={() => act({ action: 'menuSync', apply: false }, 'menu', 'Menu checked ✓')}>{busy === 'menu' ? 'Checking…' : 'Check'}</button>
         </div>
-        {!menu && <div className="text-sm" style={{ color: 'var(--color-ink-muted)' }}>No check run yet.</div>}
+        {!menu && <div style={muted}>No check run yet</div>}
         {menu && (
           <>
-            <div className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>
-              {menu.mode === 'live' ? 'Live — prices update automatically' : 'Preview — showing what would change, nothing sent'} · {ago(menu.updated)}
-            </div>
             {menu.error && <div className="text-sm" style={{ color: 'var(--color-danger-deep)' }}>{menu.error}</div>}
             {!menu.error && menu.changes.length === 0 && <div className="text-sm">All Google menu prices match Square ✓</div>}
             {menu.changes.map(c => (
@@ -339,7 +380,7 @@ export default function GoogleReviewsCard({ active, onCount }: { active: boolean
             )}
           </>
         )}
-      </div>
+      </InfoTile>
     </div>
   );
 }
