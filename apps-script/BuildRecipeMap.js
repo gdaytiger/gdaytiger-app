@@ -156,7 +156,9 @@ function buildRecipeMap() {
   notionProducts.forEach(function (p) {
     const sectionHeader = (BRM_NOTION_TO_SHEET[p.name.toLowerCase().trim()] || p.name).toUpperCase();
 
-    let direct = sectionRecipes[sectionHeader];
+    // Sandwich sections are "<NAME> (TAKEAWAY)" since 27 Nov 2026 — Notion
+    // products map to the takeaway costing.
+    let direct = sectionRecipes[sectionHeader] || sectionRecipes[sectionHeader + ' (TAKEAWAY)'];
     let source = 'food';
     if (!direct) {
       direct = coffeeProductsMap[sectionHeader];

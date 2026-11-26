@@ -162,10 +162,16 @@ function isBoughtIn_(name) { return !!NOTION_BOUGHT_IN[String(name || '').toLowe
 
 function findSectionRow(data, productName) {
   var mapped = NOTION_TO_SHEET_NAME[productName.toLowerCase().trim()];
-  var target = normalise(mapped || productName);
-  for (var r = 0; r < data.length; r++) {
-    for (var c = 0; c < data[r].length; c++) {
-      if (normalise(String(data[r][c] || '')) === target) return r;
+  var base = normalise(mapped || productName);
+  // Since 27 Nov 2026 sandwich sections are titled "<NAME> (TAKEAWAY)" with a
+  // "<NAME> (DINE IN)" twin. Notion products track the TAKEAWAY costing, so try
+  // the exact name first, then the "(takeaway)" title.
+  var targets = [base, base + ' (takeaway)'];
+  for (var t = 0; t < targets.length; t++) {
+    for (var r = 0; r < data.length; r++) {
+      for (var c = 0; c < data[r].length; c++) {
+        if (normalise(String(data[r][c] || '')) === targets[t]) return r;
+      }
     }
   }
   return -1;
