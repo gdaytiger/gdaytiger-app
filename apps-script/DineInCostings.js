@@ -91,12 +91,13 @@ function buildDineInCostings() {
 
   // Takeaway mushroom has no block parmesan → zero it (after the dine-in copy).
   for (let r = 0; r < vals.length; r++) {
-    if (String(vals[r][0]).trim().toUpperCase() !== 'MUSHROOM SANDWICH') continue;
+    const tt = String(vals[r][0]).trim().toUpperCase();
+    if (tt !== 'MUSHROOM SANDWICH' && tt !== 'MUSHROOM SANDWICH (TAKEAWAY)') continue;
     for (let k = r + 1; k < Math.min(r + 45, vals.length); k++) {
       if (String(vals[k][4]).trim().toLowerCase() === 'profit %') break;
       if (String(vals[k][0]).toUpperCase().indexOf('BLOCK PARMESAN') === 0) {
         sh.getRange(k + 1, 1, 1, DINE_IN_COLS).setValues([[
-          'Block Parmesan (g) — dine in only', vals[k][1], fx[k][2] || vals[k][2], 0, '', 0]]);
+          'Block Parmesan (g) — dine in only', vals[k][1], '', 0, '', 0]]);   // no price link → not in recipe map
         log.push('✓ MUSHROOM SANDWICH (takeaway): Block Parmesan zeroed (row ' + (k + 1) + ')');
       }
     }

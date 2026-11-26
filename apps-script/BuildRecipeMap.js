@@ -39,7 +39,7 @@ const BRM_COFFEE_CELL_TO_KEY = {
 // Made-in-house keys (these get expanded into their sub-recipe ingredients)
 const BRM_MADE_IN_HOUSE = ['tuna_mix', 'caponata', 'mushroom_mix', 'schnittas',
                            'basil_pesto', 'tiger_sauce', 'honey_mustard_mayo',
-                           'pickled_onions', 'fennel_slaw'];
+                           'pickled_onions', 'fennel_slaw', 'egg_slab', 'fermented_chilli_mayo'];
 
 // Map of K-col label prefix → MIH key. Used by the sub-recipe auto-detector to
 // figure out which made-in-house item each L-col formula corresponds to.
@@ -54,6 +54,8 @@ const BRM_MIH_LABEL_TO_KEY = {
   'HONEY MUSTARD MAYO':  'honey_mustard_mayo',
   'PICKLED ONIONS':      'pickled_onions',
   'FENNEL SLAW':         'fennel_slaw',
+  'EGG SLAB':            'egg_slab',              // L14 — Bacon + Egg
+  'FERMENTED CHILLI MAYO': 'fermented_chilli_mayo', // L15 — Bacon + Egg
 };
 
 // ─── MANUAL OVERRIDES ─────────────────────────────────────────────────────────

@@ -56,6 +56,8 @@ const FOOD_INGREDIENTS = [
     { key: 'honey_mustard_mayo', name: 'Honey Mustard Mayo (900g)',         col: 12, row: 11, unit: '900g',      supplier: 'GDay Tiger' },
     { key: 'pickled_onions',     name: 'Pickled Onions (3200g)',            col: 12, row: 12, unit: '3200g',     supplier: 'GDay Tiger' },
     { key: 'fennel_slaw',        name: 'Fennel Slaw (1100g)',               col: 12, row: 13, unit: '1100g',     supplier: 'GDay Tiger' },
+    { key: 'egg_slab',           name: 'Egg Slab (12 portions)',            col: 12, row: 14, unit: '12 portions', supplier: 'GDay Tiger' },
+    { key: 'fermented_chilli_mayo', name: 'Fermented Chilli Mayo (125g)',   col: 12, row: 15, unit: '125g',      supplier: 'GDay Tiger' },
     // ── EXTRAS ───────────────────────────────────────────────────────────────
     { key: 'butter',             name: 'Butter (1.5kg)',                    col: 14, row: 5,  unit: '1.5kg',     supplier: '5Ways' },
     { key: 'olive_oil',          name: 'Olive Oil (4L)',                    col: 14, row: 6,  unit: '4L',        supplier: '5Ways' },
