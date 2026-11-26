@@ -19,7 +19,7 @@ const FOOD_KEYS = [
   'tuna_mix','caponata','mushroom_mix','schnittas','basil_pesto','tiger_sauce','honey_mustard_mayo',
   'butter','olive_oil','salt','pepper','eggs',
   'napkins','tray',
-  'plain_flour','sr_flour','caster_sugar','brown_sugar','bicarb_soda','cinnamon','vegetable_oil','breadcrumbs','honey','pinenuts',
+  'plain_flour','sr_flour','caster_sugar','brown_sugar','bicarb_soda','cinnamon','vegetable_oil','breadcrumbs','honey','pinenuts','fryer_oil',
 ];
 
 const COFFEE_KEYS = [
@@ -79,6 +79,7 @@ const DEFAULT_QTY: Record<string, { default: number; large?: number; iced?: numb
   tray: { default: 1 },
   honey: { default: 0.005 },
   pinenuts: { default: 0.005 },
+  fryer_oil: { default: 0.147 }, // L per fried schnitzel (2026 invoices ÷ sales)
   // ── Coffee (per cup, small/hot is default) ───────────────────────────────
   coffee_beans: { default: 23, large: 46 },
   chocolate: { default: 30, large: 60 },

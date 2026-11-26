@@ -67,7 +67,7 @@ const AP_INGREDIENT_LABELS = {
   napkins:'Napkins (2000pk)', tray:'Paper Tray (150pk)',
   plain_flour:'Plain Flour (kg)', sr_flour:'SR Flour (kg)', caster_sugar:'Caster Sugar (kg)', brown_sugar:'Brown Sugar (kg)',
   bicarb_soda:'Bicarb Soda (g)', cinnamon:'Cinnamon (g)', vegetable_oil:'Veg Oil (L)', breadcrumbs:'Breadcrumbs (kg)',
-  honey:'Honey (kg)', pinenuts:'Pinenuts (kg)',
+  honey:'Honey (kg)', pinenuts:'Pinenuts (kg)', fryer_oil:'Fryer Oil (L)',
   // coffee
   coffee_beans:'Coffee (g)', chocolate:'Chocolate (g)', chai:'Chai (g)', fbomb:'F.Bomb (g)',
   decaf_beans:'Decaf (g)', matcha:'Matcha (g)',
@@ -93,7 +93,7 @@ const AP_INGREDIENT_PACK_SIZE = {
   butter:1.5, olive_oil:4, salt:25, pepper:1, eggs:180,           // eggs in dozens? 15 doz = 180
   napkins:2000, tray:150,
   plain_flour:12.5, sr_flour:12.5, caster_sugar:15, brown_sugar:15, bicarb_soda:0.5, cinnamon:0.5, vegetable_oil:20,
-  breadcrumbs:10, honey:3, pinenuts:1,
+  breadcrumbs:10, honey:3, pinenuts:1, fryer_oil:20,
   // coffee
   coffee_beans:1000, chocolate:1000, chai:1000, fbomb:1000, decaf_beans:1000, matcha:500,
   sungold_jersey_fc:2000, sungold_lowfat:2000, happy_soy:6000, alt_dairy_oat:12000, alt_dairy_almond:12000,

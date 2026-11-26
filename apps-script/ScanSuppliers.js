@@ -113,6 +113,7 @@ const FOOD_CELL_META = {
   R12: { min: 3,  max: 6,   refreshDays: 14, label: 'Sungold FC 2LT (cross-write)' },
   N12: { min: 15, max: 35,  refreshDays: 14, label: 'DVDL Thick Cream 3LT (cross-write)' },
   R15: { min: 30, max: 80,  refreshDays: 60, label: 'Pinenuts /1kg', manual: true },
+  R17: { min: 60, max: 100, refreshDays: 30, label: 'Fryer Oil Cottonseed /20L' }, // ~2 tins/month
   H10: { min: 1,  max: 8,   refreshDays: 21, label: 'Fennel /each' },  // a whole-box price (~$50) must never land here
   H19: { min: 0.3, max: 4,  refreshDays: 30, label: 'Cucumber /each' },
   J8:  { min: 6,  max: 15,  refreshDays: 90, label: 'Fermented Chilli 150g (Faire — The Broth Sisters)' }, // bulk-ordered (~36 jars), so long refresh window // never appears on a scanned invoice — maintained by hand in FOOD COSTINGS
@@ -156,6 +157,10 @@ const FIVEWAYS_MAP = [
   { match: ['NJPB', 'BREADCRUMBS JAPANESE PANKO', 'PANKO'],cell: 'R13', convert: p => p,              note: 'Japanese Panko Breadcrumbs /10kg bag' },
   { match: ['FHON3', 'HONEY PURE BLEND', 'HONEY BLEND'],   cell: 'R14', convert: p => p,              note: 'Honey Pure Blend 100% /3kg tub' },
   { match: ['TPMU1', 'NUTS PINENUT', 'PINENUT KERNAL'],    cell: 'R15', convert: p => p,              note: 'Pinenuts Kernel Medium /1kg bag' },
+  // Fryer oil (schnitzels). SCO = Cottonseed Mediterranei 20LT tin (usual); OCO20 =
+  // Cottonseed Odessa 20LT drum (sub when SCO is short, same price band). 5Ways
+  // matches on item-code substring — 'SCO' is unique across all 2026 codes.
+  { match: ['SCO', 'OCO20'],                                cell: 'R17', convert: p => p,              note: 'Fryer Oil Cottonseed /20L tin' },
 ];
 
 // Per-each items that Sciclunas sometimes sells by the box: "Box (20)" → price ÷ 20.
@@ -964,9 +969,13 @@ function parse5WaysLines(text) {
   for (let i = 0; i < lines.length; i++) {
     if (/^[DRWF]$/.test(lines[i])) {
       if (tcStart === -1) tcStart = i; n++;
-    } else if (n >= 3) { break; } else { tcStart = -1; n = 0; }
+    } else if (n >= 3 || (n >= 1 && /^\d+(?:\.\d+)?\s+[A-Z]+$/.test(lines[i]))) {
+      // 1- and 2-line invoices (13 in 2026, e.g. 21 Aug Odessa oil + Swiss) used to
+      // be skipped entirely — accept them when the next line is a quantity ("1.00 DRUM").
+      break;
+    } else { tcStart = -1; n = 0; }
   }
-  if (n < 2) return items;
+  if (n < 1) return items;
 
   const SKIP = {KG:1,CTN:1,TIN:1,BAG:1,PKT:1,JAR:1,DRUM:1,BLK:1,UNIT:1,EACH:1,BTL:1,BOX:1,
                 EA:1,PK:1,PCE:1,LTR:1,VIC:1,PTY:1,LTD:1,ABN:1,BSB:1,GST:1,INC:1,REF:1,
@@ -1004,7 +1013,11 @@ function parse5WaysLines(text) {
 
   for (let i = 0; i < icLines.length; i++) {
     const price = prLines[i] || 0; if (price <= 0) continue;
-    items.push({ itemCode: icLines[i], description: useNames ? names[i] : icLines[i], unitPrice: price });
+    // qty: the n quantity lines ("1.00 TIN", "2.29 KG") sit straight after the n
+    // type codes, in the same order as the item codes. Used by FryerOil.js.
+    const qm  = /^(\d+(?:\.\d+)?)\s/.exec(lines[tcStart + n + i] || '');
+    items.push({ itemCode: icLines[i], description: useNames ? names[i] : icLines[i], unitPrice: price,
+                 qty: qm ? parseFloat(qm[1]) : null });
   }
   return items;
 }
@@ -1613,6 +1626,7 @@ const CELL_TO_INGREDIENT_KEY = {
   N12: 'dvdl_thick_cream',     // DVDL Thick Cream 3LT — Redi Milk cross-write from D10
   R14: 'honey',                // Honey Pure Blend 90/10 3KG (5Ways FHON3) — kitchen + matcha
   R15: 'pinenuts',             // Pinenuts Kernel 1KG (5Ways)
+  R17: 'fryer_oil',            // Fryer Oil Cottonseed 20L (5Ways SCO / OCO20)
 };
 
 // Compute severity tier from days-stale vs expected refresh window.

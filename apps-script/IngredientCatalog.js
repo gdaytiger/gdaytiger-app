@@ -81,6 +81,7 @@ const FOOD_INGREDIENTS = [
     // food recipes referencing R12 attribute to the unified `sungold_jersey_fc`.
     { key: 'breadcrumbs',        name: 'Breadcrumbs Panko (10kg)',          col: 18, row: 13, unit: '10kg',      supplier: '5Ways' },
     { key: 'honey',              name: 'Honey Pure Blend 90/10 (3kg)',      col: 18, row: 14, unit: '3kg',       supplier: '5Ways' },
+    { key: 'fryer_oil',          name: 'Fryer Oil Cottonseed (20L)',        col: 18, row: 17, unit: '20L',       supplier: '5Ways' },
   ];
 
 // Cells that appear in recipes for attribution but are NOT standalone priced
