@@ -67,6 +67,7 @@ const DRIVE_ROOT_FOLDER  = 'Supplier Invoices';
 // Gmail senders
 const GMAIL_PFD    = 'PFDPortal@pfdfoods.com.au';
 const GMAIL_ABICOR = 'sales@triosuppliesaustralia.com.au';
+const GMAIL_WFPLASTIC = 'sales@wfplastic.com.au';  // printed greaseproof (FOOD P5), ~yearly custom reprint
 const GMAIL_FAIRE  = 'updates@info.faire.com';  // Faire wholesale order confirmations ("Thanks for your order!")  // formerly sales@abicorsouthern.com.au
 
 // Scan windows
@@ -114,6 +115,7 @@ const FOOD_CELL_META = {
   N12: { min: 15, max: 35,  refreshDays: 14, label: 'DVDL Thick Cream 3LT (cross-write)' },
   R15: { min: 30, max: 80,  refreshDays: 60, label: 'Pinenuts /1kg', manual: true },
   R17: { min: 60, max: 100, refreshDays: 30, label: 'Fryer Oil Cottonseed /20L' }, // ~2 tins/month
+  P5:  { min: 900, max: 2200, refreshDays: 450, label: 'Greaseproof printed /20,000 (WF Plastic, landed ex GST)' }, // ~yearly reprint
   H10: { min: 1,  max: 8,   refreshDays: 21, label: 'Fennel /each' },  // a whole-box price (~$50) must never land here
   H19: { min: 0.3, max: 4,  refreshDays: 30, label: 'Cucumber /each' },
   J8:  { min: 6,  max: 15,  refreshDays: 90, label: 'Fermented Chilli 150g (Faire — The Broth Sisters)' }, // bulk-ordered (~36 jars), so long refresh window // never appears on a scanned invoice — maintained by hand in FOOD COSTINGS
@@ -513,6 +515,11 @@ function scanFoodSuppliers(cutoffOverride) {
     updates += scanFaireFromGmail_(cutoff, log);
   } catch(e) { log.push('ERROR (Faire): ' + e.message); }
 
+  // ── WF Plastic (Gmail tax invoices — printed greaseproof → P5)
+  try {
+    updates += scanWfPlasticFromGmail_(cutoff, log);
+  } catch(e) { log.push('ERROR (WF Plastic): ' + e.message); }
+
   // ── Abicor (Gmail Tax Invoice PDFs)
   log.push('\n--- ABICOR / TRIO SUPPLIES ---');
   try {
@@ -793,6 +800,68 @@ function scanFaireFromGmail_(cutoff, log) {
     }, log);
   }
   return updates;
+}
+
+// ─── WF PLASTIC (printed greaseproof) ─────────────────────────────────────────
+// Tax invoice emails (body, no PDF needed): one table row per product —
+//   QTY / CODE / NAME / UNIT PRICE / DISCOUNTS / TAX / SUBTOTAL — then
+//   "Shipping Cost: $x", "Product Subtotal:", "Discount:", "GST:", "Grand Total:".
+// P5 = LANDED cost ex GST per 20,000 sheets: greaseproof line subtotal (after
+// discount) + its share of freight, normalised to 20,000 sheets.
+// e.g. #61845 (27 Oct 2025): $1,440 − $240 + $105.97 freight = $1,305.97.
+function scanWfPlasticFromGmail_(cutoff, log) {
+  log.push('\n--- WF PLASTIC (Gmail tax invoices) ---');
+  const sheet = SpreadsheetApp.openById(SS_FOOD).getSheetByName(SHEET_FOOD);
+  const daysBack = Math.max(1, Math.ceil((Date.now() - cutoff.getTime()) / 86400000));
+  const query = `from:${GMAIL_WFPLASTIC} subject:"Tax Invoice" -subject:"Dispatch" newer_than:${daysBack}d`;
+  let threads;
+  try { threads = GmailApp.search(query, 0, 20); }
+  catch (e) { log.push('ERROR searching Gmail (WF Plastic): ' + e.message); return 0; }
+  if (!threads || !threads.length) { log.push('No WF Plastic invoices in window'); return 0; }
+  const msgs = [];
+  threads.forEach(t => t.getMessages().forEach(m => msgs.push(m)));
+  msgs.sort((a, b) => b.getDate() - a.getDate());          // newest invoice wins
+  for (const m of msgs) {
+    const r = parseWfPlasticInvoice_(m.getPlainBody() || m.getBody().replace(/<[^>]+>/g, '\n'));
+    if (!r) continue;
+    log.push(`${m.getSubject()} (${m.getDate().toLocaleDateString('en-AU')}): line $${r.line} + freight $${r.freight} ` +
+             `for ${r.sheets} sheets → $${r.per20k} /20,000 ex GST`);
+    return validateAndUpdate(sheet, 'P5', r.per20k, 'Greaseproof printed /20,000 (WF Plastic)', log, FOOD_CELL_META) ? 1 : 0;
+  }
+  log.push('No greaseproof line found on WF Plastic invoices');
+  return 0;
+}
+
+function parseWfPlasticInvoice_(text) {
+  const L = String(text || '').split(/\n/).map(s => s.replace(/&nbsp;/g, ' ').trim()).filter(Boolean);
+  const money = s => { const m = /^-?\$?(-?[\d,]+\.\d{2})$/.exec(s); return m ? Math.abs(parseFloat(m[1].replace(/,/g, ''))) : null; };
+  const after = label => { const i = L.findIndex(l => l.toLowerCase() === label); return i >= 0 ? money(L[i + 1] || '') : null; };
+  const gi = L.findIndex(l => /greaseproof/i.test(l) && /sheets?/i.test(l));
+  if (gi === -1) return null;
+  // Row after NAME: UNIT PRICE, DISCOUNTS, TAX %, SUBTOTAL
+  const nums = [];
+  for (let k = gi + 1; k < Math.min(gi + 8, L.length) && nums.length < 4; k++) {
+    if (/%$/.test(L[k])) { nums.push('tax'); continue; }
+    const v = money(L[k]); if (v !== null) nums.push(v);
+  }
+  const vals = nums.filter(n => n !== 'tax');
+  if (vals.length < 3) return null;
+  const line = vals[2];                                   // SUBTOTAL (after discount)
+  const prod = after('product subtotal:'), disc = after('discount:') || 0;
+  const ship = after('shipping cost:') || after('shipping subtotal:') || 0;
+  const netProducts = prod !== null ? prod - disc : line;
+  const freight = netProducts > 0 ? Math.round(ship * line / netProducts * 100) / 100 : ship;
+  const sm = /\(([\d,]+)\s*Sheets\)/i.exec(L[gi]) || /([\d,]+)\s*(?:Half\s*)?Sheets/i.exec(L[gi]);
+  const sheets = sm ? parseInt(sm[1].replace(/,/g, ''), 10) : 20000;
+  const per20k = Math.round((line + freight) * 20000 / sheets * 100) / 100;
+  return { line: line, freight: freight, sheets: sheets, per20k: per20k };
+}
+
+// One-off backfill (15 months) — WF Plastic reorders about yearly.
+function rescanWfPlastic() {
+  const log = [];
+  scanWfPlasticFromGmail_(new Date(Date.now() - 450 * 24 * 60 * 60 * 1000), log);
+  Logger.log(log.join('\n'));
 }
 
 // "<desc> $<total> Qty: <n>" → [{ description, unitPrice, qty, total }]
