@@ -97,7 +97,7 @@ const COFFEE_CELL_META = {
   D9:  { min: 28,  max: 45,  refreshDays: 21, label: 'Alt.Dairy.Co Almond /carton' },
   D10: { min: 15,  max: 35,  refreshDays: 14, label: 'DVDL Thick Cream 3LT (capture)' },
   F5:  { min: 25,  max: 50,  refreshDays: 30, label: 'Bundaberg Raw Sugar /15KG' },
-  F6:  { min: 8,   max: 20,  refreshDays: 30, label: 'B-Honey Squeeze /750g' },
+  F6:  { min: 15,  max: 30,  refreshDays: 75, label: 'Honey Pure Blend 90/10 /3kg tub (FHON3, mirrors FOOD R14)' },
   // pack — expected units per carton. Sheet prices are stored per this pack
   //        size; the Planetware parser normalises any other pack back to it
   //        and flags the change (see trackPackChange_).
@@ -240,11 +240,11 @@ const FAIRE_MAP = [
 
 const FIVEWAYS_COFFEE_MAP = [
   { match: ['BRS15'], cell: 'F5', convert: p => p, note: 'Bundaberg Raw Sugar 15KG /bag' },
-  // BHS750 = B-Honey Squeeze 750g bottle, used in matcha. Invoice "Unit Price"
-  // column is per bottle ($11.47) even when ordered by the carton (6 × = $68.82),
-  // and parse5WaysLines reads that column — so write it straight through. The
-  // F6 guard (8–20) rejects any OCR mis-read of the carton total.
-  { match: ['BHS750'], cell: 'F6', convert: p => p, note: 'B-Honey Squeeze 750G /bottle' },
+  // FHON3 = Honey Pure Blend 90/10 3kg tub. From 27 Nov 2026 this is the ONLY
+  // honey (matcha + kitchen) — B-Honey Squeeze BHS750 was dropped. COFFEE F6
+  // mirrors FOOD R14 so the 24 matcha recipes keep their =F6 refs. Unit Price is
+  // per tub ($19.50); the F6 guard (15–30) rejects carton/OCR mis-reads.
+  { match: ['FHON3'], cell: 'F6', convert: p => p, note: 'Honey Pure Blend 90/10 3KG /tub (mirror of FOOD R14)' },
   // DGTCC = G'Day Tiger branded clear 16oz cup (Detpak), CTN of 1000. Unit Price
   // column is ex-GST per carton ($122.25 Nov 2026) — sheet stores per 1000.
   { match: ['DGTCC'], cell: 'H8', convert: p => p, note: "G'Day Tiger 16oz Detpak cup /1000" },
@@ -559,7 +559,7 @@ function rescanThisWeek() {
 }
 
 // Wider one-off backfill (35 days) — use to capture an item that only appears on
-// an older invoice, e.g. honey (BHS750) last seen 01/12-Jun. Same as
+// an older invoice, e.g. honey (FHON3) which is only ordered every ~2 months. Same as
 // rescanThisWeek but a longer window; does NOT touch the last-scan timestamp.
 function rescanLast35Days() {
   const backdated = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
@@ -1600,7 +1600,7 @@ const CELL_TO_INGREDIENT_KEY = {
   D7:  'happy_soy',            // Happy Happy Soy Boy 6L
   D8:  'alt_dairy_oat',        // Alternative Dairy Oat 12LT
   D9:  'alt_dairy_almond',     // Alternative Dairy Almond 12LT
-  F6:  'honey_squeeze',        // B-Honey Squeeze 750G (5Ways BHS750, used in matcha)
+  F6:  'honey',                // Honey Pure Blend 90/10 3KG (5Ways FHON3) — matcha; mirrors FOOD R14
   F5:  'bundaberg_raw_sugar',  // Bundaberg Raw Sugar 15KG
   H5:  'cup_small_6oz',        // Planetware 6oz Slim Cup /1000
   H6:  'cup_large_12oz',       // Planetware 12oz Slim Cup /1000
@@ -1611,6 +1611,7 @@ const CELL_TO_INGREDIENT_KEY = {
   // FOOD sheet
   R12: 'sungold_jersey_fc',    // Sungold FC 2LT cross-write — same ingredient as D5
   N12: 'dvdl_thick_cream',     // DVDL Thick Cream 3LT — Redi Milk cross-write from D10
+  R14: 'honey',                // Honey Pure Blend 90/10 3KG (5Ways FHON3) — kitchen + matcha
   R15: 'pinenuts',             // Pinenuts Kernel 1KG (5Ways)
 };
 

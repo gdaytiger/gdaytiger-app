@@ -1200,7 +1200,7 @@ function productMatchesIngredient(productName: string, ingredientKey: string): b
     cinnamon:            { inc: ['BANANA BREAD'] },
     vegetable_oil:       { inc: ['BANANA BREAD'] },
     breadcrumbs:         { inc: ['CHICKEN SCHNITTA'] },
-    honey:               { inc: ['CHICKEN SCHNITTA'] },
+    honey:               { inc: ['CHICKEN SCHNITTA', 'MATCHA'] },
   };
   const rule = MAP[ingredientKey];
   if (!rule) return false;
