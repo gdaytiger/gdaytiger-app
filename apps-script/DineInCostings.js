@@ -27,7 +27,7 @@ const DINE_IN_SECTIONS = {
   'BACON + EGG': 1.8,
 };
 const DINE_IN_COLS = 6; // A–F
-const MUSHROOM_PARM_G = 25; // g block parmesan per DINE-IN mushroom sandwich
+const MUSHROOM_PARM_G = 10; // g block parmesan per DINE-IN mushroom sandwich (reweighed 27 Nov 2026)
 
 function buildDineInCostings() {
   const sh   = SpreadsheetApp.openById(SS_FOOD).getSheetByName(SHEET_FOOD);
